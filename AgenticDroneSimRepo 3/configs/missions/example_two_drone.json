@@ -1,8 +1,0 @@
-{
-  "name": "example_two_drone",
-  "description": "Baseline-style mission: one instruction per drone.",
-  "drones": {
-    "Drone1": "fly forward for 5 seconds then land",
-    "Drone2": "hover for 5 seconds, then fly backward for 3 seconds and land"
-  }
-}
