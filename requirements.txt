@@ -1,5 +1,6 @@
 # Core (always needed)
 numpy>=1.24.0
+PyYAML>=6.0        # mission scenario config files (Phase 4)
 
 # Simulator adapter (only needed to fly in AirSim/CARLA-Air)
 airsim>=1.8.1

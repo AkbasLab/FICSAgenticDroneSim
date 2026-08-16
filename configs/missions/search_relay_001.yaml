@@ -1,0 +1,64 @@
+# Canonical search-and-relay mission (Phase 4).
+# This scenario stays fixed while the coordination architecture develops.
+
+scenario_id: search_relay_001
+random_seed: 17
+
+mission:
+  type: distributed_search
+  deadline_s: 900
+  required_coverage: 0.95
+  targets_to_find: 2
+  min_separation_m: 3.0
+
+base:
+  position: [0, 0, 0]
+  comm_range_m: 120
+
+# Four rectangular search sectors [min_x, min_y, max_x, max_y], flown at -8 m.
+sectors:
+  - id: S1
+    footprint: [10, 10, 50, 50]
+  - id: S2
+    footprint: [-50, 10, -10, 50]
+  - id: S3
+    footprint: [-50, -50, -10, -10]
+  - id: S4
+    footprint: [10, -50, 50, -10]
+
+# Two simulated targets (detected geometrically, no vision model).
+targets:
+  - id: T1
+    position: [30, 30, -8]
+    detection_radius_m: 8
+    observation_period_s: 1.0
+  - id: T2
+    position: [-30, -30, -8]
+    detection_radius_m: 8
+    observation_period_s: 1.0
+
+# One restricted region the drones must not enter (polygon of x,y vertices).
+# Placed in the empty band north of the base, clear of the base and all four
+# sectors, so a correct controller stays out of it.
+restricted_zones:
+  - id: R1
+    polygon: [[-6, 54], [6, 54], [6, 66], [-6, 66]]
+
+vehicles:
+  - id: Drone1
+    start: [0, 0, 0]
+    battery_s: 900
+  - id: Drone2
+    start: [4, 0, 0]
+    battery_s: 900
+  - id: Drone3
+    start: [8, 0, 0]
+    battery_s: 900
+  - id: Drone4
+    start: [12, 0, 0]
+    battery_s: 900
+
+network:
+  profile: perfect
+
+faults: []
