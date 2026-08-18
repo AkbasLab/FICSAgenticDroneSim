@@ -149,3 +149,8 @@ python scripts/run_single_mission.py --planner mistral --drones 2
 ```
 
 Planners: `gemini | llama | mistral | rule`. Adapters: `airsim | mock`.
+
+## Video Demos
+
+Link: https://www.mediafire.com/folder/ta9erqa13mxja/AI+AirSim+Vids#ta9erqa13mxja
+
