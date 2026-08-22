@@ -92,7 +92,7 @@ around it.
   It completes the canonical mission, which is the baseline the coordinated
   architecture has to beat.
 
-  <img width="1200" height="1200" alt="image" src="https://github.com/user-attachments/assets/fe9489b7-4f30-49a6-b145-86559ca006d3" />
+  <img width="400" height="400" alt="image" src="https://github.com/user-attachments/assets/fe9489b7-4f30-49a6-b145-86559ca006d3" />
 
 
 ```
