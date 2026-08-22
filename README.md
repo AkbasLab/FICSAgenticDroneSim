@@ -10,6 +10,9 @@ This repo is the restructured successor to the flat-script open-loop baseline
 phase - persistent agents, peer communication, task allocation, fault tolerance -
 can be built on top.
 
+<img width="2940" height="790" alt="image" src="https://github.com/user-attachments/assets/5a3a6056-3b1e-478c-b2b0-86cad7580693" />
+
+
 ## The two interfaces everything is built around
 
 - **`MissionPlanner`** (`agentic_uav/planners/base_planner.py`)
