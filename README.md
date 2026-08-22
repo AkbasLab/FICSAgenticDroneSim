@@ -92,6 +92,9 @@ around it.
   It completes the canonical mission, which is the baseline the coordinated
   architecture has to beat.
 
+  <img width="2940" height="790" alt="image" src="https://github.com/user-attachments/assets/d9801e05-62bf-4f11-b03c-cf77d7e0b3a4" />
+
+
 ```
 python scripts/run_canonical_mission.py           # deterministic, on the mock
 python scripts/run_canonical_mission.py --airsim  # fly it for real
