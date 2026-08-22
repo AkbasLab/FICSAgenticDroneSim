@@ -69,8 +69,7 @@ python scripts/phase3_demo.py --adapter airsim   # fly it for real
 
 Skill unit tests (no sim, no LLM): `python tests/test_skills.py`
 
-<img width="2582" height="688" alt="image" src="https://github.com/user-attachments/assets/886a6cff-eadf-4acf-a88e-3dcaa9659d59" />
-
+<img width="2576" height="692" alt="image" src="https://github.com/user-attachments/assets/d63a6582-72c1-4e80-b18a-09188f0a6b6d" />
 
 ## The canonical mission (Phase 4)
 
