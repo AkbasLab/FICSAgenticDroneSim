@@ -92,7 +92,7 @@ around it.
   It completes the canonical mission, which is the baseline the coordinated
   architecture has to beat.
 
-  <img width="2940" height="790" alt="image" src="https://github.com/user-attachments/assets/d9801e05-62bf-4f11-b03c-cf77d7e0b3a4" />
+  <img width="1200" height="1200" alt="image" src="https://github.com/user-attachments/assets/fe9489b7-4f30-49a6-b145-86559ca006d3" />
 
 
 ```
@@ -123,6 +123,9 @@ It handles the required reactions: accept a task, navigate to and search the
 sector, report completion, return home, **react to low battery** (stop extending
 the mission and land safely), and **recover from a failed navigation skill**
 (retry, then give up safely).
+
+<img width="2940" height="790" alt="image" src="https://github.com/user-attachments/assets/d9801e05-62bf-4f11-b03c-cf77d7e0b3a4" />
+
 
 ```
 python scripts/run_persistent_agent.py                 # completes the task
