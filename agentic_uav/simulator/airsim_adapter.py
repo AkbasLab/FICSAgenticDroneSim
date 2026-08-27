@@ -21,6 +21,17 @@ class AirSimVehicleAdapter:
         self._clients = {}
         self._clients_lock = threading.Lock()
         self._ground_z = {}   # vehicle_id -> ground level recorded at takeoff
+        self._t0 = time.monotonic()   # mission clock origin
+
+    def now(self, vehicle_id=None) -> float:
+        """Seconds since this adapter was created.
+
+        The agent layer needs a clock: battery depletion, information ageing and
+        message timestamps are all measured against it. The mock keeps a
+        *simulated* per-vehicle clock; here real time is the truth and all
+        vehicles share it, which is what we want when they fly concurrently.
+        """
+        return time.monotonic() - self._t0
 
     def _client_for(self, vehicle_id):
         c = self._clients.get(vehicle_id)
