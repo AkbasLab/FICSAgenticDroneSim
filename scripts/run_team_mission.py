@@ -15,7 +15,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agentic_uav.experiments.team_runner import build_team, run_team
+from agentic_uav.experiments.team_runner import (
+    build_team, run_team, run_team_threaded)
 from agentic_uav.simulator.mock_adapter import MockVehicleAdapter
 from agentic_uav.simulator.scenario_manager import load_scenario
 
@@ -45,7 +46,14 @@ def main():
         factory = lambda vid: MockVehicleAdapter(ground_z=0.0)
 
     agents, tasks, bus, _truth = build_team(scenario, factory)
-    report = run_team(agents, tasks, bus)
+    # AirSim: one thread per drone so the fleet flies concurrently.
+    # Mock: interleaved on the simulated clock, fully deterministic.
+    report = (run_team_threaded(agents, tasks, bus) if args.airsim
+              else run_team(agents, tasks, bus))
+    if report.errors:
+        print("\nERRORS:")
+        for vid, err in report.errors.items():
+            print(f"  {vid}: {err}")
 
     _print(report, agents)
     if args.messages:

@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agentic_uav.agents.objectives import SearchTask
 from agentic_uav.agents.persistent_agent import PersistentAgent
+from agentic_uav.simulator.ground_truth import GroundTruth, SensorModel
 from agentic_uav.simulator.mock_adapter import MockVehicleAdapter
 from agentic_uav.simulator.scenario_manager import load_scenario
 
@@ -33,6 +34,10 @@ def main():
     ap.add_argument("--battery", type=float, default=None,
                     help="override battery budget (s) to see the low-battery reaction")
     ap.add_argument("--airsim", action="store_true")
+    ap.add_argument("--log", action="store_true",
+                    help="print the per-decision belief audit trail")
+    ap.add_argument("--log-json", default=None,
+                    help="write full belief snapshots to a JSON file")
     args = ap.parse_args()
 
     scenario = load_scenario(args.scenario)
@@ -47,15 +52,26 @@ def main():
     else:
         adapter = MockVehicleAdapter(ground_z=0.0)
 
+    # Ground truth lives on the simulator side; the agent only gets a sensor.
+    truth = GroundTruth(scenario)
+    sensor = SensorModel(truth)
+
     task = SearchTask(task_id=f"search_{sector.sector_id}", sector=sector,
-                      report_to=scenario.base.position,
-                      targets_of_interest=scenario.targets)
+                      report_to=scenario.base.position)
 
     agent = PersistentAgent(vehicle_id=vehicle.vehicle_id, adapter=adapter,
                             home=vehicle.start, battery_total_s=battery,
-                            cruise_altitude=sector.altitude)
+                            cruise_altitude=sector.altitude, sensor=sensor,
+                            roster=truth.roster(), sector_ids=truth.sector_ids())
+    agent.belief.brief(scenario)
     report = agent.run(task)
     _print(report)
+    if args.log:
+        print("=== decision audit trail (what the agent knew / didn't know) ===\n")
+        print(report.log.format_text())
+        if args.log_json:
+            report.log.to_json(args.log_json)
+            print(f"(full belief snapshots written to {args.log_json})")
     return 0 if report.completed else 1
 
 
