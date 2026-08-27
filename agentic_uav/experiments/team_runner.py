@@ -27,6 +27,7 @@ class TeamRunReport:
     message_log: object = None
     bus: object = None
     total_steps: int = 0
+    errors: dict = field(default_factory=dict)
 
     @property
     def all_completed(self):
@@ -95,3 +96,42 @@ def run_team(agents, tasks, bus, max_total_steps=400) -> TeamRunReport:
         agents={a.vehicle_id: a.report() for a in agents},
         message_stats=bus.stats(), message_log=bus.log, bus=bus,
         total_steps=total)
+
+
+def run_team_threaded(agents, tasks, bus) -> TeamRunReport:
+    """Fly all agents at the same time, one thread each - for AirSim.
+
+    `run_team` interleaves agents on a *simulated* clock, which is exact and
+    deterministic but serialises real flight: with AirSim every skill blocks on
+    `.join()`, so drone 1 would fly its whole sweep before drone 2 moved. Here
+    each agent owns a thread and its own AirSim client, so the fleet genuinely
+    flies concurrently and messages cross mid-flight. Thread ordering makes the
+    run non-deterministic, so use this for the simulator and `run_team` for
+    reproducible experiments.
+    """
+    import threading
+
+    errors = {}
+
+    def fly(agent):
+        try:
+            agent.start(tasks[agent.vehicle_id])
+            while agent.step():
+                pass
+        except Exception as e:                      # keep one drone's failure local
+            errors[agent.vehicle_id] = repr(e)
+
+    threads = [threading.Thread(target=fly, args=(a,), name=a.vehicle_id,
+                                daemon=True) for a in agents]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    report = TeamRunReport(
+        agents={a.vehicle_id: a.report() for a in agents},
+        message_stats=bus.stats(), message_log=bus.log, bus=bus,
+        total_steps=sum(a.steps for a in agents))
+    if errors:
+        report.errors = errors
+    return report
