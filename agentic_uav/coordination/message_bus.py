@@ -22,6 +22,7 @@ for degradation are here so the later phase only has to change parameters, not
 the protocol.
 """
 
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -156,18 +157,24 @@ class MessageBus:
         self._pending: List[tuple] = []     # (deliver_at, recipient, message)
         self._inboxes: Dict[str, List[AgentMessage]] = {}
         self._registered: List[str] = []
+        # Agents run in threads when flying in AirSim, so every mutation of the
+        # queues is guarded. Deterministic mock runs are single-threaded and
+        # unaffected.
+        self._lock = threading.RLock()
 
     # --- setup ---
 
     def register(self, vehicle_id) -> "AgentLink":
-        if vehicle_id not in self._registered:
-            self._registered.append(vehicle_id)
-            self._inboxes[vehicle_id] = []
+        with self._lock:
+            if vehicle_id not in self._registered:
+                self._registered.append(vehicle_id)
+                self._inboxes[vehicle_id] = []
         return AgentLink(self, vehicle_id)
 
     # --- called through AgentLink only ---
 
     def _send(self, message: AgentMessage):
+      with self._lock:
         recipients = [v for v in self._registered if message.addressed_to(v)]
         for r in recipients:
             entry = MessageLogEntry(
@@ -195,7 +202,8 @@ class MessageBus:
         return rand < self.loss_rate
 
     def _receive(self, vehicle_id, now) -> List[AgentMessage]:
-        """Hand over the messages that have arrived for this agent by `now`."""
+      """Hand over the messages that have arrived for this agent by `now`."""
+      with self._lock:
         self._deliver_due(now)
         inbox = self._inboxes.get(vehicle_id, [])
         ready, keep = [], []
