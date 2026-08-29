@@ -47,8 +47,10 @@ def main():
     battery = args.battery if args.battery is not None else vehicle.battery_s
 
     if args.airsim:
+        from agentic_uav.simulator import scenario_manager
         from agentic_uav.simulator.airsim_adapter import AirSimVehicleAdapter
         adapter = AirSimVehicleAdapter()
+        scenario_manager.spawn_missing_drones(adapter.client, 1)
     else:
         adapter = MockVehicleAdapter(ground_z=0.0)
 

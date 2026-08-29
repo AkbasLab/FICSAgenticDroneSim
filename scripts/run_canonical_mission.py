@@ -34,8 +34,12 @@ def main():
     scenario = load_scenario(args.scenario)
 
     if args.airsim:
+        from agentic_uav.simulator import scenario_manager
         from agentic_uav.simulator.airsim_adapter import AirSimVehicleAdapter
         adapter = AirSimVehicleAdapter()
+        # self-heal: add any vehicles the sim doesn't already have
+        scenario_manager.spawn_missing_drones(adapter.client,
+                                              len(scenario.vehicles))
     else:
         adapter = MockVehicleAdapter(ground_z=0.0)
 

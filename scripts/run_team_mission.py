@@ -39,9 +39,13 @@ def main():
     scenario = load_scenario(args.scenario)
 
     if args.airsim:
+        from agentic_uav.simulator import scenario_manager
         from agentic_uav.simulator.airsim_adapter import AirSimVehicleAdapter
         shared = AirSimVehicleAdapter()
-        factory = lambda vid: shared          # adapter is per-vehicle internally
+        scenario_manager.spawn_missing_drones(shared.client,
+                                              len(scenario.vehicles))
+        # one adapter object, but it hands out a MultirotorClient per vehicle
+        factory = lambda vid: shared
     else:
         factory = lambda vid: MockVehicleAdapter(ground_z=0.0)
 
