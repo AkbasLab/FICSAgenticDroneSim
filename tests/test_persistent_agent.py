@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from agentic_uav.agents.objectives import AgentEvent, SearchTask
 from agentic_uav.agents.persistent_agent import PersistentAgent
 from agentic_uav.core.models import NavOutcome, Position3D
+from agentic_uav.simulator.ground_truth import GroundTruth, SensorModel
 from agentic_uav.simulator.mock_adapter import MockVehicleAdapter
 from agentic_uav.simulator.scenario_manager import load_scenario
 
@@ -19,20 +20,22 @@ SCENARIO = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 
 
 def _setup(sector_id="S1"):
+    """Build the scenario, the task, and the sensor that is the agent's only
+    route to ground truth (Phase 6.2 - the task itself carries no targets)."""
     scenario = load_scenario(SCENARIO)
     sector = next(s for s in scenario.sectors if s.sector_id == sector_id)
     vehicle = scenario.vehicles[0]
     task = SearchTask(task_id=f"search_{sector_id}", sector=sector,
-                      report_to=scenario.base.position,
-                      targets_of_interest=scenario.targets)
-    return scenario, sector, vehicle, task
+                      report_to=scenario.base.position)
+    sensor = SensorModel(GroundTruth(scenario))
+    return scenario, sector, vehicle, task, sensor
 
 
 def test_agent_completes_search_task():
-    scenario, sector, vehicle, task = _setup("S1")
+    scenario, sector, vehicle, task, sensor = _setup("S1")
     agent = PersistentAgent(vehicle.vehicle_id, MockVehicleAdapter(0.0),
                             home=vehicle.start, battery_total_s=vehicle.battery_s,
-                            cruise_altitude=sector.altitude)
+                            cruise_altitude=sector.altitude, sensor=sensor)
     r = agent.run(task)
     assert r.completed, r.decisions
     assert r.sector_searched and r.reported and r.returned_home and r.landed
@@ -41,10 +44,10 @@ def test_agent_completes_search_task():
 def test_no_preflight_plan_one_skill_at_a_time():
     """The agent must decide skills incrementally, not emit a full plan up front.
     Each decision is a single (event -> objective) step, in the right order."""
-    scenario, sector, vehicle, task = _setup("S1")
+    scenario, sector, vehicle, task, sensor = _setup("S1")
     agent = PersistentAgent(vehicle.vehicle_id, MockVehicleAdapter(0.0),
                             home=vehicle.start, battery_total_s=vehicle.battery_s,
-                            cruise_altitude=sector.altitude)
+                            cruise_altitude=sector.altitude, sensor=sensor)
     r = agent.run(task)
     objectives = [d.split("->")[1] for d in r.decisions]
     # the first decision reacts to task assignment, not a precomputed plan
@@ -58,20 +61,20 @@ def test_no_preflight_plan_one_skill_at_a_time():
 
 
 def test_detects_target_in_sector():
-    scenario, sector, vehicle, task = _setup("S1")  # T1 lives in S1
+    scenario, sector, vehicle, task, sensor = _setup("S1")  # T1 lives in S1
     agent = PersistentAgent(vehicle.vehicle_id, MockVehicleAdapter(0.0),
                             home=vehicle.start, battery_total_s=vehicle.battery_s,
-                            cruise_altitude=sector.altitude)
+                            cruise_altitude=sector.altitude, sensor=sensor)
     r = agent.run(task)
     assert "T1" in r.detections
 
 
 def test_low_battery_returns_without_finishing_search():
-    scenario, sector, vehicle, task = _setup("S1")
+    scenario, sector, vehicle, task, sensor = _setup("S1")
     # only enough battery to take off and start heading out
     agent = PersistentAgent(vehicle.vehicle_id, MockVehicleAdapter(0.0),
                             home=vehicle.start, battery_total_s=8.0,
-                            cruise_altitude=sector.altitude)
+                            cruise_altitude=sector.altitude, sensor=sensor)
     r = agent.run(task)
     assert not r.completed
     assert r.aborted_safely          # it still landed safely
@@ -100,10 +103,10 @@ class FlakyAdapter(MockVehicleAdapter):
 
 
 def test_recovers_from_failed_navigation():
-    scenario, sector, vehicle, task = _setup("S1")
+    scenario, sector, vehicle, task, sensor = _setup("S1")
     agent = PersistentAgent(vehicle.vehicle_id, FlakyAdapter(0.0),
                             home=vehicle.start, battery_total_s=vehicle.battery_s,
-                            cruise_altitude=sector.altitude)
+                            cruise_altitude=sector.altitude, sensor=sensor)
     r = agent.run(task)
     # despite the first nav failure, it retried and finished the task
     assert r.completed, r.decisions
