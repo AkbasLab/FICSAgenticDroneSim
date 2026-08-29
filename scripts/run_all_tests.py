@@ -24,6 +24,7 @@ SUITES = [
     ("5",   "Persistent agent loop",     "tests/test_persistent_agent.py", 5),
     ("6",   "Belief state + truth split", "tests/test_belief_state.py", 11),
     ("7",   "Message protocol",          "tests/test_messaging.py", 14),
+    ("3-7", "AirSim code path (fake sim)", "tests/test_airsim_path.py", 12),
 ]
 
 DEMOS = [
