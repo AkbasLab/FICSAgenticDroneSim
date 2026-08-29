@@ -24,7 +24,8 @@ SUITES = [
     ("5",   "Persistent agent loop",     "tests/test_persistent_agent.py", 5),
     ("6",   "Belief state + truth split", "tests/test_belief_state.py", 11),
     ("7",   "Message protocol",          "tests/test_messaging.py", 14),
-    ("3-7", "AirSim code path (fake sim)", "tests/test_airsim_path.py", 12),
+    ("8",   "Decentralized allocation",  "tests/test_allocation.py", 21),
+    ("3-8", "AirSim code path (fake sim)", "tests/test_airsim_path.py", 13),
 ]
 
 DEMOS = [
@@ -34,6 +35,7 @@ DEMOS = [
     ("5", "Persistent agent",        "scripts/run_persistent_agent.py"),
     ("6", "Belief audit trail",      "scripts/run_persistent_agent.py --log"),
     ("7", "4-agent team mission",    "scripts/run_team_mission.py"),
+    ("8", "Decentralized allocation", "scripts/run_allocation_mission.py"),
 ]
 
 

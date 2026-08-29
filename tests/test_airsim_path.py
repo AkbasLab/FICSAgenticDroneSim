@@ -35,6 +35,8 @@ AIRSIM_SCRIPTS = [
     ("scripts/run_persistent_agent.py", "--airsim --log"),
     ("scripts/run_team_mission.py", "--airsim"),
     ("scripts/run_team_mission.py", "--airsim --messages --beliefs"),
+    ("scripts/run_allocation_mission.py", "--airsim"),
+    ("scripts/run_allocation_mission.py", "--airsim --bids --conflicts"),
 ]
 
 # runs a script with the fake airsim installed first
@@ -252,6 +254,36 @@ def test_threaded_team_runner_completes_without_deadlock():
         assert a.belief.team.teammates, f"{a.vehicle_id} heard from nobody"
 
 
+def test_decentralized_allocation_works_on_the_airsim_adapter():
+    """Phase 8 must divide the work when flying the real adapter too, not just
+    on the mock - the allocation runs inside the agent loop, which the AirSim
+    path drives differently (threads, real clock)."""
+    fake_airsim.install()
+    from agentic_uav.coordination.tasks import TaskStatus
+    from agentic_uav.experiments.team_runner import (
+        build_allocating_team, run_team_threaded)
+    from agentic_uav.simulator.airsim_adapter import AirSimVehicleAdapter
+    from agentic_uav.simulator.scenario_manager import load_scenario
+
+    sc = load_scenario(os.path.join(ROOT, "configs/missions/search_relay_001.yaml"))
+    shared = AirSimVehicleAdapter()
+    agents, tasks, bus, _ = build_allocating_team(sc, lambda vid: shared)
+    report = run_team_threaded(agents, tasks, bus)
+    assert not report.errors, report.errors
+
+    completed, claims = {}, {}
+    for a in agents:
+        for t in a.allocator.board.all():
+            if t.status is TaskStatus.COMPLETE:
+                completed[t.task_id] = t.assigned_agent
+            if t.assigned_agent:
+                claims.setdefault(t.task_id, set()).add(t.assigned_agent)
+    sectors = {f"SEARCH_SECTOR_S{i}" for i in (1, 2, 3, 4)}
+    assert sectors <= set(completed), completed
+    disputed = {k: v for k, v in claims.items() if len(v) > 1}
+    assert not disputed, f"boards disagree after a threaded run: {disputed}"
+
+
 def test_each_vehicle_gets_its_own_client():
     """The concurrency fix: one MultirotorClient per vehicle, never shared."""
     fake_airsim.install()
@@ -285,6 +317,8 @@ if __name__ == "__main__":
         ("every --airsim script runs end to end", test_every_airsim_script_runs),
         ("threaded team runner completes without deadlock",
          test_threaded_team_runner_completes_without_deadlock),
+        ("decentralized allocation works on AirSim adapter",
+         test_decentralized_allocation_works_on_the_airsim_adapter),
         ("each vehicle gets its own client", test_each_vehicle_gets_its_own_client),
     ]
     passed = failed = 0
