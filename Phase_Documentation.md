@@ -1,4 +1,5 @@
 # Phase Documentation
+A dedicated section of the repository where every phase of the project is clearly documented, including the steps, tools, procedures, and important decisions made throughout development. This documentation will improve reproducibility and allow new team members or contributors who are unfamiliar with the project to quickly understand the workflow, set up the necessary environment, and follow the same process without needing extensive prior knowledge or guidance.
 ## Phase 1 — Natural-language flight planning (open-loop baseline)
 Goal: an operator types a plain-English instruction; a language model turns it into a validated sequence of flight actions; the drone executes it in simulation.
 
