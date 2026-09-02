@@ -189,7 +189,21 @@ class TaskBoard:
         return sorted(out, key=lambda t: (-t.priority, t.task_id))
 
     def held_by(self, vehicle_id, now):
+        """Tasks this vehicle holds with a *valid* lease - how OTHERS judge it."""
         return [t for t in self.tasks.values() if t.held_by(vehicle_id, now)]
+
+    def claimed_by(self, vehicle_id):
+        """Tasks this vehicle claimed and hasn't finished - how IT sees itself.
+
+        Deliberately ignores the lease. A drone knows what it took on; a lapsed
+        lease means its teammates may start doubting it, not that it should
+        abandon the sector it is halfway through. It keeps working and keeps
+        renewing; if someone else genuinely takes the task over, `assigned_agent`
+        changes and this stops matching.
+        """
+        return [t for t in self.tasks.values()
+                if t.assigned_agent == vehicle_id
+                and t.status not in (TaskStatus.COMPLETE, TaskStatus.FAILED)]
 
     def incomplete(self):
         return [t for t in self.tasks.values()

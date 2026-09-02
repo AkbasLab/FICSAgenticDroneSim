@@ -60,7 +60,8 @@ class TaskAllocator:
 
     def __init__(self, vehicle_id, board, link=None, weights=None,
                  capabilities=None, lease_s=DEFAULT_LEASE_S,
-                 bid_window_s=DEFAULT_BID_WINDOW_S, max_concurrent=1):
+                 bid_window_s=DEFAULT_BID_WINDOW_S, max_concurrent=1,
+                 health=None):
         self.vehicle_id = vehicle_id
         self.board = board
         self.link = link
@@ -69,6 +70,9 @@ class TaskAllocator:
         self.lease_s = lease_s
         self.bid_window_s = bid_window_s
         self.max_concurrent = max_concurrent
+        # Phase 9: teammate liveness. A task held by a drone we believe is gone
+        # is available *now* - we should not wait out its lease.
+        self.health = health
 
         # task_id -> {vehicle_id: Bid}   (only bids this agent has actually heard)
         self.bids: Dict[str, Dict[str, Bid]] = {}
@@ -96,7 +100,34 @@ class TaskAllocator:
                               mission_id=belief.mission.mission_id, ttl_s=ttl_s)
 
     def my_tasks(self, now):
-        return self.board.held_by(self.vehicle_id, now)
+        """What I consider mine. Lease-independent - see TaskBoard.claimed_by."""
+        return self.board.claimed_by(self.vehicle_id)
+
+    def open_for_me(self, now):
+        """Tasks I could take on right now.
+
+        Two ways a task becomes available:
+          - the ordinary route: unassigned, or its holder's lease ran out;
+          - the Phase 9 route: its holder is a drone I believe has failed.
+
+        The second matters because the lease has to be longer than the longest
+        skill (or a drone busy inside a 70s sweep would have its sector stolen),
+        which is far longer than it takes to notice a teammate has gone silent.
+        Waiting out the lease of a drone we already know is lost would waste most
+        of the mission.
+        """
+        lost = set(self.health.failed_peers()) if self.health else set()
+        out = []
+        for t in self.board.all():
+            if t.status in (TaskStatus.COMPLETE, TaskStatus.FAILED):
+                continue
+            if not (t.required_capabilities <= self.capabilities):
+                continue
+            if t.assigned_agent == self.vehicle_id:
+                continue
+            if t.is_open(now) or t.assigned_agent in lost:
+                out.append(t)
+        return sorted(out, key=lambda t: (-t.priority, t.task_id))
 
     def has_capacity(self, now):
         return len(self.my_tasks(now)) < self.max_concurrent
@@ -225,8 +256,15 @@ class TaskAllocator:
         now = belief.now
         changed = False
 
-        # 8.4 - reclaim tasks whose holder went silent
-        for t in self.board.expire_leases(now):
+        # 8.4 / 9.3 - reclaim tasks whose holder went silent, either because
+        # its lease ran out or because we now believe the drone itself is gone
+        lost = set(self.health.failed_peers()) if self.health else set()
+        reclaimable = list(self.board.expire_leases(now))
+        for t in self.board.all():
+            if (t.assigned_agent in lost and t not in reclaimable
+                    and t.status not in (TaskStatus.COMPLETE, TaskStatus.FAILED)):
+                reclaimable.append(t)
+        for t in reclaimable:
             if t.assigned_agent == self.vehicle_id:
                 continue                        # our own lease: renewed below
             self._log(f"t={now:.0f} {t.task_id} lease expired "
@@ -237,7 +275,9 @@ class TaskAllocator:
             self._announce([t], belief)
             changed = True
 
-        # renew our own leases by reporting progress (step 6)
+        # renew our own leases by reporting progress (step 6). This also revives
+        # a lease that lapsed while we were inside a long skill - we are still
+        # flying it, so the correct action is to reassert, not to abandon.
         for t in self.my_tasks(now):
             t.renew(now, self.lease_s)
             self._send(MessageType.TASK_ACCEPT,
@@ -247,7 +287,7 @@ class TaskAllocator:
         if not self.has_capacity(now):
             return changed
 
-        open_tasks = self.board.open_tasks(now, self.capabilities)
+        open_tasks = self.open_for_me(now)
         if not open_tasks:
             return changed
 
