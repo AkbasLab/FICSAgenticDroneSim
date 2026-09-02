@@ -15,6 +15,7 @@ University.
 | 6 | Belief state | The log shows what the agent knew *and didn't* | 11 |
 | 7 | Message protocol | Four agents coordinate only via delivered messages | 14 |
 | 8 | Task allocation | Four drones divide the work with no central assignment | 21 |
+| 9 | Roles + recovery | Kill one drone; the rest reassign its work and finish | 22 |
 | — | Simulator path | Every `--airsim` entry point runs end to end | 13 |
 
 **86 tests, 7 demos, none requiring a simulator, GPU or API key:**
@@ -280,3 +281,70 @@ all resolved, every board converged, no sector flown twice.
 
 **Exit criterion.** Four drones receive one mission, divide the sectors with no
 central assignment, complete the work, and converge on a single holder per task.
+
+---
+
+## Phase 9 — Dynamic roles and failure recovery
+
+**Goal.** Let the team change shape, not just its to-do list, and keep going when
+a drone is lost.
+
+**Built.** Three roles: `SCOUT` (searches), `RELAY` (holds station to keep the
+team connected), `RESERVE` (spare capacity) — each agent choosing its own from
+local belief, deterministically. A RELAY drops the `search` capability, so the
+capability check already in the bidding path stops handing it sectors; no
+special-casing in the allocator.
+
+**Failure detection is graded on purpose.** `HEALTHY → SUSPECTED → UNREACHABLE →
+FAILED`, with `RECOVERED` if a peer speaks again. A missed heartbeat means "I
+have not heard from you", which is not the same as "you have crashed" — comms
+loss is common, vehicle loss is not. Declaring failure on one missed message
+would be worse than no detection at all, because sectors would be pulled off
+healthy drones that were briefly quiet. That restraint is asserted as a test, as
+is the fact that a peer we have never heard from at t=0 is not "failed".
+
+**The interesting problem.** Three separate bugs, all of them really one issue:
+the relationship between lease duration and skill duration.
+
+1. *A drone lost its own task mid-flight.* `my_tasks()` filtered on lease
+   validity, so once a 40 s lease lapsed during a 70 s sweep, the drone could no
+   longer renew what it had already stopped "holding", it abandoned the sector
+   it was halfway through. Fixed by separating `claimed_by()` (how a drone sees
+   itself — lease-independent) from `held_by()` (how *others* judge it).
+2. *Teammates stole sectors from healthy drones.* With a lease shorter than a
+   sweep, other agents saw the lease expire and rebid on work that was actively
+   being flown. The constraint is now explicit: **the lease must exceed the
+   longest skill.**
+3. *But then a dead drone's work stayed locked.* A 150 s lease means waiting out
+   most of the mission for a drone the team already knows is gone. Fixed by
+   letting health detection short-circuit the lease, a task whose holder is
+   believed failed becomes available immediately, without waiting for expiry.
+
+A fourth, smaller one: an agent with no task and no pending events quit the loop
+**while still airborne**. It now waits a bounded number of rounds for work to
+appear, then flies home rather than being left stranded.
+
+**Exit criterion.** One of four drones is switched off mid-mission, no flight,
+no sensing, no heartbeats, and nobody is told. The others detect the silence,
+reclaim its sector, and finish:
+
+```
+!! Drone2 switched off at t=15s (teammates not informed)
+detected the loss : Drone3:unreachable, Drone4:failed
+sectors completed : 4/4
+  SEARCH_SECTOR_S2     by Drone4  <- reassigned after the failure
+human commands after launch: 0
+```
+
+Both halves are checked negatively too. Raise the heartbeat interval
+(`--heartbeat 200`) and the team never concludes the drone is gone, so the sector
+is never reclaimed - 3/4. Shorten the lease below a sweep (`--lease 40`) and
+drones lose work they are actively flying - 1/4. The passing result depends on
+both mechanisms, not on luck.
+
+**Controlled emergence, defined operationally** (9.4) and checked as assertions
+rather than asserted in prose: a team-level objective is given; no central
+controller specifies any drone's task sequence; agents use only local beliefs and
+delivered messages (verified by scanning each belief for ground-truth objects);
+allocation and role changes arise from agent interaction; and the deterministic
+safety constraints still hold, every surviving drone lands safely at home.
