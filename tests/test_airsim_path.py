@@ -37,6 +37,7 @@ AIRSIM_SCRIPTS = [
     ("scripts/run_team_mission.py", "--airsim --messages --beliefs"),
     ("scripts/run_allocation_mission.py", "--airsim"),
     ("scripts/run_allocation_mission.py", "--airsim --bids --conflicts"),
+    ("scripts/run_failure_recovery.py", "--airsim --roles --health"),
 ]
 
 # runs a script with the fake airsim installed first
@@ -284,6 +285,47 @@ def test_decentralized_allocation_works_on_the_airsim_adapter():
     assert not disputed, f"boards disagree after a threaded run: {disputed}"
 
 
+def test_failure_recovery_works_on_the_airsim_adapter():
+    """Phase 9 must recover from a lost drone on the real adapter too.
+
+    Note the scaled timings. On the AirSim adapter every vehicle shares one wall
+    clock, and against the fake a whole mission runs in a fraction of a second -
+    so the mock's values (150s lease, 15s heartbeat, 5s bid window) would all be
+    enormous relative to the run, and nothing would ever expire. The protocol's
+    parameters are relative to mission duration, not absolute, so they are scaled
+    to this time base. The invariants asserted are the same ones the mock test
+    checks; only the clock differs.
+    """
+    fake_airsim.install(move_duration_s=0.01)
+    from agentic_uav.coordination.tasks import TaskStatus
+    from agentic_uav.experiments.team_runner import (
+        build_allocating_team, run_team_with_faults)
+    from agentic_uav.simulator.airsim_adapter import AirSimVehicleAdapter
+    from agentic_uav.simulator.scenario_manager import load_scenario
+
+    sc = load_scenario(os.path.join(ROOT, "configs/missions/search_relay_001.yaml"))
+    shared = AirSimVehicleAdapter()
+    agents, tasks, bus, _ = build_allocating_team(
+        sc, lambda vid: shared, lease_s=5.0, heartbeat_interval_s=0.02,
+        bid_window_s=0.005)
+    run_team_with_faults(agents, tasks, bus, stop_at={"Drone2": 0.02})
+
+    # the loss was detected from silence alone
+    detected = [a.vehicle_id for a in agents if a.vehicle_id != "Drone2"
+                and a.health.state_of("Drone2").value in
+                ("suspected", "unreachable", "failed")]
+    assert detected, "nobody noticed the failure on the AirSim path"
+
+    completed = {}
+    for a in agents:
+        for t in a.allocator.board.all():
+            if t.status is TaskStatus.COMPLETE:
+                completed.setdefault(t.task_id, t.assigned_agent)
+    for i in (1, 2, 3, 4):
+        assert f"SEARCH_SECTOR_S{i}" in completed, completed
+    assert completed["SEARCH_SECTOR_S2"] != "Drone2"
+
+
 def test_each_vehicle_gets_its_own_client():
     """The concurrency fix: one MultirotorClient per vehicle, never shared."""
     fake_airsim.install()
@@ -319,6 +361,8 @@ if __name__ == "__main__":
          test_threaded_team_runner_completes_without_deadlock),
         ("decentralized allocation works on AirSim adapter",
          test_decentralized_allocation_works_on_the_airsim_adapter),
+        ("failure recovery works on AirSim adapter",
+         test_failure_recovery_works_on_the_airsim_adapter),
         ("each vehicle gets its own client", test_each_vehicle_gets_its_own_client),
     ]
     passed = failed = 0
