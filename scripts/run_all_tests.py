@@ -26,7 +26,8 @@ SUITES = [
     ("7",   "Message protocol",          "tests/test_messaging.py", 14),
     ("8",   "Decentralized allocation",  "tests/test_allocation.py", 21),
     ("9",   "Roles + failure recovery",  "tests/test_roles_recovery.py", 22),
-    ("3-9", "AirSim code path (fake sim)", "tests/test_airsim_path.py", 14),
+    ("10",  "Degraded comms model",      "tests/test_network.py", 30),
+    ("3-10", "AirSim code path (fake sim)", "tests/test_airsim_path.py", 15),
 ]
 
 DEMOS = [
@@ -38,6 +39,7 @@ DEMOS = [
     ("7", "4-agent team mission",    "scripts/run_team_mission.py"),
     ("8", "Decentralized allocation", "scripts/run_allocation_mission.py"),
     ("9", "Failure recovery",        "scripts/run_failure_recovery.py"),
+    ("10", "Comms conditions study",  "scripts/run_comms_study.py"),
 ]
 
 
