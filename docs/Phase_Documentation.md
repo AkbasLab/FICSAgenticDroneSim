@@ -348,3 +348,92 @@ controller specifies any drone's task sequence; agents use only local beliefs an
 delivered messages (verified by scanning each belief for ground-truth objects);
 allocation and role changes arise from agent interaction; and the deterministic
 safety constraints still hold — every surviving drone lands safely at home.
+
+---
+
+## Phase 10 — The degraded-communications simulator
+
+**Goal.** Phase 7 proved the protocol under *perfect* communication. This is
+where it gets tested honestly.
+
+**Built.** A configurable, seeded `NetworkModel`: latency mean and jitter, packet
+loss, message rate limit, bandwidth cap, communication range, plus burst loss,
+partitions, interference zones and asymmetric links. Four named conditions —
+`nominal`, `moderate`, `severe`, `partitioned` — so every experiment means the
+same thing by those words.
+
+| condition | latency | loss | other |
+|---|---|---|---|
+| `nominal` | 20±5 ms | 0% | — |
+| `moderate` | 150±50 ms | 10% | — |
+| `severe` | 600±250 ms | 30% | 4 msg/s rate limit, 5% burst loss |
+| `partitioned` | 100±30 ms | 5% | two groups split for a window |
+
+**These numbers are experimental parameters, not claims about a real radio.**
+They exist so two architectures can be compared under identical conditions.
+Calibrating them against an operational system is separate work.
+
+**Seeded and reproducible.** One RNG per run, drawn in a deterministic order
+because the runner is single-threaded and stepped in simulated-time order. Same
+seed means the same messages lost and the same latencies drawn — which is what
+makes comparing two architectures "under the same degraded conditions" a
+meaningful statement rather than a hopeful one.
+
+**Message lifetimes by type.** A delayed message can arrive after it has stopped
+being useful, so heartbeats and intents expire quickly while target reports live
+long and mission constraints never expire. `link.send()` applies the per-type TTL
+automatically.
+
+**Agents estimate; they never read.** An agent cannot see
+`packet_loss_probability`. It infers link quality from missing sequence numbers,
+heartbeat arrival rate, message age on arrival, and whether anything is getting
+through at all. A test walks each estimator's attributes to confirm no
+`NetworkModel` or `NetworkProfile` is reachable from it, and a behavioural test
+confirms agents estimate higher loss under `severe` than under `nominal` without
+being told which condition they are in.
+
+**Verified statistically, not assumed.** Thousands of messages per check: 10% and
+30% configured loss land within a couple of points empirically; a 150±50 ms
+profile produces a mean of 145–155 ms and a standard deviation of 45–55 ms;
+latency never goes negative even when jitter exceeds the mean; partitions block
+only across the split and only inside the window; expired messages are never
+delivered; identical seeds reproduce identically and different seeds do not.
+
+**Two honest findings.**
+
+*The agent's "latency" estimate is not latency.* `now - message.timestamp` at
+read time is dominated by the agent's own decision cadence — tens of seconds
+between inbox checks — not by the wire. Renamed to **message age on arrival**,
+which is the number the agent actually needs anyway, since it governs whether the
+contents can still be trusted. A true one-way latency estimate would need an echo
+protocol and a synchronised clock.
+
+*The `severe` profile is dominated by its rate limit, not its packet loss.* At
+4 messages/second, 568 of 744 messages were refused by the rate limiter versus 63
+lost to the 30% packet-loss setting. The condition is behaving as configured, but
+"severe" currently means "rate-starved" more than "lossy". Worth recalibrating in
+the pilot experiments the spec calls for.
+
+**Exit criterion.** The same mission replays under all four conditions with
+reproducible delivery:
+
+```
+condition      sectors   sent  deliv   rate    delay  drops
+nominal          4/4      315    303   96%   10.35s  none
+moderate         4/4      282    240   85%   21.13s  packet_loss=32
+severe           4/4      744     99   13%   31.09s  burst_loss=11, packet_loss=63, rate_limited=568
+partitioned      4/4      426    289   68%   16.01s  packet_loss=15, partitioned=108, expired=2
+```
+
+```bash
+python scripts/run_comms_study.py              # all four conditions
+python scripts/run_comms_study.py --estimates  # agents' own view of the link
+python scripts/run_comms_study.py --condition severe --messages
+python tests/test_network.py                   # 30 statistical checks
+```
+
+Notably the mission completes under every condition, including one where 87% of
+messages never arrive — each drone's own sector search does not depend on hearing
+from anyone. That is a result about this scenario as much as about the
+architecture, and the coordination-dependent scenarios are where the comparison
+will actually bite.
