@@ -38,6 +38,7 @@ AIRSIM_SCRIPTS = [
     ("scripts/run_allocation_mission.py", "--airsim"),
     ("scripts/run_allocation_mission.py", "--airsim --bids --conflicts"),
     ("scripts/run_failure_recovery.py", "--airsim --roles --health"),
+    ("scripts/run_comms_study.py", "--condition nominal --estimates"),
 ]
 
 # runs a script with the fake airsim installed first
@@ -326,6 +327,30 @@ def test_failure_recovery_works_on_the_airsim_adapter():
     assert completed["SEARCH_SECTOR_S2"] != "Drone2"
 
 
+def test_degraded_comms_runs_on_the_airsim_adapter():
+    """Phase 10 must work on the real adapter too - the network model sits with
+    the bus, so it is adapter-independent, but the wiring still has to hold."""
+    fake_airsim.install(move_duration_s=0.005)
+    from agentic_uav.coordination import comms_conditions as cc
+    from agentic_uav.experiments.team_runner import build_allocating_team, run_team
+    from agentic_uav.simulator.airsim_adapter import AirSimVehicleAdapter
+    from agentic_uav.simulator.scenario_manager import load_scenario
+
+    sc = load_scenario(os.path.join(ROOT, "configs/missions/search_relay_001.yaml"))
+    shared = AirSimVehicleAdapter()
+    agents, tasks, bus, _ = build_allocating_team(
+        sc, lambda vid: shared, network=cc.condition("moderate"), seed=5,
+        lease_s=5.0, heartbeat_interval_s=0.02, bid_window_s=0.005)
+    run_team(agents, tasks, bus)
+
+    s = bus.stats()
+    assert s["sent"] > 0
+    assert s["dropped_link"] > 0, "10% loss should have dropped something"
+    # and the agents formed their own estimate rather than reading the config
+    for a in agents:
+        assert a.comms is not None
+
+
 def test_each_vehicle_gets_its_own_client():
     """The concurrency fix: one MultirotorClient per vehicle, never shared."""
     fake_airsim.install()
@@ -363,6 +388,8 @@ if __name__ == "__main__":
          test_decentralized_allocation_works_on_the_airsim_adapter),
         ("failure recovery works on AirSim adapter",
          test_failure_recovery_works_on_the_airsim_adapter),
+        ("degraded comms runs on AirSim adapter",
+         test_degraded_comms_runs_on_the_airsim_adapter),
         ("each vehicle gets its own client", test_each_vehicle_gets_its_own_client),
     ]
     passed = failed = 0
