@@ -33,6 +33,13 @@ class SearchAgentPolicy:
         if belief.landed:
             return Objective.DONE
 
+        # Phase 8: with no task in hand, the job is to win one. The agent only
+        # flies once the team's allocation has given it something to do.
+        if belief.task is None:
+            if getattr(belief, "no_work_remaining", False):
+                return Objective.LAND if belief.near_home else Objective.RETURN_HOME
+            return Objective.CLAIM_TASK
+
         # safety reaction: too many nav failures -> abandon task, come home.
         if belief.nav_failures > self.max_nav_retries and not belief.rtb_forced:
             belief.rtb_forced = True

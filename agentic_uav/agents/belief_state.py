@@ -60,6 +60,10 @@ class BeliefState:
         self.reported = False
         self.rtb_forced = False
         self.nav_failures = 0
+        # Phase 8: which mission tasks this agent currently holds (drives the
+        # workload term in its bids), and whether any work is left at all.
+        self.held_task_ids = []
+        self.no_work_remaining = False
 
         # --- bookkeeping ---
         self.last_result = None
@@ -253,6 +257,7 @@ class BeliefState:
                 "position": _pt(s.position),
                 "battery_frac": round(s.battery_frac, 3),
                 "health": s.health,
+                "role": s.role,
                 "current_skill": s.current_skill,
                 "current_task": s.current_task,
                 "airborne": s.airborne,

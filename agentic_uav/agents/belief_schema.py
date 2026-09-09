@@ -78,6 +78,7 @@ class SelfBelief:
     health: str = "ok"                  # ok | degraded | failed
     current_skill: Optional[str] = None
     current_task: Optional[str] = None
+    role: str = "scout"                 # Phase 9: functional role
     airborne: bool = False
     landed: bool = False
 

@@ -28,6 +28,7 @@ class TeamRunReport:
     bus: object = None
     total_steps: int = 0
     errors: dict = field(default_factory=dict)
+    stopped: dict = field(default_factory=dict)   # vehicle_id -> time it was killed
 
     @property
     def all_completed(self):
@@ -78,10 +79,70 @@ def build_team(scenario, adapter_factory, latency_s=0.0, loss_rate=0.0,
     return agents, tasks, bus, truth
 
 
+def build_allocating_team(scenario, adapter_factory, latency_s=0.0, loss_rate=0.0,
+                          rng=None, battery_s=None, lease_s=None,
+                          bid_window_s=None, capabilities=None,
+                          heartbeat_interval_s=20.0):
+    """Phase 8: a team given the *mission*, with no sector assigned to anyone.
+
+    Every agent gets the same task board and works out its own share through
+    the contract-net protocol. Contrast with `build_team`, where the sectors are
+    handed out up front by the experiment.
+    """
+    from ..coordination.bidding import BidWeights
+    from ..coordination.role_manager import RoleManager
+    from ..coordination.roles import HealthMonitor
+    from ..coordination.task_allocator import (
+        DEFAULT_BID_WINDOW_S, DEFAULT_LEASE_S, TaskAllocator)
+    from ..coordination.tasks import TaskBoard, tasks_from_scenario
+
+    truth = GroundTruth(scenario)
+    sensor = SensorModel(truth)
+    bus = MessageBus(latency_s=latency_s, loss_rate=loss_rate, rng=rng)
+    mission_tasks = tasks_from_scenario(scenario, include_relay=False)
+
+    agents = []
+    for vehicle in scenario.vehicles:
+        # each agent gets its OWN copy of the board - no shared state
+        board = TaskBoard([MissionTaskCopy(t) for t in mission_tasks])
+        link = bus.register(vehicle.vehicle_id)
+        health = HealthMonitor(vehicle.vehicle_id,
+                               heartbeat_interval_s=heartbeat_interval_s)
+        roles = RoleManager(vehicle.vehicle_id, health)
+        allocator = TaskAllocator(
+            vehicle_id=vehicle.vehicle_id, board=board, link=link,
+            weights=BidWeights(),
+            capabilities=capabilities or {"search", "relay", "inspect"},
+            lease_s=lease_s or DEFAULT_LEASE_S,
+            bid_window_s=(DEFAULT_BID_WINDOW_S if bid_window_s is None
+                          else bid_window_s),
+            health=health)
+        agent = PersistentAgent(
+            vehicle_id=vehicle.vehicle_id,
+            adapter=adapter_factory(vehicle.vehicle_id),
+            home=vehicle.start,
+            battery_total_s=battery_s or vehicle.battery_s,
+            cruise_altitude=scenario.sectors[0].altitude,
+            sensor=sensor, roster=truth.roster(), sector_ids=truth.sector_ids(),
+            link=link, message_log=bus.log, allocator=allocator,
+            health=health, role_manager=roles, max_steps=120)
+        agent.belief.brief(scenario)
+        agents.append(agent)
+
+    # no tasks dict: every agent starts empty-handed and bids for work
+    return agents, {v.vehicle_id: None for v in scenario.vehicles}, bus, truth
+
+
+def MissionTaskCopy(t):
+    """A per-agent copy of a task, so boards can legitimately diverge."""
+    import copy
+    return copy.deepcopy(t)
+
+
 def run_team(agents, tasks, bus, max_total_steps=400) -> TeamRunReport:
     """Step agents in simulated-time order until they all finish."""
     for a in agents:
-        a.start(tasks[a.vehicle_id])
+        a.start(tasks.get(a.vehicle_id))
 
     active = list(agents)
     total = 0
@@ -96,6 +157,45 @@ def run_team(agents, tasks, bus, max_total_steps=400) -> TeamRunReport:
         agents={a.vehicle_id: a.report() for a in agents},
         message_stats=bus.stats(), message_log=bus.log, bus=bus,
         total_steps=total)
+
+
+def run_team_with_faults(agents, tasks, bus, stop_at=None,
+                         max_total_steps=600) -> TeamRunReport:
+    """Run the team, stopping chosen agents partway through (Phase 9 exit criterion).
+
+    `stop_at` is {vehicle_id: sim_time_s}. When an agent's clock passes its time
+    it is switched off completely - no flight, no sensing, no heartbeats. Its
+    teammates are *not* told; they have to notice the silence, decide it is a
+    failure rather than a comms glitch, reclaim its task and carry on. No human
+    command is issued at any point after the mission starts.
+    """
+    stop_at = stop_at or {}
+    for a in agents:
+        a.start(tasks.get(a.vehicle_id))
+
+    stopped_at = {}
+    active = list(agents)
+    total = 0
+    while active and total < max_total_steps:
+        agent = min(active, key=lambda a: a.belief.now)
+        total += 1
+
+        deadline = stop_at.get(agent.vehicle_id)
+        if deadline is not None and agent.belief.now >= deadline and not agent.stopped:
+            agent.stopped = True
+            stopped_at[agent.vehicle_id] = agent.belief.now
+            active.remove(agent)
+            continue
+
+        if not agent.step():
+            active.remove(agent)
+
+    report = TeamRunReport(
+        agents={a.vehicle_id: a.report() for a in agents},
+        message_stats=bus.stats(), message_log=bus.log, bus=bus,
+        total_steps=total)
+    report.stopped = stopped_at
+    return report
 
 
 def run_team_threaded(agents, tasks, bus) -> TeamRunReport:

@@ -16,6 +16,7 @@ from ..core.models import Position3D
 
 class Objective(str, Enum):
     """The next thing the agent is trying to accomplish."""
+    CLAIM_TASK = "claim_task"        # Phase 8: bid for work, no task held yet
     TAKE_OFF = "take_off"
     GO_TO_SECTOR = "go_to_sector"
     SEARCH_SECTOR = "search_sector"
@@ -45,12 +46,17 @@ class AgentEvent(str, Enum):
     MESSAGE_RECEIVED = "message_received"
     COMMS_CHANGED = "comms_changed"
     TEAMMATE_FAILED = "teammate_failed"
+    ROLE_CHANGED = "role_changed"
 
 
 @dataclass
 class SearchTask:
-    """A search assignment handed to one agent - not a plan, just the goal."""
+    """A search assignment handed to one agent - not a plan, just the goal.
+
+    Deliberately carries no target list. Where the targets actually are is ground
+    truth (Phase 6.2); the agent must discover them through its sensor, so a task
+    assignment can never smuggle in perfect information.
+    """
     task_id: str
     sector: Sector
     report_to: Position3D             # base station position to report back to
-    targets_of_interest: Optional[list] = field(default=None)
