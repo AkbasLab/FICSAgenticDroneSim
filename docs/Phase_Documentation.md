@@ -16,9 +16,9 @@ University.
 | 7 | Message protocol | Four agents coordinate only via delivered messages | 14 |
 | 8 | Task allocation | Four drones divide the work with no central assignment | 21 |
 | 9 | Roles + recovery | Kill one drone; the rest reassign its work and finish | 22 |
-| — | Simulator path | Every `--airsim` entry point runs end to end | 13 |
+| — | Simulator path | Every `--airsim` entry point runs end to end | 14 |
 
-**86 tests, 7 demos, none requiring a simulator, GPU or API key:**
+**109 tests, 8 demos, none requiring a simulator, GPU or API key:**
 
 ```bash
 python scripts/run_all_tests.py
@@ -289,7 +289,7 @@ central assignment, complete the work, and converge on a single holder per task.
 **Goal.** Let the team change shape, not just its to-do list, and keep going when
 a drone is lost.
 
-**Built.** Three roles: `SCOUT` (searches), `RELAY` (holds station to keep the
+**Built.** Three roles — `SCOUT` (searches), `RELAY` (holds station to keep the
 team connected), `RESERVE` (spare capacity) — each agent choosing its own from
 local belief, deterministically. A RELAY drops the `search` capability, so the
 capability check already in the bidding path stops handing it sectors; no
@@ -308,7 +308,7 @@ the relationship between lease duration and skill duration.
 
 1. *A drone lost its own task mid-flight.* `my_tasks()` filtered on lease
    validity, so once a 40 s lease lapsed during a 70 s sweep, the drone could no
-   longer renew what it had already stopped "holding", it abandoned the sector
+   longer renew what it had already stopped "holding" — it abandoned the sector
    it was halfway through. Fixed by separating `claimed_by()` (how a drone sees
    itself — lease-independent) from `held_by()` (how *others* judge it).
 2. *Teammates stole sectors from healthy drones.* With a lease shorter than a
@@ -317,14 +317,14 @@ the relationship between lease duration and skill duration.
    longest skill.**
 3. *But then a dead drone's work stayed locked.* A 150 s lease means waiting out
    most of the mission for a drone the team already knows is gone. Fixed by
-   letting health detection short-circuit the lease, a task whose holder is
+   letting health detection short-circuit the lease — a task whose holder is
    believed failed becomes available immediately, without waiting for expiry.
 
 A fourth, smaller one: an agent with no task and no pending events quit the loop
 **while still airborne**. It now waits a bounded number of rounds for work to
 appear, then flies home rather than being left stranded.
 
-**Exit criterion.** One of four drones is switched off mid-mission, no flight,
+**Exit criterion.** One of four drones is switched off mid-mission — no flight,
 no sensing, no heartbeats, and nobody is told. The others detect the silence,
 reclaim its sector, and finish:
 
@@ -338,8 +338,8 @@ human commands after launch: 0
 
 Both halves are checked negatively too. Raise the heartbeat interval
 (`--heartbeat 200`) and the team never concludes the drone is gone, so the sector
-is never reclaimed - 3/4. Shorten the lease below a sweep (`--lease 40`) and
-drones lose work they are actively flying - 1/4. The passing result depends on
+is never reclaimed — 3/4. Shorten the lease below a sweep (`--lease 40`) and
+drones lose work they are actively flying — 1/4. The passing result depends on
 both mechanisms, not on luck.
 
 **Controlled emergence, defined operationally** (9.4) and checked as assertions
@@ -347,4 +347,4 @@ rather than asserted in prose: a team-level objective is given; no central
 controller specifies any drone's task sequence; agents use only local beliefs and
 delivered messages (verified by scanning each belief for ground-truth objects);
 allocation and role changes arise from agent interaction; and the deterministic
-safety constraints still hold, every surviving drone lands safely at home.
+safety constraints still hold — every surviving drone lands safely at home.
