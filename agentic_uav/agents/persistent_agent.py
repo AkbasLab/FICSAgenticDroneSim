@@ -28,6 +28,7 @@ from ..experiments.decision_log import DecisionLog
 from ..experiments.mission_runner import _timed_path
 from .belief_schema import Source
 from .belief_state import BeliefState
+from .comms_estimator import CommsEstimator
 from .guardian import Guardian
 from .objectives import AgentEvent, Objective
 from .search_policy import SearchAgentPolicy
@@ -72,7 +73,7 @@ class PersistentAgent:
                  low_battery_frac=0.30, critical_battery_frac=0.12,
                  max_steps=60, sensor=None, roster=None, sector_ids=None,
                  link=None, message_log=None, allocator=None,
-                 health=None, role_manager=None):
+                 health=None, role_manager=None, comms=None):
         self.vehicle_id = vehicle_id
         self.adapter = adapter
         self.executor = SkillExecutor(adapter)
@@ -96,6 +97,9 @@ class PersistentAgent:
         self.allocator = allocator
         # Phase 9: teammate liveness and this agent's functional role.
         self.health = health
+        # Phase 10.5: link quality is *estimated* from observed traffic, never
+        # read from the network model's configuration.
+        self.comms = comms
         self.roles = role_manager or (RoleManager(vehicle_id, health)
                                       if health is not None else None)
         # set by fault injection - a stopped drone does nothing at all, which is
@@ -476,7 +480,11 @@ class PersistentAgent:
         for m in messages:
             if self.health is not None:
                 self.health.note_heard(m.sender_id, b.now)
+            if self.comms is not None:
+                self.comms.observe(m, b.now)
             self._apply_message(b, m)
+        if self.comms is not None:
+            self.comms.apply_to(b)
         b.communication.connected_peers = [
             vid for vid, r in b.team.teammates.items() if not r.is_stale(b.now)]
         return messages

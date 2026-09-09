@@ -215,6 +215,8 @@ class TeamBelief:
 
 @dataclass
 class CommunicationBelief:
+    # Both are ESTIMATES the agent computed from observed traffic (Phase 10.5),
+    # never the network model's configured values.
     estimated_latency_s: float = 0.0
     recent_loss_rate: float = 0.0
     connected_peers: List[str] = field(default_factory=list)
