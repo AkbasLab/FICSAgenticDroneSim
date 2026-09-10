@@ -16,7 +16,8 @@ University.
 | 7 | Message protocol | Four agents coordinate only via delivered messages | 14 |
 | 8 | Task allocation | Four drones divide the work with no central assignment | 21 |
 | 9 | Roles + recovery | Kill one drone; the rest reassign its work and finish | 22 |
-| — | Simulator path | Every `--airsim` entry point runs end to end | 14 |
+| 10 | Degraded comms | Replay one mission under four comms conditions, reproducibly | 30 |
+| — | Simulator path | Every `--airsim` entry point runs end to end | 15 |
 
 **109 tests, 8 demos, none requiring a simulator, GPU or API key:**
 
