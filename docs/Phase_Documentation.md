@@ -19,11 +19,96 @@ University.
 | 10 | Degraded comms | Replay one mission under four comms conditions, reproducibly | 30 |
 | — | Simulator path | Every `--airsim` entry point runs end to end | 15 |
 
-**109 tests, 8 demos, none requiring a simulator, GPU or API key:**
+**140 tests, 9 demos, none requiring a simulator, GPU or API key:**
 
 ```bash
 python scripts/run_all_tests.py
 ```
+
+---
+
+## Before you start — tools, setup, and what each phase needs
+
+### What you actually need
+
+Most of this project runs on **Python alone**. The simulator and the language
+models are only needed for specific phases, so do not install everything before
+you begin.
+
+| Tool | Version | Needed for | Required? |
+|---|---|---|---|
+| Python | 3.10 | everything | **Yes** |
+| `numpy`, `PyYAML`, `matplotlib` | see `requirements.txt` | everything | **Yes** |
+| Ollama + `llama3.1:8b`, `mistral-nemo` | latest | Phase 1–2 local LLM planning | Optional |
+| Google Gemini API key | `google-genai` SDK | Phase 1–2 cloud planning | Optional |
+| CARLA-Air (CARLA 0.9.16 + AirSim 1.8.1, UE 4.26) | v0.1.7 | any `--airsim` run | Optional |
+
+**Phases 3 through 10 need nothing but Python.** They run against a
+deterministic kinematic mock simulator, which is why the whole test suite works
+on a laptop with no GPU.
+
+### One-time setup (all phases)
+
+```bash
+conda create -n carlaAir python=3.10
+conda activate carlaAir
+cd AgenticDroneSimRepo
+pip install -r requirements.txt
+
+python scripts/run_all_tests.py      # confirm the install: 140 tests, 9 demos
+```
+
+If `run_all_tests.py` is green, you are ready for Phases 3–10.
+
+### Additional setup for LLM planning (Phases 1–2 only)
+
+Local models, via Ollama:
+
+```bash
+ollama pull llama3.1:8b
+ollama pull mistral-nemo
+```
+
+Cloud model — put the key in a `.env` file in the repo root:
+
+```powershell
+# Windows PowerShell. Use -Encoding ascii: `echo >` writes UTF-16, which the
+# loader cannot read and which produces "UnicodeDecodeError: 0xff".
+Set-Content -Path .env -Value "GEMINI_API_KEY=your_key_here" -Encoding ascii
+```
+
+Never commit `.env`. It is gitignored; keep it that way.
+
+### Additional setup for the simulator (`--airsim` runs)
+
+1. Launch CARLA-Air and wait for **Town10HD** to finish loading. Commands sent
+   during load fail in confusing ways.
+2. Confirm the ports: CARLA on **2000**, AirSim RPC on **41451**.
+3. Generate `settings.json` (written to `~/Documents/AirSim/`) and **restart
+   CARLA-Air** — settings are only read at startup:
+
+```bash
+python -c "from agentic_uav.simulator.scenario_manager import write_airsim_settings; print(write_airsim_settings(4))"
+```
+
+4. Verify the connection before running anything else:
+
+```bash
+python -c "import airsim; c=airsim.MultirotorClient(); c.confirmConnection(); print(c.listVehicles())"
+```
+
+Expect `['Drone1', 'Drone2', 'Drone3', 'Drone4']`. If this fails, stop — nothing
+downstream will work. The Phase 4–10 scripts also self-heal by calling
+`spawn_missing_drones()`, but a clean `settings.json` is more reliable.
+
+See `docs/SIM_TESTING.md` for the full simulator walkthrough and
+`docs/TESTING.md` for how to verify each phase and deliberately break it.
+
+### Reading a phase section
+
+Each phase below ends with a **How to run it** block giving the exact commands,
+the files involved, and the parameters worth changing. A consolidated command
+reference and a parameter-tuning table are in the appendices at the end.
 
 ---
 
@@ -51,6 +136,63 @@ than a reasoning one: constraining generation with a JSON schema
 landing either sank through the terrain or stopped in mid-air. Fixed by recording
 ground level before takeoff, descending fast to 4 m above it, settling, then a
 slow final approach and disarm.
+
+
+### How to run it
+
+**Needs:** Python, plus Ollama (local models) or a Gemini key (cloud model).
+The `rule` planner needs neither and is the right choice for a first run.
+
+```bash
+# no LLM, no simulator - deterministic keyword planner on the mock.
+# This PROMPTS for each drone's instruction; type e.g.
+#   fly forward 5 seconds then land
+python scripts/run_single_mission.py --planner rule --adapter mock --drones 1
+
+# non-interactive: read the instructions from a JSON file
+python scripts/run_single_mission.py --planner rule --adapter mock \
+    --mission configs/missions/example_mission.json
+
+# local models (Ollama running)
+python scripts/run_single_mission.py --planner llama --adapter mock --drones 1
+python scripts/run_single_mission.py --planner mistral --adapter mock --drones 1
+
+# cloud model (.env with GEMINI_API_KEY)
+python scripts/run_single_mission.py --planner gemini --adapter mock --drones 1
+
+# fly it for real
+python scripts/run_single_mission.py --planner gemini --adapter airsim --drones 1
+```
+
+**Options:** `--planner gemini|llama|mistral|rule` · `--adapter mock|airsim` ·
+`--drones N` (prompts for N instructions) · `--mission <path.json>`
+
+**Note:** with no `--mission`, the script is **interactive** — it waits for you
+to type each drone's instruction, so it will appear to hang if you are not
+expecting a prompt. `--mission` takes a **path to a JSON file**, not an
+instruction string:
+
+```json
+{
+  "drones": {
+    "Drone1": "fly forward 5 seconds then land",
+    "Drone2": "go up 15 meters, hover 3 seconds, then come back and land"
+  }
+}
+```
+
+There is a ready-made one at `configs/missions/example_mission.json`.
+
+**Files:** `agentic_uav/planners/` (one file per planner, plus
+`base_planner.py` holding the shared prompt, few-shot examples and the JSON
+schema) · `agentic_uav/control/action_executor.py` · `agentic_uav/agents/rule_policy.py`
+
+**Worth adjusting:** the action vocabulary and required parameters live in
+`ACTION_PARAMS` in `agentic_uav/control/skills.py`; the schema that forces
+multi-step plans is `build_plan_schema()` in the same file. Model names are
+`MODEL` constants at the top of each planner. Local models run CPU-only
+(`num_gpu: 0`) so the GPU stays free for the simulator — change that in
+`llama_planner.py` if you want GPU inference.
 
 ---
 
@@ -81,6 +223,30 @@ behavior-preservation tests run missions through the new pipeline on the mock
 adapter with the deterministic policy and assert the exact sequence of actions
 each drone executes — they still pass today, eight phases later.
 
+
+### How to run it
+
+**Needs:** Python only.
+
+```bash
+# behaviour-preservation check - the refactor must not change flight behaviour
+python tests/test_behavior_preservation.py
+
+# several drones at once
+python scripts/run_single_mission.py --planner rule --adapter mock --drones 4
+python scripts/run_single_mission.py --planner mistral --adapter airsim --drones 2
+```
+
+**Files:** `agentic_uav/planners/base_planner.py` (the `MissionPlanner`
+interface) · `agentic_uav/core/models.py` (the `VehicleAdapter` interface) ·
+`agentic_uav/simulator/airsim_adapter.py` · `agentic_uav/simulator/mock_adapter.py`
+
+**Worth knowing:** `AirSimVehicleAdapter._client_for()` creates **one
+`MultirotorClient` per vehicle**. Do not change this to a shared client — the
+AirSim RPC client is not thread-safe, and sharing it makes drones swap speeds
+and stall. Flight constants (altitude, speeds, landing profile) are all in
+`agentic_uav/control/navigation.py`.
+
 ---
 
 ## Phase 3 — High-level skills with formal contracts
@@ -102,6 +268,30 @@ something the agent can *reason about* in later phases.
 
 **Exit criterion.** Four drones take off, fly to distinct waypoints, hold,
 return and land — every skill reporting success, concurrently.
+
+
+### How to run it
+
+**Needs:** Python only (add CARLA-Air for `--adapter airsim`).
+
+```bash
+python scripts/phase3_demo.py                     # 4 drones, exit criterion
+python scripts/phase3_showcase.py                 # all 11 skills in sequence
+python tests/test_skills.py                       # 12 tests
+
+python scripts/phase3_demo.py --adapter airsim    # fly it
+python scripts/phase3_showcase.py --adapter airsim
+```
+
+**Files:** `agentic_uav/control/skills.py` (typed commands + `SkillContract`
+for each skill) · `agentic_uav/control/skill_executor.py` (executes them and
+enforces the contract) · `agentic_uav/control/navigation.py` (flight constants)
+
+**Worth adjusting:** each skill's defaults — `speed_mps`, `tolerance_m`,
+`timeout_s`, and `lane_spacing_m` for `SearchRegionCommand` — are dataclass
+fields in `skills.py`. Lane spacing controls how thoroughly a sector is swept;
+at the default 8 m with a detection radius of 8 m, coverage comes out at 100%.
+Widen it and coverage drops.
 
 ---
 
@@ -128,6 +318,36 @@ because a scorer that can only say PASS proves nothing.
 **Exit criterion.** A fully scripted, *non-agentic* controller completes the
 mission — 100% coverage, both targets found. That is the baseline the coordinated
 architecture has to beat.
+
+
+### How to run it
+
+**Needs:** Python only (add CARLA-Air for `--airsim`).
+
+```bash
+python scripts/run_canonical_mission.py           # scored 4-drone mission
+python scripts/run_canonical_mission.py --airsim  # fly it
+python scripts/plot_mission_layout.py --paths     # regenerate the layout figure
+python tests/test_mission.py                      # 6 tests
+```
+
+**Options:** `--scenario path/to/other.yaml` · `--airsim`
+
+**Files:** `configs/missions/search_relay_001.yaml` (**the scenario — edit this
+to change the world**) · `agentic_uav/experiments/mission_runner.py` (the
+scripted baseline controller) · `agentic_uav/experiments/metrics.py` (the
+scorer) · `agentic_uav/simulator/target_model.py` (geometric detection)
+
+**Worth adjusting — all in the YAML:** sector footprints, target positions and
+`detection_radius_m`, the restricted-zone polygon, `deadline_s`,
+`required_coverage`, `min_separation_m`, per-vehicle `battery_s`, and
+`random_seed`. To add a scenario, copy the YAML, change `scenario_id`, and pass
+it with `--scenario`.
+
+**Careful:** keep the restricted zone clear of the base and of the routes drones
+fly to their sectors, or every run fails the no-fly check. Coverage is sampled on
+a 5 m grid with an 8 m path radius (`COVERAGE_CELL_M` / `COVERAGE_RADIUS_M` in
+`metrics.py`).
 
 ---
 
@@ -160,6 +380,37 @@ task_assigned->take_off → skill_succeeded->go_to_sector
 Every objective was chosen in response to something that happened. Low battery
 makes it break off and land safely; a failed navigation skill is retried and
 recovered.
+
+
+### How to run it
+
+**Needs:** Python only (add CARLA-Air for `--airsim`).
+
+```bash
+python scripts/run_persistent_agent.py                  # completes the task
+python scripts/run_persistent_agent.py --battery 8      # low-battery safe abort
+python scripts/run_persistent_agent.py --sector S3      # a different sector
+python scripts/run_persistent_agent.py --airsim         # fly it
+python tests/test_persistent_agent.py                   # 5 tests
+```
+
+**Options:** `--sector S1|S2|S3|S4` · `--battery <seconds>` · `--scenario` ·
+`--airsim` · `--log` · `--log-json out.json`
+
+**Files:** `agentic_uav/agents/persistent_agent.py` (the lifecycle loop) ·
+`agentic_uav/agents/search_policy.py` (the deterministic policy) ·
+`agentic_uav/agents/guardian.py` (the safety layer) ·
+`agentic_uav/agents/objectives.py` (objectives and replan events)
+
+**Worth adjusting:** `low_battery_frac` (0.30) and `critical_battery_frac`
+(0.12) are constructor arguments on `PersistentAgent`; `ROLE_BATTERY_FLOOR`
+(0.35) is in `role_manager.py`; `max_nav_retries` (2) is on `SearchAgentPolicy`;
+`MAX_IDLE_ROUNDS` (3) at the top of `persistent_agent.py` controls how long an
+agent with no work waits before flying home.
+
+**On `--battery`:** the value is in **simulated seconds on the mock but real
+seconds in AirSim**. On the mock, 8 is a good demo value. In AirSim start around
+45 and halve it if the agent still completes.
 
 ---
 
@@ -199,6 +450,34 @@ report shows as stale, not current.
     DECIDED : search_sector via search_region -> success
 ```
 
+
+### How to run it
+
+**Needs:** Python only.
+
+```bash
+python scripts/run_persistent_agent.py --log                    # audit trail
+python scripts/run_persistent_agent.py --log --log-json run.json
+python tests/test_belief_state.py                               # 11 tests
+```
+
+`run.json` holds the full belief snapshot at every decision — that is the file
+to analyse a run from afterwards.
+
+**Files:** `agentic_uav/agents/belief_schema.py` (the six sections) ·
+`agentic_uav/agents/belief_state.py` · `agentic_uav/simulator/ground_truth.py`
+(`GroundTruth` + `SensorModel`) · `agentic_uav/experiments/decision_log.py`
+
+**Worth adjusting:** information lifetimes are `DEFAULT_TTL` per `Source` in
+`belief_schema.py`; confidence decays with a 20 s half-life
+(`Provenance.decayed_confidence`).
+
+**Rule to preserve:** an agent must never hold a `GroundTruth`,
+`MissionScenario` or `Target`. Everything reaches belief through `SensorModel`
+or a delivered message. Two tests in `test_belief_state.py` enforce this — if
+you add a feature that hands an agent scenario data, they will fail, and that is
+the point.
+
 ---
 
 ## Phase 7 — Inter-agent message protocol
@@ -236,6 +515,38 @@ None were link loss: heartbeat TTL was shorter than a 70-second search sweep, so
 messages aged out before agents next checked their inbox. TTLs were raised above
 skill duration, and the statistics now separate link loss from expiry, so
 "perfect" is visibly perfect.
+
+
+### How to run it
+
+**Needs:** Python only (add CARLA-Air for `--airsim`).
+
+```bash
+python scripts/run_team_mission.py                      # 4 agents together
+python scripts/run_team_mission.py --messages           # per-message log
+python scripts/run_team_mission.py --beliefs            # each agent's team view
+python scripts/run_team_mission.py --airsim             # fly it (threaded)
+python tests/test_messaging.py                          # 14 tests
+```
+
+**Options:** `--messages` · `--beliefs` · `--log-json msgs.json` · `--airsim`
+
+**Files:** `agentic_uav/coordination/protocols.py` (13 message types + the
+envelope) · `agentic_uav/coordination/message_bus.py` (`MessageBus` and the
+two-method `AgentLink`) · `agentic_uav/experiments/team_runner.py`
+
+**Worth adjusting:** message TTLs are in `comms_conditions.TTL_BY_TYPE`. They
+**must exceed the longest skill** (a sector sweep is ~70 s) or messages age out
+before the recipient next checks its inbox and appear as losses.
+
+**Two runners:** `run_team()` interleaves agents on a simulated clock — exact and
+deterministic, used for all mock experiments. `run_team_threaded()` gives each
+drone its own thread and AirSim client so the fleet flies concurrently; it is
+selected automatically by `--airsim` and is **not** deterministic.
+
+**Rule to preserve:** agents hold an `AgentLink` (`send` / `receive_available`),
+never the bus. The blackout test in `test_messaging.py` reruns the mission with a
+bus that delivers nothing and asserts every team belief stays empty.
 
 ---
 
@@ -282,6 +593,38 @@ all resolved, every board converged, no sector flown twice.
 
 **Exit criterion.** Four drones receive one mission, divide the sectors with no
 central assignment, complete the work, and converge on a single holder per task.
+
+
+### How to run it
+
+**Needs:** Python only (add CARLA-Air for `--airsim`).
+
+```bash
+python scripts/run_allocation_mission.py                # 4 drones divide the work
+python scripts/run_allocation_mission.py --bids         # every bid, explained
+python scripts/run_allocation_mission.py --conflicts    # duplicate-claim log
+python scripts/run_allocation_mission.py --lease 1      # force lease expiry
+python scripts/run_allocation_mission.py --airsim
+python tests/test_allocation.py                         # 21 tests
+```
+
+**Options:** `--bids` · `--conflicts` · `--lease <seconds>` · `--scenario` ·
+`--airsim`
+
+**Files:** `agentic_uav/coordination/tasks.py` (`MissionTask`, `TaskBoard`) ·
+`agentic_uav/coordination/bidding.py` (the cost function) ·
+`agentic_uav/coordination/task_allocator.py` (the contract-net protocol)
+
+**Worth adjusting:** the bid weights are `BidWeights` in `bidding.py`
+(`w_distance` 1.0, `w_battery` 1.5, `w_workload` 2.0, `w_comms` 0.5, `w_role`
+5.0 — the last is high enough to be disqualifying). `DEFAULT_LEASE_S` (120) and
+`DEFAULT_BID_WINDOW_S` (5) are at the top of `task_allocator.py`.
+`tasks_from_scenario()` builds the task list from the YAML; pass
+`include_relay=True` to add the relay task.
+
+**Constraint that matters most:** the **lease must be longer than the longest
+skill**. Shorter, and teammates see a busy drone's lease expire and steal the
+sector it is actively flying. Try `--lease 40` to see this happen.
 
 ---
 
@@ -350,6 +693,43 @@ delivered messages (verified by scanning each belief for ground-truth objects);
 allocation and role changes arise from agent interaction; and the deterministic
 safety constraints still hold — every surviving drone lands safely at home.
 
+
+### How to run it
+
+**Needs:** Python only (add CARLA-Air for `--airsim`).
+
+```bash
+python scripts/run_failure_recovery.py                       # kill Drone2 at t=5s
+python scripts/run_failure_recovery.py --health              # health transitions
+python scripts/run_failure_recovery.py --roles               # role changes
+python scripts/run_failure_recovery.py --kill Drone3 --at 40
+python scripts/run_failure_recovery.py --airsim
+python tests/test_roles_recovery.py                          # 22 tests
+```
+
+**Options:** `--kill <DroneN>` · `--at <sim seconds>` · `--lease <seconds>` ·
+`--heartbeat <seconds>` · `--roles` · `--health` · `--airsim`
+
+**Files:** `agentic_uav/coordination/roles.py` (`Role`, `HealthState`,
+`HealthMonitor`) · `agentic_uav/coordination/role_manager.py` (the role policy) ·
+`run_team_with_faults()` in `agentic_uav/experiments/team_runner.py`
+
+**Worth adjusting:** the silence thresholds are multiples of the heartbeat
+interval, at the top of `roles.py` — `SUSPECT_AFTER_MISSED` 2.0,
+`UNREACHABLE_AFTER_MISSED` 4.0, `FAILED_AFTER_MISSED` 8.0. Lower them to detect
+loss faster at the cost of false positives during ordinary comms glitches.
+
+**Two settings that interact, and are easy to get wrong:**
+
+* `--lease` must exceed the longest skill (~70 s). The default is 150.
+  Try `--lease 40` and the run degrades to 1/4 sectors, because drones lose work
+  they are actively flying.
+* `--heartbeat` drives failure detection. Try `--heartbeat 200` and the run
+  degrades to 3/4, because the team never concludes the missing drone is gone.
+
+Only both together give 4/4. That is a useful demonstration that the result
+depends on the mechanisms rather than on luck.
+
 ---
 
 ## Phase 10 — The degraded-communications simulator
@@ -362,13 +742,6 @@ loss, message rate limit, bandwidth cap, communication range, plus burst loss,
 partitions, interference zones and asymmetric links. Four named conditions —
 `nominal`, `moderate`, `severe`, `partitioned` — so every experiment means the
 same thing by those words.
-
-| condition | latency | loss | other |
-|---|---|---|---|
-| `nominal` | 20±5 ms | 0% | — |
-| `moderate` | 150±50 ms | 10% | — |
-| `severe` | 600±250 ms | 30% | 4 msg/s rate limit, 5% burst loss |
-| `partitioned` | 100±30 ms | 5% | two groups split for a window |
 
 **These numbers are experimental parameters, not claims about a real radio.**
 They exist so two architectures can be compared under identical conditions.
@@ -426,15 +799,221 @@ severe           4/4      744     99   13%   31.09s  burst_loss=11, packet_loss=
 partitioned      4/4      426    289   68%   16.01s  packet_loss=15, partitioned=108, expired=2
 ```
 
-```bash
-python scripts/run_comms_study.py              # all four conditions
-python scripts/run_comms_study.py --estimates  # agents' own view of the link
-python scripts/run_comms_study.py --condition severe --messages
-python tests/test_network.py                   # 30 statistical checks
-```
-
 Notably the mission completes under every condition, including one where 87% of
 messages never arrive — each drone's own sector search does not depend on hearing
 from anyone. That is a result about this scenario as much as about the
 architecture, and the coordination-dependent scenarios are where the comparison
 will actually bite.
+
+### How to run it
+
+**Needs:** Python only.
+
+```bash
+python scripts/run_comms_study.py                             # all four conditions
+python scripts/run_comms_study.py --estimates                 # agents' own view
+python scripts/run_comms_study.py --condition severe --messages
+python scripts/run_comms_study.py --seed 42                   # a different draw
+python tests/test_network.py                                  # 30 tests
+```
+
+**Options:** `--condition nominal|moderate|severe|partitioned` · `--seed N` ·
+`--estimates` · `--messages` · `--lease` · `--heartbeat` · `--scenario`
+
+**Files:** `agentic_uav/coordination/network_model.py` (`NetworkProfile`,
+`NetworkModel`, `Partition`, `InterferenceZone`) ·
+`agentic_uav/coordination/comms_conditions.py` (**the four conditions and the
+per-type TTLs — edit here to add or retune a condition**) ·
+`agentic_uav/agents/comms_estimator.py` (the agent-side estimate)
+
+**Adding a condition:**
+
+```python
+# in comms_conditions.py
+MY_CONDITION = _register(NetworkProfile(
+    name="my_condition",
+    latency_ms_mean=300.0,
+    latency_ms_jitter=100.0,
+    packet_loss_probability=0.2,
+    message_rate_limit=None,          # messages/sec/sender, None = unlimited
+    communication_range_m=None,       # metres, None = unlimited
+))
+ORDER.append("my_condition")          # so the study script picks it up
+```
+
+**Reproducibility:** pass the same `--seed` and you get the same losses and the
+same latency draws. Different architectures compared under one seed are
+comparing like with like; that is the whole reason the seed exists.
+
+**Rule to preserve:** agents must never read the `NetworkProfile`. They estimate
+link quality from sequence gaps, heartbeat arrival rate and message age. A test
+in `test_network.py` walks each estimator for a smuggled network object.
+
+**Two things not to misread in the output:** `msg_age` is how old messages are
+when read (dominated by decision cadence), **not** wire latency; and `est_loss`
+counts everything that failed to arrive, including rate-limited messages, so
+under `severe` it legitimately exceeds the configured 30%.
+
+
+---
+
+## Appendix A — Command reference
+
+Every runnable entry point, in phase order. All work with no simulator unless
+the `--airsim` column says otherwise.
+
+| Phase | Command | What it shows | AirSim? |
+|---|---|---|---|
+| all | `python scripts/run_all_tests.py` | 140 tests + 9 demos, one summary | no |
+| 1 | `python scripts/run_single_mission.py --planner rule --adapter mock` | English → validated plan → flight | `--adapter airsim` |
+| 2 | `python tests/test_behavior_preservation.py` | refactor changed structure, not behaviour | no |
+| 3 | `python scripts/phase3_demo.py` | 4 drones run skills concurrently | `--adapter airsim` |
+| 3 | `python scripts/phase3_showcase.py` | all 11 skills | `--adapter airsim` |
+| 4 | `python scripts/run_canonical_mission.py` | scored mission, 8 criteria | `--airsim` |
+| 4 | `python scripts/plot_mission_layout.py --paths` | regenerates the scenario figure | no |
+| 5 | `python scripts/run_persistent_agent.py` | closed-loop agent, no preflight plan | `--airsim` |
+| 5 | `python scripts/run_persistent_agent.py --battery 8` | low-battery safe abort | `--airsim` |
+| 6 | `python scripts/run_persistent_agent.py --log` | what the agent knew / didn't | `--airsim` |
+| 7 | `python scripts/run_team_mission.py --messages` | 4 agents, per-message log | `--airsim` |
+| 8 | `python scripts/run_allocation_mission.py --bids` | self-organising division of work | `--airsim` |
+| 9 | `python scripts/run_failure_recovery.py --health` | recovery from a lost drone | `--airsim` |
+| 10 | `python scripts/run_comms_study.py --estimates` | four comms conditions | no |
+
+Test suites individually:
+
+```bash
+python tests/test_skills.py                 # 12   Phase 3
+python tests/test_behavior_preservation.py  #  4   Phase 1-2
+python tests/test_mission.py                #  6   Phase 4
+python tests/test_persistent_agent.py       #  5   Phase 5
+python tests/test_belief_state.py           # 11   Phase 6
+python tests/test_messaging.py              # 14   Phase 7
+python tests/test_allocation.py             # 21   Phase 8
+python tests/test_roles_recovery.py         # 22   Phase 9
+python tests/test_network.py                # 30   Phase 10
+python tests/test_airsim_path.py            # 15   the --airsim path, faked
+```
+
+---
+
+## Appendix B — Parameters worth tuning, and where they live
+
+| Parameter | Default | File | What it does |
+|---|---|---|---|
+| `ALTITUDE` | −8.0 m | `control/navigation.py` | cruise height (NED: negative is up) |
+| `FLY_TO_SPEED` | 4.0 m/s | `control/navigation.py` | point-to-point speed |
+| landing profile | 5.0 → 1.5 m/s | `control/navigation.py` | fast descent, settle, slow final approach |
+| `lane_spacing_m` | 8.0 m | `control/skills.py` | sweep density; wider means lower coverage |
+| `required_coverage` | 0.95 | scenario YAML | coverage needed to pass |
+| `deadline_s` | 900 | scenario YAML | mission time limit |
+| `battery_s` | 900 | scenario YAML | per-vehicle budget |
+| `random_seed` | 17 | scenario YAML | scenario-level seed |
+| `low_battery_frac` | 0.30 | `PersistentAgent(...)` | when to stop extending the mission |
+| `critical_battery_frac` | 0.12 | `PersistentAgent(...)` | when to land immediately |
+| `MAX_IDLE_ROUNDS` | 3 | `agents/persistent_agent.py` | idle waits before flying home |
+| `BidWeights` | 1.0/1.5/2.0/0.5/5.0 | `coordination/bidding.py` | distance / battery / workload / comms / role |
+| `DEFAULT_LEASE_S` | 120 | `coordination/task_allocator.py` | **must exceed the longest skill** |
+| `DEFAULT_BID_WINDOW_S` | 5 | `coordination/task_allocator.py` | how long to collect rival bids |
+| `SUSPECT_AFTER_MISSED` | 2.0 | `coordination/roles.py` | heartbeats missed before "suspected" |
+| `FAILED_AFTER_MISSED` | 8.0 | `coordination/roles.py` | heartbeats missed before "failed" |
+| `TTL_BY_TYPE` | 90–600 s | `coordination/comms_conditions.py` | message lifetimes by type |
+| condition profiles | see table | `coordination/comms_conditions.py` | the four comms conditions |
+
+**The single most important relationship in the system:**
+
+```
+message TTL  >  task lease  >  longest skill duration (~70 s sweep)
+```
+
+Break it in either direction and the symptoms are confusing rather than obvious:
+too short a lease and healthy drones lose work they are flying; too short a TTL
+and normal traffic looks like packet loss.
+
+---
+
+## Appendix C — Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `No module named airsim` / `numpy` | pip installed into `base`, not `carlaAir` | `conda activate carlaAir`, check `python -c "import sys; print(sys.executable)"` contains `envs\carlaAir` |
+| `UnicodeDecodeError: 0xff` reading `.env` | PowerShell `echo >` wrote UTF-16 | rewrite with `Set-Content -Encoding ascii` |
+| `Vehicle API for Drone1 not available` | vehicles not in `settings.json` | regenerate settings, restart CARLA-Air; scripts also call `spawn_missing_drones()` |
+| conda refuses to install | Terms of Service not accepted | `conda tos accept` |
+| conda won't activate in PowerShell | execution policy | `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`, then `conda init powershell` |
+| Gemini returns 404 | model name deprecated | use `gemini-flash-latest` |
+| LLM drops steps from a multi-part command | unconstrained output | keep `format=PLAN_SCHEMA` in the Ollama call / `response_mime_type="application/json"` for Gemini |
+| Drones swap speeds, stall, interfere | shared AirSim RPC client | one `MultirotorClient` per vehicle (already in `_client_for`) |
+| Drone sinks through the ground on landing | ground level not recorded | ensure `takeoff()` ran first — it records `ground_z` |
+| Only one drone moves at a time in AirSim | sequential runner | `--airsim` selects the threaded runner; confirm you passed it |
+| Battery never depletes in AirSim | adapter clock missing | `AirSimVehicleAdapter.now()` must exist |
+| Drones lose sectors mid-sweep | lease shorter than the skill | raise `--lease` above ~70 s |
+| Team never notices a dead drone | heartbeat interval too large | lower `--heartbeat` |
+| Messages look lost under perfect comms | TTL shorter than a skill | raise the TTL in `TTL_BY_TYPE` |
+| Everything times out in AirSim | sim still loading, or paused | wait for Town10HD to finish loading |
+
+When an AirSim run wedges, restarting CARLA-Air is almost always faster than
+debugging the vehicle state.
+
+---
+
+## Appendix D — Where things live
+
+```
+agentic_uav/
+  core/          data types, enums, geometry, mission models
+  simulator/     airsim_adapter.py     real simulator
+                 mock_adapter.py       deterministic kinematics, no sim
+                 fake_airsim.py        fake AirSim API, for testing the --airsim path
+                 ground_truth.py       GroundTruth + SensorModel (Phase 6)
+                 target_model.py       geometric detection, no neural network
+                 scenario_manager.py   YAML loader, settings.json, vehicle spawning
+  control/       skills.py             typed commands + contracts
+                 skill_executor.py     executes skills, enforces contracts
+                 navigation.py         flight constants
+  agents/        persistent_agent.py   the lifecycle loop
+                 belief_state.py       + belief_schema.py
+                 search_policy.py      deterministic policy
+                 guardian.py           safety override layer
+                 comms_estimator.py    agent-side link estimate (Phase 10.5)
+  coordination/  protocols.py          message types + envelope
+                 message_bus.py        bus + AgentLink
+                 tasks.py              MissionTask, TaskBoard
+                 bidding.py            deterministic bid function
+                 task_allocator.py     contract-net protocol
+                 roles.py              roles + health states
+                 role_manager.py       role policy
+                 network_model.py      seeded degradation model
+                 comms_conditions.py   the four conditions + TTLs
+  planners/      gemini / llama / mistral / rule
+  experiments/   mission_runner.py     scripted baseline
+                 team_runner.py        multi-agent runners
+                 metrics.py            mission scoring
+                 decision_log.py       per-decision belief log
+configs/missions/search_relay_001.yaml  the canonical scenario
+scripts/         one runnable demo per phase
+tests/           140 tests, no simulator required
+docs/            Phase_Documentation.md (this file)
+                 TESTING.md       verify each phase, and break it on purpose
+                 SIM_TESTING.md   flying it in CARLA-Air
+                 ARCHITECTURE.md  module-by-module design
+```
+
+---
+
+## Appendix E — Conventions to preserve
+
+Four rules the tests enforce. Breaking one is usually a design mistake rather
+than a failing test.
+
+1. **Agents never touch ground truth.** Everything reaches belief through
+   `SensorModel` or a delivered message. Enforced in `test_belief_state.py`.
+2. **Agents never touch the message bus or the network model.** They hold an
+   `AgentLink` and a `CommsEstimator`. Enforced in `test_messaging.py` and
+   `test_network.py`.
+3. **Mock runs are deterministic.** Same input, same output, every time. If you
+   add randomness, seed it. Enforced in several suites.
+4. **Behaviour is preserved across refactors.** `test_behavior_preservation.py`
+   pins the exact action sequence for a set of missions and has passed since
+   Phase 2.
+
+Before pushing: `python scripts/run_all_tests.py` should print **ALL GREEN**.
