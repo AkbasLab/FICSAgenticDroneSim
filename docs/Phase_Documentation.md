@@ -17,9 +17,10 @@ University.
 | 8 | Task allocation | Four drones divide the work with no central assignment | 21 |
 | 9 | Roles + recovery | Kill one drone; the rest reassign its work and finish | 22 |
 | 10 | Degraded comms | Replay one mission under four comms conditions, reproducibly | 30 |
-| — | Simulator path | Every `--airsim` entry point runs end to end | 15 |
+| 11 | Runtime-safety guardian | Every unsafe command is blocked and named | 45 |
+| — | Simulator path | Every `--airsim` entry point runs end to end | 16 |
 
-**140 tests, 9 demos, none requiring a simulator, GPU or API key:**
+**186 tests, 11 demos, none requiring a simulator, GPU or API key:**
 
 ```bash
 python scripts/run_all_tests.py
@@ -854,6 +855,217 @@ when read (dominated by decision cadence), **not** wire latency; and `est_loss`
 counts everything that failed to arrive, including rate-limited messages, so
 under `severe` it legitimately exceeds the configured 30%.
 
+---
+
+## Phase 11 — An independent runtime-safety guardian
+
+**Goal.** Every phase so far has trusted the policy. Phase 11 stops doing that.
+A deterministic safety layer sits between *whatever proposed a command* and the
+vehicle, so that a buggy rule policy, a future LLM policy, a corrupt message or
+a unit-confusion error cannot fly the drone somewhere it should not go.
+
+**Deterministic on purpose.** The guardian contains no model, no learned
+component and no randomness. Same command plus same belief always produces the
+same verdict, and it can always name which check failed and why. A guardrail
+implemented as a second language model would inherit exactly the failure modes it
+is meant to contain — wrong in novel ways, not exhaustively testable, unable to
+explain itself to an auditor. A fixed list of bounded predicates can be all three.
+
+**Ten checks**, each independently named so a rejection is always attributable:
+
+| Check | Catches |
+|---|---|
+| `altitude_bounds` | below the floor (3 m) or above the ceiling (60 m) |
+| `geofence` | a waypoint outside the operating box |
+| `restricted_zones` | flight into a published no-fly polygon |
+| `waypoint_validity` | `NaN`, `inf`, or coordinates beyond 300 m |
+| `max_speed` | above 12 m/s, or negative |
+| `command_timeout` | zero (can never succeed) or absurd (effectively unbounded) |
+| `battery_reserve` | starting new work below the 10% reserve |
+| `separation` | a waypoint on a teammate's known position |
+| `landing_site` | landing where the belief says it is unsafe |
+| `conflicting_commands` | a second command issued while one is still running |
+
+**Four outcomes, and the distinction that matters.** `APPROVE` ·
+`APPROVE_WITH_MODIFICATION` · `REJECT_AND_REPLAN` · `EXECUTE_SAFE_FALLBACK`. A
+violation that can be *narrowed* into the envelope is narrowed — 120 m/s becomes
+12 m/s, 1 m altitude becomes the floor — because refusing a command the agent
+can safely have a weaker version of costs mission progress for no safety gain. A
+violation that cannot be narrowed (a `NaN` waypoint, a no-fly zone) is refused
+outright. The guardian has no authority to invent new work; when it substitutes,
+it may only substitute one of five pre-agreed fallbacks: `HOLD_POSITION`,
+`CLIMB_OR_DESCEND_TO_SAFE_LAYER`, `RETURN_HOME`, `LAND_AT_SAFE_LOCATION`,
+`CONTINUE_LAST_VALID_PLAN`.
+
+**Logged separately from the mission.** `GuardianLog` records the proposed
+action, the rejection reason, what was substituted, which fallback fired and the
+effect on the mission. The headline metric is **intervention rate** — the
+fraction of proposed commands the guardian did not pass through unchanged. On a
+healthy policy it should be ~0; a rising rate on an LLM policy is a measurement
+of how often that policy proposes something unflyable, which is precisely the
+number this project needs when the LLM planner arrives.
+
+**Attacked, not assumed.** A safety layer nobody has attacked is an assumption.
+`unsafe_injection.py` is the attack: a catalogue of 13 commands a compromised
+policy could plausibly emit, each paired with the check that must catch it, plus
+an `InjectingPolicy` that substitutes unsafe commands into a live mission so
+containment can be observed end to end. Nothing in that module is used in normal
+operation.
+
+**A real flight bug found by the guardian.** The guardian flagged a *legitimate*
+`return_home` as an altitude violation — and it was right. The policy was
+targeting home at `z = 0`, which makes the drone descend while it translates
+across the map instead of flying home at cruise altitude and landing as a
+separate skill. That is a genuine bug the mock adapter had been forgiving for
+six phases. Fixed in `search_policy.py`.
+
+**Containment is not the same as safety, and `--repeat` proved it.** Running the
+demo with a policy that stays broken for the whole mission, rather than for three
+steps, exposed a design gap: every unsafe command was blocked — zero reached the
+vehicle — and the drone still never came down. `REJECT_AND_REPLAN` quietly
+assumes the policy can produce something better next time. A permanently broken
+policy never will, so the guardian and the agent negotiated for 60 commands while
+the aircraft held station until the step cap. Perfectly contained, and perfectly
+unsafe.
+
+The fix is escalation: after a bounded number of consecutive failures, the
+guardian stops asking and flies the aircraft home itself. `EXECUTE_SAFE_FALLBACK`
+already existed for this and had simply never fired in a real run.
+
+**And the first version of that fix was evadable.** Counting consecutive
+*rejections* looks right and is not. The injected sequence alternates an
+out-of-bounds waypoint (rejected) with a 120 m/s speed (clamped and approved) —
+so the rejection counter resets every other command and never reaches three. A
+compromised policy could fly indefinitely while never once being rejected twice
+in a row. A clamp is not a success; it still means the policy proposed something
+unflyable. So the counter that governs escalation resets only on a command that
+passed **every** check untouched:
+
+| counter | increments on | resets on | threshold |
+|---|---|---|---|
+| `consecutive_rejections` | `REJECT_AND_REPLAN` | anything else | 3 |
+| `consecutive_interventions` | anything that is not a clean approval | `APPROVE` only | 5 |
+
+Either one tripping escalates, and an escalated fallback must *terminate the
+flight* — `RETURN_HOME`, or `LAND_AT_SAFE_LOCATION` if already home. Holding
+position or repeating the last valid plan would leave a compromised aircraft
+airborne until the battery decided the outcome. With escalation in place the
+permanently-broken run ends in 8 commands with the drone landed at home, instead
+of 60 with it still flying.
+
+**A correctness bug in the agent, found the same way.** With the policy broken on
+every step, `_verify()` credited progress for the *objective* rather than for the
+command actually executed — marking a sector "searched" when the command that ran
+was a guardian fallback, not a sweep. It crashed loudly here, but the silent
+version is worse: a mission reporting coverage no drone ever flew. Verification
+is now keyed on the executed command type in `persistent_agent.py`.
+
+**Exit criterion.** Every unsafe command is blocked, and a mission flown with a
+deliberately compromised policy still ends safely — including when the policy
+never recovers:
+
+```
+  blocked 13/13 (all unsafe commands stopped)
+
+  commands evaluated : 7
+  approved unchanged : 4
+  interventions      : 3 (43% of commands)
+  by outcome:  approve 4 · approve_with_modification 1 · reject_and_replan 2
+  checks that failed:  geofence 2 · max_speed 1 · waypoint_validity 1
+
+  unsafe commands that reached the vehicle: 0
+  drone landed safely at home: True
+```
+
+And with `--repeat`, where the policy is broken from step 2 onward and never
+recovers:
+
+```
+  commands evaluated : 8
+  unsafe commands that reached the vehicle: 0
+  drone landed safely at home: True
+```
+
+Every one of the 13 was caught by its *intended* check, not incidentally by
+another one — which is what makes the catalogue a test of the checks rather than
+a test of the envelope as a whole.
+
+### How to run it
+
+**Needs:** Python only.
+
+```bash
+python scripts/run_guardian_demo.py                  # catalogue; nothing flies
+python scripts/run_guardian_demo.py --live           # + compromised-policy mission
+python scripts/run_guardian_demo.py --case nan_waypoint   # one case in isolation
+python scripts/run_guardian_demo.py --live --repeat  # policy stays broken throughout
+python tests/test_guardian.py                        # 45 tests
+```
+
+Exit code 0 means every unsafe command was blocked. The catalogue run is the
+fast check; `--live` is the one to show someone.
+
+**Options:** `--live` · `--repeat` · `--case <name>` · `--scenario`
+
+**Files:** `agentic_uav/agents/safety_guardian.py` (`SafetyLimits`,
+`SafetyCheck`, `GuardianOutcome`, `FallbackAction`, `SafetyGuardian` — **edit
+`SafetyLimits` to change the envelope**) ·
+`agentic_uav/agents/unsafe_injection.py` (the 13-case catalogue and
+`InjectingPolicy`) · `agentic_uav/experiments/guardian_log.py` (the audit log and
+`intervention_rate`)
+
+**Wiring it into an agent** — one keyword argument; nothing else changes:
+
+```python
+from agentic_uav.agents.safety_guardian import SafetyGuardian, SafetyLimits
+
+agent = PersistentAgent(..., guardian=SafetyGuardian(
+    limits=SafetyLimits.from_scenario(scenario)))
+...
+print(agent.guardian_log.format_summary())
+```
+
+`SafetyLimits.from_scenario()` builds the geofence as a 40 m margin around the
+scenario's sectors and base, and inherits the scenario's restricted zones and
+minimum separation. Pass `SafetyLimits(...)` directly to override any bound.
+
+**Adding a check:**
+
+```python
+# in safety_guardian.py, add to the list built in evaluate()
+def _check_my_rule(self, command, belief) -> SafetyCheck:
+    if <unsafe condition>:
+        return SafetyCheck("my_rule", passed=False, reason="...",
+                           severity=Severity.HARD)   # HARD = cannot be narrowed
+    return SafetyCheck("my_rule", passed=True)
+```
+
+Then add a matching `UnsafeCase` to `unsafe_injection.py` with
+`expects_check="my_rule"`. A check without a case in the catalogue is an
+untested check.
+
+**Escalation thresholds** live on `SafetyGuardian` as `MAX_CONSECUTIVE_REJECTIONS`
+(3) and `MAX_CONSECUTIVE_INTERVENTIONS` (5), and both are constructor arguments.
+Lower them and a policy having a bad minute gets sent home; raise them and a
+compromised one stays airborne longer. On a healthy policy neither counter ever
+leaves zero, which is what makes them safe to have.
+
+**Rule to preserve:** the guardian must stay deterministic and policy-independent.
+It reads the command and the belief — never ground truth, never the network model,
+never the policy's internals — and it must never gain the ability to author new
+work beyond the five fallbacks. `test_guardian.py` enforces both.
+
+**Methodological note.** Both findings above came from running a documented
+command, not from writing a new test — `--live --repeat` was in the docs and had
+never been executed. Two of the three real bugs in this phase were found that
+way. Every command in this file is now run as part of the suite.
+
+**What this does *not* do.** It is an envelope check, not a collision-avoidance
+system: separation is checked against *believed* teammate positions, which under
+degraded comms may be stale. It does not model vehicle dynamics, wind, or
+airspace deconfliction with anything outside the team. It bounds what may be
+*commanded*; it does not guarantee what the vehicle actually does.
+
 
 ---
 
@@ -864,7 +1076,7 @@ the `--airsim` column says otherwise.
 
 | Phase | Command | What it shows | AirSim? |
 |---|---|---|---|
-| all | `python scripts/run_all_tests.py` | 140 tests + 9 demos, one summary | no |
+| all | `python scripts/run_all_tests.py` | 186 tests + 11 demos, one summary | no |
 | 1 | `python scripts/run_single_mission.py --planner rule --adapter mock` | English → validated plan → flight | `--adapter airsim` |
 | 2 | `python tests/test_behavior_preservation.py` | refactor changed structure, not behaviour | no |
 | 3 | `python scripts/phase3_demo.py` | 4 drones run skills concurrently | `--adapter airsim` |
@@ -878,6 +1090,7 @@ the `--airsim` column says otherwise.
 | 8 | `python scripts/run_allocation_mission.py --bids` | self-organising division of work | `--airsim` |
 | 9 | `python scripts/run_failure_recovery.py --health` | recovery from a lost drone | `--airsim` |
 | 10 | `python scripts/run_comms_study.py --estimates` | four comms conditions | no |
+| 11 | `python scripts/run_guardian_demo.py --live` | unsafe commands blocked, mission survives | `--live` runs on mock |
 
 Test suites individually:
 
@@ -891,7 +1104,8 @@ python tests/test_messaging.py              # 14   Phase 7
 python tests/test_allocation.py             # 21   Phase 8
 python tests/test_roles_recovery.py         # 22   Phase 9
 python tests/test_network.py                # 30   Phase 10
-python tests/test_airsim_path.py            # 15   the --airsim path, faked
+python tests/test_guardian.py               # 45   Phase 11
+python tests/test_airsim_path.py            # 16   the --airsim path, faked
 ```
 
 ---
@@ -918,6 +1132,14 @@ python tests/test_airsim_path.py            # 15   the --airsim path, faked
 | `FAILED_AFTER_MISSED` | 8.0 | `coordination/roles.py` | heartbeats missed before "failed" |
 | `TTL_BY_TYPE` | 90–600 s | `coordination/comms_conditions.py` | message lifetimes by type |
 | condition profiles | see table | `coordination/comms_conditions.py` | the four comms conditions |
+| `max_altitude` / `min_altitude` | −3.0 / −60.0 m | `agents/safety_guardian.py` | guardian altitude floor and ceiling |
+| `max_speed_mps` | 12.0 | `agents/safety_guardian.py` | hard speed bound; above it is narrowed |
+| `min_battery_reserve_frac` | 0.10 | `agents/safety_guardian.py` | never start new work below this |
+| `min_separation_m` | 3.0 (scenario) | `agents/safety_guardian.py` | separation from believed teammate positions |
+| `max_waypoint_range_m` | 300.0 | `agents/safety_guardian.py` | sanity bound on coordinates |
+| geofence `margin_m` | 40.0 m | `SafetyLimits.from_scenario()` | margin around the sectors and base |
+| `MAX_CONSECUTIVE_REJECTIONS` | 3 | `agents/safety_guardian.py` | rejections before the guardian flies home itself |
+| `MAX_CONSECUTIVE_INTERVENTIONS` | 5 | `agents/safety_guardian.py` | **the non-evadable counter**; resets only on a clean approval |
 
 **The single most important relationship in the system:**
 
@@ -950,6 +1172,9 @@ and normal traffic looks like packet loss.
 | Team never notices a dead drone | heartbeat interval too large | lower `--heartbeat` |
 | Messages look lost under perfect comms | TTL shorter than a skill | raise the TTL in `TTL_BY_TYPE` |
 | Everything times out in AirSim | sim still loading, or paused | wait for Town10HD to finish loading |
+| Guardian rejects legitimate commands | envelope too tight for the scenario | check `SafetyLimits.from_scenario()` margin; a real rejection names the failed check |
+| Drone returns home mid-mission for no obvious reason | escalation fired | the log line starts `escalated after N...`; the policy proposed 5 unsafe commands in a row |
+| `intervention_rate` above 0 on a healthy policy | the policy is proposing something unflyable | read `guardian_log.format_text()` — it names the check and the exact command |
 
 When an AirSim run wedges, restarting CARLA-Air is almost always faster than
 debugging the vehicle state.
@@ -973,7 +1198,8 @@ agentic_uav/
   agents/        persistent_agent.py   the lifecycle loop
                  belief_state.py       + belief_schema.py
                  search_policy.py      deterministic policy
-                 guardian.py           safety override layer
+                 safety_guardian.py    deterministic safety layer (Phase 11)
+                 unsafe_injection.py   the 13-case attack catalogue
                  comms_estimator.py    agent-side link estimate (Phase 10.5)
   coordination/  protocols.py          message types + envelope
                  message_bus.py        bus + AgentLink
@@ -989,9 +1215,10 @@ agentic_uav/
                  team_runner.py        multi-agent runners
                  metrics.py            mission scoring
                  decision_log.py       per-decision belief log
+                 guardian_log.py       guardian audit log + intervention rate
 configs/missions/search_relay_001.yaml  the canonical scenario
 scripts/         one runnable demo per phase
-tests/           140 tests, no simulator required
+tests/           186 tests, no simulator required
 docs/            Phase_Documentation.md (this file)
                  TESTING.md       verify each phase, and break it on purpose
                  SIM_TESTING.md   flying it in CARLA-Air
@@ -1002,7 +1229,7 @@ docs/            Phase_Documentation.md (this file)
 
 ## Appendix E — Conventions to preserve
 
-Four rules the tests enforce. Breaking one is usually a design mistake rather
+Five rules the tests enforce. Breaking one is usually a design mistake rather
 than a failing test.
 
 1. **Agents never touch ground truth.** Everything reaches belief through
@@ -1012,7 +1239,10 @@ than a failing test.
    `test_network.py`.
 3. **Mock runs are deterministic.** Same input, same output, every time. If you
    add randomness, seed it. Enforced in several suites.
-4. **Behaviour is preserved across refactors.** `test_behavior_preservation.py`
+4. **The guardian is deterministic and policy-independent.** No model, no
+   randomness, no access to ground truth or the network model, and no authority
+   to author work beyond the five fallbacks. Enforced in `test_guardian.py`.
+5. **Behaviour is preserved across refactors.** `test_behavior_preservation.py`
    pins the exact action sequence for a set of missions and has passed since
    Phase 2.
 
