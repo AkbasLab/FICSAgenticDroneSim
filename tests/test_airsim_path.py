@@ -39,6 +39,7 @@ AIRSIM_SCRIPTS = [
     ("scripts/run_allocation_mission.py", "--airsim --bids --conflicts"),
     ("scripts/run_failure_recovery.py", "--airsim --roles --health"),
     ("scripts/run_comms_study.py", "--condition nominal --estimates"),
+    ("scripts/run_guardian_demo.py", "--live"),
 ]
 
 # runs a script with the fake airsim installed first
@@ -351,6 +352,41 @@ def test_degraded_comms_runs_on_the_airsim_adapter():
         assert a.comms is not None
 
 
+def test_guardian_blocks_unsafe_commands_on_the_airsim_adapter():
+    """Phase 11 must hold on the real adapter too. The guardian is
+    adapter-independent by construction, but the wiring still has to work."""
+    fake_airsim.install()
+    from agentic_uav.agents.objectives import SearchTask
+    from agentic_uav.agents.persistent_agent import PersistentAgent
+    from agentic_uav.agents.safety_guardian import SafetyGuardian, SafetyLimits
+    from agentic_uav.agents.search_policy import SearchAgentPolicy
+    from agentic_uav.agents.unsafe_injection import InjectingPolicy
+    from agentic_uav.simulator.airsim_adapter import AirSimVehicleAdapter
+    from agentic_uav.simulator.ground_truth import GroundTruth, SensorModel
+    from agentic_uav.simulator.scenario_manager import load_scenario
+
+    sc = load_scenario(os.path.join(ROOT, "configs/missions/search_relay_001.yaml"))
+    truth = GroundTruth(sc)
+    v, sector = sc.vehicles[0], sc.sectors[0]
+    policy = InjectingPolicy(SearchAgentPolicy(), unsafe_at={2, 3},
+                             cases=["outside_geofence", "nan_waypoint"])
+    agent = PersistentAgent(
+        v.vehicle_id, AirSimVehicleAdapter(), policy=policy, home=v.start,
+        battery_total_s=v.battery_s, cruise_altitude=sector.altitude,
+        sensor=SensorModel(truth), roster=truth.roster(),
+        guardian=SafetyGuardian(limits=SafetyLimits.from_scenario(sc)))
+    agent.belief.brief(sc)
+    agent.run(SearchTask("search_S1", sector, sc.base.position))
+
+    assert policy.injected, "nothing was injected"
+    assert agent.guardian_log.interventions(), "the guardian never fired"
+    for r in agent.guardian_log.records:
+        if r.outcome == "approve":
+            wp = (r.proposed_detail or {}).get("waypoint")
+            if wp:
+                assert abs(wp[0]) < 200, f"unsafe waypoint approved: {wp}"
+
+
 def test_each_vehicle_gets_its_own_client():
     """The concurrency fix: one MultirotorClient per vehicle, never shared."""
     fake_airsim.install()
@@ -390,6 +426,8 @@ if __name__ == "__main__":
          test_failure_recovery_works_on_the_airsim_adapter),
         ("degraded comms runs on AirSim adapter",
          test_degraded_comms_runs_on_the_airsim_adapter),
+        ("guardian blocks unsafe commands on AirSim adapter",
+         test_guardian_blocks_unsafe_commands_on_the_airsim_adapter),
         ("each vehicle gets its own client", test_each_vehicle_gets_its_own_client),
     ]
     passed = failed = 0
