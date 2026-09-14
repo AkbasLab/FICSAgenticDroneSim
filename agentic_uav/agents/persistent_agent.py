@@ -30,6 +30,7 @@ from .belief_schema import Source
 from .belief_state import BeliefState
 from .comms_estimator import CommsEstimator
 from .guardian import Guardian
+from .safety_guardian import GuardianOutcome, SafetyGuardian
 from .objectives import AgentEvent, Objective
 from .search_policy import SearchAgentPolicy
 
@@ -65,6 +66,7 @@ class AgentRunReport:
     decisions: List[str] = field(default_factory=list)   # (event -> objective)
     detail: str = ""
     log: object = None                  # DecisionLog: what it knew at each step
+    guardian_log: object = None         # GuardianLog: what the guardian blocked
 
 
 class PersistentAgent:
@@ -78,7 +80,14 @@ class PersistentAgent:
         self.adapter = adapter
         self.executor = SkillExecutor(adapter)
         self.policy = policy or SearchAgentPolicy()
-        self.guardian = guardian or Guardian()
+        # Phase 11: the deterministic runtime-safety guardian, with its own log
+        # kept separate from the decision log so agent reliability and guardian
+        # correction can be told apart.
+        from ..experiments.guardian_log import GuardianLog
+        self.guardian_log = GuardianLog(vehicle_id)
+        self.guardian = guardian or SafetyGuardian(log=self.guardian_log)
+        if getattr(self.guardian, "log", None) is None:
+            self.guardian.log = self.guardian_log
         self.max_steps = max_steps
 
         # The sensor is the ONLY route from ground truth into belief (Phase 6.2).
@@ -237,9 +246,23 @@ class PersistentAgent:
             self.log.finish(rec, objective=objective.value)
             return True
         self._validate(command)
+
+        # Phase 11: every command passes the guardian before it reaches the
+        # vehicle, whatever proposed it. Four possible outcomes.
         guard = self.guardian.evaluate(command, b)
         override = None
-        if guard.overridden:
+        grec = self._guardian_record()
+
+        if guard.outcome is GuardianOutcome.REJECT_AND_REPLAN:
+            # the command never executes; the agent is asked to think again
+            b.push(AgentEvent.SAFETY_REJECTED, guard.reason)
+            self._guardian_effect(grec, "command blocked; agent asked to replan")
+            self.log.finish(rec, objective=objective.value,
+                            skill=str(command.skill_type.value),
+                            override=guard.reason, outcome="rejected_by_guardian")
+            return True
+
+        if guard.outcome is not GuardianOutcome.APPROVE:
             b.push(AgentEvent.SAFETY_REJECTED, guard.reason)
             command = guard.command
             objective = self._objective_for(command)
@@ -250,9 +273,15 @@ class PersistentAgent:
                        {"objective": objective.value,
                         "skill": command.skill_type.value}, ttl_s=90.0)
 
+        self.guardian.begin(command)
         result = self.executor.execute(self.vehicle_id, command)
+        self.guardian.end(command)
+
         b.record(result)                 # emits SKILL_SUCCEEDED/FAILED/TIMEOUT
         self._verify(b, objective, command, result)
+        if override:
+            self._guardian_effect(
+                grec, f"{command.skill_type.value} -> {result.status.value}")
         self.log.finish(rec, objective=objective.value,
                         skill=str(command.skill_type.value),
                         override=override, outcome=result.status.value)
@@ -294,14 +323,25 @@ class PersistentAgent:
         b.push(AgentEvent.REPORT_SENT, f"sector done; {found}")
 
     def _verify(self, b, objective, command, result):
-        """Recognize success/failure and update progress (the closed loop)."""
+        """Recognize success/failure and update progress (the closed loop).
+
+        Progress is credited for what was actually **executed**, never for what
+        was merely intended. The two can differ: the guardian may substitute a
+        safe fallback for a rejected command, and a compromised policy may hand
+        back a command that has nothing to do with the objective. Crediting the
+        objective in either case would mark a sector searched that no sweep ever
+        covered - a silent correctness bug, and the reason this method checks the
+        command type rather than trusting the objective.
+        """
         ok = result.status is SkillStatus.SUCCESS
 
         if objective is Objective.TAKE_OFF:
-            if ok:
+            if ok and isinstance(command, sk.TakeOffCommand):
                 b.airborne = True
 
         elif objective is Objective.GO_TO_SECTOR:
+            if not isinstance(command, sk.GoToWaypointCommand):
+                return          # something else flew; no progress to credit
             if ok:
                 b.at_sector = True
                 b.nav_failures = 0
@@ -309,6 +349,8 @@ class PersistentAgent:
                 b.nav_failures += 1
 
         elif objective is Objective.SEARCH_SECTOR:
+            if not isinstance(command, sk.SearchRegionCommand):
+                return          # no sweep was flown, so no sector was searched
             if ok:
                 b.sector_searched = True
                 b.nav_failures = 0
@@ -322,7 +364,7 @@ class PersistentAgent:
                 b.nav_failures += 1
 
         elif objective is Objective.LAND:
-            if ok:
+            if ok and isinstance(command, sk.LandCommand):
                 b.landed = True
                 b.airborne = False
 
@@ -351,6 +393,18 @@ class PersistentAgent:
                                 "position": _to_list(o.position),
                                 "sector_id": getattr(b.task.sector, "sector_id", None)},
                                ttl_s=120.0)
+
+    # --- guardian bookkeeping (Phase 11) ---
+
+    def _guardian_record(self):
+        recs = getattr(self.guardian_log, "records", None)
+        return recs[-1] if recs else None
+
+    def _guardian_effect(self, record, effect):
+        if record is not None:
+            self.guardian_log.note_effect(record, effect)
+            self.guardian_log.set_phase(
+                record, self.guardian.flight_phase(self.belief))
 
     # --- teammate health and roles (Phase 9) ---
 
@@ -590,4 +644,5 @@ class PersistentAgent:
             returned_home=b.near_home, landed=b.landed,
             detections=list(b.detections), battery_frac_end=b.battery_frac,
             steps=steps, decisions=decisions, log=self.log,
+            guardian_log=self.guardian_log,
             detail=" | ".join(f"{e}:{d}" for e, d in b.history))

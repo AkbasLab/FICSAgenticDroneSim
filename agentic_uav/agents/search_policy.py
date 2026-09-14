@@ -88,7 +88,13 @@ class SearchAgentPolicy:
                 timeout_s=LEG_TIMEOUT)
 
         if objective is Objective.RETURN_HOME:
-            return sk.ReturnHomeCommand(home=belief.home, speed_mps=DEFAULT_SPEED,
+            # fly home AT CRUISE ALTITUDE, then land as a separate skill.
+            # Targeting home at ground level would descend while translating,
+            # and the guardian's altitude-floor check correctly flags it.
+            home_at_altitude = Position3D(belief.home.x, belief.home.y,
+                                          belief.cruise_altitude)
+            return sk.ReturnHomeCommand(home=home_at_altitude,
+                                        speed_mps=DEFAULT_SPEED,
                                         tolerance_m=DEFAULT_TOLERANCE,
                                         timeout_s=LEG_TIMEOUT)
 
