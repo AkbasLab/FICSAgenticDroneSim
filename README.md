@@ -1,4 +1,4 @@
-# AgenticDroneSimRepo
+# Agentic Drone Swarm
 
 A multi-agent UAV simulation framework. An operator gives drones instructions,
 a planner turns each into a validated sequence of flight actions, and the drones
