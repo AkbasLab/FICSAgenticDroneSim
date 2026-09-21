@@ -18,9 +18,10 @@ University.
 | 9 | Roles + recovery | Kill one drone; the rest reassign its work and finish | 22 |
 | 10 | Degraded comms | Replay one mission under four comms conditions, reproducibly | 30 |
 | 11 | Runtime-safety guardian | Every unsafe command is blocked and named | 45 |
-| — | Simulator path | Every `--airsim` entry point runs end to end | 16 |
+| 12 | LLM as agent policy | Each drone decides via its own model context, still validated | 60 |
+| — | Simulator path | Every `--airsim` entry point runs end to end | 17 |
 
-**186 tests, 11 demos, none requiring a simulator, GPU or API key:**
+**247 tests, 13 demos, none requiring a simulator, GPU or API key:**
 
 ```bash
 python scripts/run_all_tests.py
@@ -1069,6 +1070,265 @@ airspace deconfliction with anything outside the team. It bounds what may be
 
 ---
 
+## Phase 12 — The LLM as a persistent agent policy
+
+**Goal.** Eleven phases built a decentralized team that works without a model.
+Now the model goes *inside* each agent — without giving back any of the safety
+properties that were bought along the way.
+
+**The insertion point is the policy slot, not the control path.** `LLMAgentPolicy`
+implements the same two methods as the deterministic Phase 5 policy —
+`next_objective(belief)` and `choose_skill(belief, objective)` — so the agent
+loop, the allocator, the message bus and the Phase 11 guardian are **completely
+unchanged**. None of them know a model is involved. Everything that made the
+deterministic system safe still sits downstream of the model.
+
+**One model process, four agents (12.1).** A backend is text-in/text-out and
+holds no conversation, so a single Ollama process serves every drone. What stays
+separate is what the research actually needs separate: identity, belief, task,
+memory, inbox and decision history. Four agents over one process are four
+independent agents — asserted, not assumed.
+
+**A closed tool set (12.2).** Fifteen tools, each with a declared parameter
+schema. The model selects one by name; it does not write Python, emit AirSim
+calls or hand the executor a path of its own invention. Unknown parameters are an
+error rather than something to ignore — a model that invents `altitude_m` when
+the tool takes `altitude` has misunderstood the tool, and silently dropping the
+extra key executes a command nobody intended. `True` is never accepted as a
+number, because a boolean quietly becoming `1.0` is how a nonsense altitude
+reaches a vehicle.
+
+**A structured decision, and no chain of thought (12.3).** Three enum fields, one
+tool, its parameters, bounded outgoing messages, a confidence, and a short
+`reason_code` from a closed list. Free-form rationale is deliberately not
+requested: it invites treating a model's self-report as evidence about its own
+processing, which it is not, and twelve reason codes can be counted across a
+thousand decisions where a thousand paragraphs cannot.
+
+Validation is strict and, importantly, **typed** — the fallback chain needs to
+know *why* an output was rejected:
+
+| rejected as | example | worth one correction? |
+|---|---|---|
+| `malformed_json` | prose, or a truncated object | yes |
+| `unknown_tool` | `deploy_countermeasures` | yes |
+| `bad_parameters` | `change_role` with no `reason_code` | yes |
+| `bad_assessment` | `mission_progress: "going_well"` | yes |
+| `bad_messages` | addressed to `Drone99`; 20 messages at once | yes |
+| `timeout` / `backend_error` | the model hung, or the server is down | **no** |
+
+A timeout cannot be corrected by explaining the problem to it, and retrying costs
+another timeout on a drone that is currently airborne.
+
+**Bounded context (12.4).** Nine sections, and deliberately *not* the raw flight
+log or every previous message. That exclusion is a research requirement, not a
+token-budget convenience: an agent whose prompt grows with mission length has a
+decision quality that varies with how long it has been flying, which confounds
+every comparison this project exists to make. A difference between two conditions
+could be the condition — or could be that one run accumulated a longer
+transcript. Bounded context means turn 200 is the same kind of decision as turn
+3. A test flies 200 turns' worth of belief updates and asserts the prompt does
+not triple.
+
+**The model never does arithmetic (12.5).** Seven deterministic calculators —
+distance, travel time, sweep time, battery sufficiency, comms reachability, task
+cost, route feasibility, separation risk — are computed in Python and handed to
+the model with its context. The division of labour is the actual claim of this
+phase:
+
+> the model chooses **what to do and why**; the code computes **whether it is possible**
+
+Two of these are load-bearing beyond convenience. `battery_sufficient` always
+counts the *return* leg, because the question an agent needs answered is never
+"can I get there" but "can I get there and still get back". And `task_cost`
+returns the deterministic bid value: the model may decide *whether* to bid, never
+what to bid, since a model that picks its own number wins every task by bidding
+zero and the contract-net guarantees evaporate. A test asserts the feasibility
+tool and the Phase 11 guardian agree on every waypoint — if they ever disagree,
+one of them is wrong.
+
+**Every failure path flies the aircraft (12.6).** One structured correction that
+names the specific fault, then the deterministic policy takes over, and the event
+is recorded. Fallback is the design, not error handling. Three decisions are
+never delegated to the model at all, because they are facts rather than
+judgements: getting airborne, a low battery, and the mission being over.
+
+**Reproducibility (12.7).** `ModelCard` records the exact identifier, temperature
+and seed, and `is_pinned` refuses to certify a floating tag — `llama3.1:latest`
+names a moving target, and a reviewer re-running the experiment in six months
+gets different weights from the same command. Every prompt and every raw output
+is saved. A hosted model is accepted as a comparison and flagged in the saved
+output as unsuitable as a sole primary result.
+
+**The whole phase runs with no model installed.** `ScriptedBackend` is the
+`fake_airsim` of Phase 12: every property that is not "the model is smart" —
+tool validation, the correction path, timeouts, per-agent isolation, the guardian
+still holding — is tested against scripted answers, deterministically, on a
+laptop with no GPU and no API key. `--backend ollama` swaps in a real local model
+without changing anything else.
+
+### Four bugs, three of them older than this phase
+
+*The model had no way to land.* The fifteen permitted tools contain no landing
+action — correctly, since landing is terminal. But a model that has finished can
+then only keep choosing `return_home`, and it did: 60 times, hovering over its
+own pad until the step cap. Correct by the letter of every check, and still a
+drone that never comes down. The terminal descent now belongs to the
+deterministic policy, exactly as take-off already did.
+
+*The simulator had every drone stacked on one point.* `MockVehicleAdapter`
+lazily created each vehicle at the origin, ignoring the per-vehicle `start`
+positions the scenario declares. Nothing noticed for nine phases because no
+deterministic demo ever asked how far apart two drones were — then Phase 12 ran
+four guardians at once and every separation check reported **0.0 m from a
+teammate**.
+
+*Which meant Phase 8's headline result rested on an artifact.* Co-located drones
+produce **numerically identical bids** — 0.09428 for all four on S1. What looked
+like "the team divides the work through the cost model" was the tie-breaker
+distributing sectors. With drones on their real pads the bids differ, and two
+genuine bugs surfaced immediately:
+
+- a drone that lost every bid found no open task, and `step()` returned
+  `False` — ending its loop **mid-air**. The Phase 9 stranded-agent bug in a new
+  guise. Only a landed drone is finished.
+- worse, the allocation **deadlocked**: a drone that claims a task leaves its
+  outstanding bids on *other* tasks in the pool. Those stale bids still win, so
+  nobody else may claim — but the busy drone has no capacity, so it cannot claim
+  either. The task sat open until it happened to free up. A bid from a drone we
+  believe is already holding work is now ignored.
+
+*And the guardian sent every escalating drone to the same coordinate.* Its
+`return_home` fallback preferred `SafetyLimits.home` — the single shared base —
+over the drone's own pad. Latent since Phase 11, harmless until more than one
+drone escalated at once.
+
+**Exit criterion.** Each drone uses a distinct persistent context to make
+mission-level decisions during flight, and every action still passes structured
+validation and runtime assurance:
+
+```
+=== Four LLM agents, one model process ===
+  backend   : scripted / scripted-v1
+  pinned    : True
+  agents    : 4 (4 distinct policy objects, 1 shared backend)
+
+  sectors searched : 4/4
+  all landed       : True
+
+  team: 31 decisions, 14 fallback (45%), 0 corrected
+  tools used: send_bidx8, start_searchx5, report_targetx4
+  guardian interventions: 0
+```
+
+and every way a model can fail still ends with the aircraft flown correctly:
+
+```
+  case                                   rejected as        agent did
+  prose instead of JSON                  malformed_json     fell back -> go_to_sector
+  tool that does not exist               unknown_tool       fell back -> go_to_sector
+  missing required parameter             bad_parameters     fell back -> go_to_sector
+  message to a drone that does not exist bad_messages       fell back -> go_to_sector
+  model times out                        timeout            fell back -> go_to_sector
+  ... 12/12 contained
+```
+
+A *well-formed* but unsafe decision is not a validation failure — it is valid
+JSON naming a real tool — and is caught one layer down, unchanged from Phase 11:
+
+```
+  model output : valid JSON, tool=go_to_waypoint (400, 400)
+  validation   : accepted - it is a real tool, correctly formed
+  guardian     : reject_and_replan
+                 waypoint_validity: 566 m from origin exceeds the 300 m bound
+                 geofence: (400,400) outside the geofence
+  reached the vehicle: NO
+```
+
+**The number to watch is the fallback rate.** It is how much of a reported "LLM
+agent" result is actually the rule agent wearing a costume. At 45% with the
+scripted control — take-off, landing and the end-of-mission checks are all
+deliberately deterministic — the model is making the mission-level choices and
+nothing else. A real model's rate against this same baseline is the first
+experiment Phase 13 should run.
+
+### How to run it
+
+**Needs:** Python only. A local model is optional.
+
+```bash
+python scripts/run_llm_agents.py                     # scripted model, no install
+python scripts/run_llm_agents.py --decisions         # per-decision trace
+python scripts/run_llm_agents.py --failures --unsafe # the failure catalogue
+python scripts/run_llm_agents.py --condition severe  # under degraded comms
+python tests/test_llm_policy.py                      # 60 tests
+```
+
+With a real local model (Ollama running, model pulled):
+
+```bash
+ollama pull llama3.1:8b
+python scripts/run_llm_agents.py --backend ollama --model llama3.1:8b \
+    --timeout 20 --save runs/llm_llama31_8b/
+```
+
+`--save` writes one JSON per drone containing every prompt, every raw output and
+the model card — which is what 12.7 asks for and what a reviewer needs.
+
+**Options:** `--backend scripted|ollama|mistral|gemini` · `--model <exact id>` ·
+`--timeout <s>` · `--condition <comms>` · `--decisions` · `--failures` ·
+`--unsafe` · `--save <dir>`
+
+**Files:** `agentic_uav/agents/llm_tools.py` (**the 15 tools — edit here to add
+one**) · `decision_schema.py` (the output contract and its typed rejections) ·
+`context_builder.py` (**the nine sections and every context bound, in
+`SUMMARY_LIMITS`**) · `reasoning_tools.py` (the deterministic calculators) ·
+`llm_policy.py` (the turn: model → validate → correct → fall back) ·
+`llm_backends.py` (`ScriptedBackend`, `OllamaBackend`, `GeminiBackend`,
+`ModelCard`) · `agentic_uav/experiments/llm_log.py` (the audit trail)
+
+**Adding a tool:**
+
+```python
+# 1. in llm_tools.py, add to TOOLS
+Tool("inspect_target", FLIGHT, "fly a close pass over a known target",
+     (Param("target_id", "id"),
+      Param("reason_code", "string", required=False, choices=REASON_CODES))),
+
+# 2. in llm_policy.py, map it to an objective
+TOOL_OBJECTIVE["inspect_target"] = Objective.GO_TO_SECTOR
+
+# 3. if it needs a command the deterministic policy cannot build,
+#    add a branch to choose_skill()
+```
+
+A tool without both an entry and a handler is unreachable by construction, which
+is the intended failure mode.
+
+**Rules to preserve:**
+
+1. **The model never touches the control path.** It selects a tool; commands are
+   built by proven code with the constants the skill contracts expect. Only
+   `go_to_waypoint` carries model-supplied coordinates, and those are bounded by
+   the tool schema, checked by `route_feasible`, and checked again by the
+   guardian.
+2. **The model never computes.** If a decision needs a number, add a calculator
+   to `reasoning_tools.py` rather than asking the model for it.
+3. **Every failure path ends in the deterministic policy.** A new failure mode
+   needs a new entry in `FAILURE_CASES` and a test that the drone still lands.
+4. **The prompt stays bounded.** New context goes through `SUMMARY_LIMITS`.
+5. **Formal runs use a pinned local model at temperature zero**, with prompts
+   and outputs saved. `ModelCard.warnings()` is not decorative.
+
+**What this does *not* establish.** That an LLM policy is *better* than the
+deterministic one — no comparison has been run, and the scripted backend is a
+control, not a model. The latency numbers here are meaningless for the same
+reason; a real 8B model in a control loop is the cost that has to be measured
+before any of this is a claim about feasibility.
+
+
+---
+
 ## Appendix A — Command reference
 
 Every runnable entry point, in phase order. All work with no simulator unless
@@ -1076,7 +1336,7 @@ the `--airsim` column says otherwise.
 
 | Phase | Command | What it shows | AirSim? |
 |---|---|---|---|
-| all | `python scripts/run_all_tests.py` | 186 tests + 11 demos, one summary | no |
+| all | `python scripts/run_all_tests.py` | 247 tests + 13 demos, one summary | no |
 | 1 | `python scripts/run_single_mission.py --planner rule --adapter mock` | English → validated plan → flight | `--adapter airsim` |
 | 2 | `python tests/test_behavior_preservation.py` | refactor changed structure, not behaviour | no |
 | 3 | `python scripts/phase3_demo.py` | 4 drones run skills concurrently | `--adapter airsim` |
@@ -1091,6 +1351,8 @@ the `--airsim` column says otherwise.
 | 9 | `python scripts/run_failure_recovery.py --health` | recovery from a lost drone | `--airsim` |
 | 10 | `python scripts/run_comms_study.py --estimates` | four comms conditions | no |
 | 11 | `python scripts/run_guardian_demo.py --live` | unsafe commands blocked, mission survives | `--live` runs on mock |
+| 12 | `python scripts/run_llm_agents.py` | 4 LLM agents, one model process | yes |
+| 12 | `python scripts/run_llm_agents.py --failures --unsafe` | every model failure mode contained | no |
 
 Test suites individually:
 
@@ -1105,7 +1367,8 @@ python tests/test_allocation.py             # 21   Phase 8
 python tests/test_roles_recovery.py         # 22   Phase 9
 python tests/test_network.py                # 30   Phase 10
 python tests/test_guardian.py               # 45   Phase 11
-python tests/test_airsim_path.py            # 16   the --airsim path, faked
+python tests/test_llm_policy.py             # 60   Phase 12
+python tests/test_airsim_path.py            # 17   the --airsim path, faked
 ```
 
 ---
@@ -1140,6 +1403,11 @@ python tests/test_airsim_path.py            # 16   the --airsim path, faked
 | geofence `margin_m` | 40.0 m | `SafetyLimits.from_scenario()` | margin around the sectors and base |
 | `MAX_CONSECUTIVE_REJECTIONS` | 3 | `agents/safety_guardian.py` | rejections before the guardian flies home itself |
 | `MAX_CONSECUTIVE_INTERVENTIONS` | 5 | `agents/safety_guardian.py` | **the non-evadable counter**; resets only on a clean approval |
+| `DEFAULT_TIMEOUT_S` | 20.0 | `agents/llm_policy.py` | per-decision model budget |
+| `max_coordination_streak` | 6 | `agents/llm_policy.py` | coordinating turns before the agent is treated as stuck |
+| `SUMMARY_LIMITS` | see file | `agents/context_builder.py` | **every bound on prompt size, in one place** |
+| `BATTERY_SAFETY_MARGIN` | 1.25 | `agents/reasoning_tools.py` | margin on every feasibility answer |
+| `MAX_OUTGOING_MESSAGES` | 4 | `agents/decision_schema.py` | messages one decision may emit |
 
 **The single most important relationship in the system:**
 
@@ -1174,6 +1442,9 @@ and normal traffic looks like packet loss.
 | Everything times out in AirSim | sim still loading, or paused | wait for Town10HD to finish loading |
 | Guardian rejects legitimate commands | envelope too tight for the scenario | check `SafetyLimits.from_scenario()` margin; a real rejection names the failed check |
 | Drone returns home mid-mission for no obvious reason | escalation fired | the log line starts `escalated after N...`; the policy proposed 5 unsafe commands in a row |
+| LLM fallback rate near 100% | the model is not producing valid output | `llm_log` names the rejection; check the model supports constrained decoding |
+| `ollama` backend import error | ollama not installed | it is optional; the default `scripted` backend needs nothing |
+| LLM agent hovers and never lands | a policy change broke the deterministic terminal descent | landing is never the model's job - see `landing_is_deterministic` |
 | `intervention_rate` above 0 on a healthy policy | the policy is proposing something unflyable | read `guardian_log.format_text()` — it names the check and the exact command |
 
 When an AirSim run wedges, restarting CARLA-Air is almost always faster than
@@ -1200,6 +1471,12 @@ agentic_uav/
                  search_policy.py      deterministic policy
                  safety_guardian.py    deterministic safety layer (Phase 11)
                  unsafe_injection.py   the 13-case attack catalogue
+                 llm_policy.py         the LLM in the policy slot (Phase 12)
+                 llm_tools.py          the 15 permitted tools
+                 llm_backends.py       scripted / ollama / gemini + ModelCard
+                 decision_schema.py    the model's output contract
+                 context_builder.py    the bounded prompt
+                 reasoning_tools.py    deterministic calculators
                  comms_estimator.py    agent-side link estimate (Phase 10.5)
   coordination/  protocols.py          message types + envelope
                  message_bus.py        bus + AgentLink
@@ -1216,9 +1493,10 @@ agentic_uav/
                  metrics.py            mission scoring
                  decision_log.py       per-decision belief log
                  guardian_log.py       guardian audit log + intervention rate
+                 llm_log.py            prompts, outputs, fallback rate
 configs/missions/search_relay_001.yaml  the canonical scenario
 scripts/         one runnable demo per phase
-tests/           186 tests, no simulator required
+tests/           247 tests, no simulator required
 docs/            Phase_Documentation.md (this file)
                  TESTING.md       verify each phase, and break it on purpose
                  SIM_TESTING.md   flying it in CARLA-Air
@@ -1229,7 +1507,7 @@ docs/            Phase_Documentation.md (this file)
 
 ## Appendix E — Conventions to preserve
 
-Five rules the tests enforce. Breaking one is usually a design mistake rather
+Six rules the tests enforce. Breaking one is usually a design mistake rather
 than a failing test.
 
 1. **Agents never touch ground truth.** Everything reaches belief through
@@ -1242,7 +1520,11 @@ than a failing test.
 4. **The guardian is deterministic and policy-independent.** No model, no
    randomness, no access to ground truth or the network model, and no authority
    to author work beyond the five fallbacks. Enforced in `test_guardian.py`.
-5. **Behaviour is preserved across refactors.** `test_behavior_preservation.py`
+5. **The model decides; it never computes and never flies.** Tools are closed,
+   numbers come from `reasoning_tools.py`, commands are built by proven code, and
+   every failure path ends in the deterministic policy. Enforced in
+   `test_llm_policy.py`.
+6. **Behaviour is preserved across refactors.** `test_behavior_preservation.py`
    pins the exact action sequence for a set of missions and has passed since
    Phase 2.
 
