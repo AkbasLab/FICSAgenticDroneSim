@@ -40,6 +40,7 @@ AIRSIM_SCRIPTS = [
     ("scripts/run_failure_recovery.py", "--airsim --roles --health"),
     ("scripts/run_comms_study.py", "--condition nominal --estimates"),
     ("scripts/run_guardian_demo.py", "--live"),
+    ("scripts/run_llm_agents.py", ""),
 ]
 
 # runs a script with the fake airsim installed first
@@ -81,7 +82,10 @@ def test_airsim_adapter_implements_everything_the_agent_uses():
                 if not m.startswith("_") and callable(getattr(MockVehicleAdapter, m))}
     air_api = {m for m in dir(AirSimVehicleAdapter)
                if not m.startswith("_") and callable(getattr(AirSimVehicleAdapter, m))}
-    gap = mock_api - air_api - {"actions_for"}       # mock-only test helper
+    # mock-only, and legitimately so: `actions_for` is a test helper, and
+    # `place` puts a vehicle on its starting pad - which in AirSim is settings.json's
+    # job, not the adapter's.
+    gap = mock_api - air_api - {"actions_for", "place"}
     assert not gap, f"mock has methods AirSim adapter lacks: {gap}"
 
 
@@ -352,6 +356,41 @@ def test_degraded_comms_runs_on_the_airsim_adapter():
         assert a.comms is not None
 
 
+def test_llm_policy_runs_on_the_airsim_adapter():
+    """Phase 12 on the real adapter. The LLM sits in the policy slot, so the
+    adapter should be irrelevant to it - but 'should be' is what the fake sim
+    exists to check."""
+    fake_airsim.install()
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    from agentic_uav.agents.llm_backends import ScriptedBackend
+    from agentic_uav.agents.llm_policy import LLMAgentPolicy
+    from agentic_uav.agents.objectives import SearchTask
+    from agentic_uav.agents.persistent_agent import PersistentAgent
+    from agentic_uav.agents.safety_guardian import SafetyGuardian, SafetyLimits
+    from agentic_uav.simulator.airsim_adapter import AirSimVehicleAdapter
+    from agentic_uav.simulator.ground_truth import GroundTruth, SensorModel
+    from agentic_uav.simulator.scenario_manager import load_scenario
+    from run_llm_agents import sensible_model
+
+    sc = load_scenario(os.path.join(ROOT, "configs/missions/search_relay_001.yaml"))
+    truth = GroundTruth(sc)
+    v, sector = sc.vehicles[0], sc.sectors[0]
+    limits = SafetyLimits.from_scenario(sc)
+    policy = LLMAgentPolicy(ScriptedBackend(default=sensible_model),
+                            v.vehicle_id, safety_limits=limits, timeout_s=None)
+    agent = PersistentAgent(
+        v.vehicle_id, AirSimVehicleAdapter(), policy=policy, home=v.start,
+        battery_total_s=v.battery_s, cruise_altitude=sector.altitude,
+        sensor=SensorModel(truth), roster=truth.roster(),
+        guardian=SafetyGuardian(limits=limits))
+    agent.belief.brief(sc)
+    report = agent.run(SearchTask("search_S1", sector, sc.base.position))
+
+    assert report.landed, "the LLM-driven agent did not land in AirSim"
+    assert policy.log.turns, "the policy was never consulted"
+    assert policy.log.stats()["fallback_rate"] < 1.0, "the model never decided"
+
+
 def test_guardian_blocks_unsafe_commands_on_the_airsim_adapter():
     """Phase 11 must hold on the real adapter too. The guardian is
     adapter-independent by construction, but the wiring still has to work."""
@@ -426,6 +465,8 @@ if __name__ == "__main__":
          test_failure_recovery_works_on_the_airsim_adapter),
         ("degraded comms runs on AirSim adapter",
          test_degraded_comms_runs_on_the_airsim_adapter),
+        ("LLM policy runs on the AirSim adapter",
+         test_llm_policy_runs_on_the_airsim_adapter),
         ("guardian blocks unsafe commands on AirSim adapter",
          test_guardian_blocks_unsafe_commands_on_the_airsim_adapter),
         ("each vehicle gets its own client", test_each_vehicle_gets_its_own_client),
