@@ -521,7 +521,14 @@ class SafetyGuardian:
 
     def _fallback_command(self, fallback, belief):
         L = self.limits
-        home = L.home or belief.home
+        # The drone's OWN pad, not the shared base. `SafetyLimits.home` comes
+        # from `from_scenario()` and is the single base coordinate for the whole
+        # team, so preferring it here sent every escalating drone to the same
+        # point - and the separation check then correctly refused to let them
+        # fly there. Found in Phase 12, latent since Phase 11: the deterministic
+        # policy always used belief.home, so only the guardian's own fallback
+        # was affected, and only when more than one drone escalated.
+        home = belief.home or L.home
         if fallback is FallbackAction.HOLD_POSITION:
             return sk.HoldPositionCommand(duration_s=5.0)
         if fallback is FallbackAction.CLIMB_OR_DESCEND_TO_SAFE_LAYER:

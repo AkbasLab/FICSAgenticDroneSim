@@ -174,6 +174,12 @@ class PersistentAgent:
         self._sense_self(b)
         received = self._receive_messages(b)
 
+        # Phase 12: a policy that wants the raw inbox gets it. The deterministic
+        # policy does not define these hooks and is unaffected - which is the
+        # point of feature-testing rather than type-testing the policy.
+        if hasattr(self.policy, "observe_messages"):
+            self.policy.observe_messages(received)
+
         # Phase 9: re-assess who is still flying, then what we should be.
         # Both run before allocation, so a lost teammate's task is already
         # reclaimable and our role already reflects the new team shape.
@@ -229,10 +235,18 @@ class PersistentAgent:
         # CLAIM_TASK is deliberation, not flight - the allocation round already
         # ran this step, so there is nothing to execute. Wait for bids/awards.
         if objective is Objective.CLAIM_TASK:
+            waiting = self._waiting_for_work(b)
             self.log.finish(rec, objective=objective.value,
-                            outcome="bidding" if self._waiting_for_work(b)
-                            else "no_work")
-            return self._waiting_for_work(b)
+                            outcome="bidding" if waiting else "no_work")
+            if waiting:
+                return True
+            # Nothing left to win. That is NOT a reason to stop stepping: an
+            # airborne drone still has to come home. Returning False here ended
+            # the loop mid-air for any drone that lost every bid - which never
+            # happened while the mock simulator co-located the whole team and
+            # made all bids identical, and happened immediately once it did not.
+            # Only a landed drone is finished.
+            return not b.landed
 
         # REPORT is an internal action (transmit completion), not a flight.
         if objective is Objective.REPORT:
@@ -278,6 +292,8 @@ class PersistentAgent:
         self.guardian.end(command)
 
         b.record(result)                 # emits SKILL_SUCCEEDED/FAILED/TIMEOUT
+        if hasattr(self.policy, "observe_result"):
+            self.policy.observe_result(result)
         self._verify(b, objective, command, result)
         if override:
             self._guardian_effect(

@@ -21,6 +21,7 @@ class Objective(str, Enum):
     GO_TO_SECTOR = "go_to_sector"
     SEARCH_SECTOR = "search_sector"
     REPORT = "report"
+    HOLD = "hold"                    # Phase 12: deliberately do nothing this turn
     RETURN_HOME = "return_home"
     LAND = "land"
     DONE = "done"
