@@ -62,7 +62,8 @@ def build_team(scenario, adapter_factory, latency_s=0.0, loss_rate=0.0,
         sector = scenario.sectors[i % len(scenario.sectors)]
         agent = PersistentAgent(
             vehicle_id=vehicle.vehicle_id,
-            adapter=adapter_factory(vehicle.vehicle_id),
+            adapter=_placed(adapter_factory(vehicle.vehicle_id),
+                            vehicle.vehicle_id, vehicle.start),
             home=vehicle.start,
             battery_total_s=battery_s or vehicle.battery_s,
             cruise_altitude=sector.altitude,
@@ -82,14 +83,24 @@ def build_team(scenario, adapter_factory, latency_s=0.0, loss_rate=0.0,
 def build_allocating_team(scenario, adapter_factory, latency_s=0.0, loss_rate=0.0,
                           rng=None, battery_s=None, lease_s=None,
                           bid_window_s=None, capabilities=None,
-                          heartbeat_interval_s=20.0):
+                          heartbeat_interval_s=20.0, network=None, seed=None,
+                          policy_factory=None, guardian_factory=None):
     """Phase 8: a team given the *mission*, with no sector assigned to anyone.
 
     Every agent gets the same task board and works out its own share through
     the contract-net protocol. Contrast with `build_team`, where the sectors are
     handed out up front by the experiment.
+
+    Phase 12: `policy_factory(vehicle_id, allocator)` builds each agent's policy.
+    It is called once per drone, so four agents get four *separate* policy
+    objects - separate memory, separate decision history - even when those
+    policies share one model process. That separation is the research property
+    12.1 asks for, and building it here means every existing caller keeps the
+    deterministic policy without changing a line.
     """
+    from ..agents.comms_estimator import CommsEstimator
     from ..coordination.bidding import BidWeights
+    from ..coordination.network_model import NetworkModel
     from ..coordination.role_manager import RoleManager
     from ..coordination.roles import HealthMonitor
     from ..coordination.task_allocator import (
@@ -98,7 +109,17 @@ def build_allocating_team(scenario, adapter_factory, latency_s=0.0, loss_rate=0.
 
     truth = GroundTruth(scenario)
     sensor = SensorModel(truth)
-    bus = MessageBus(latency_s=latency_s, loss_rate=loss_rate, rng=rng)
+
+    # Phase 10: a seeded NetworkModel, if a profile was given. The model can see
+    # true positions (range and interference need them) because it is simulator
+    # infrastructure - agents never hold it.
+    net = None
+    if network is not None:
+        run_seed = scenario.random_seed if seed is None else seed
+        net = NetworkModel(profile=network, seed=run_seed,
+                           position_of=truth.true_position)
+    bus = MessageBus(latency_s=latency_s, loss_rate=loss_rate, rng=rng,
+                     network=net)
     mission_tasks = tasks_from_scenario(scenario, include_relay=False)
 
     agents = []
@@ -109,6 +130,8 @@ def build_allocating_team(scenario, adapter_factory, latency_s=0.0, loss_rate=0.
         health = HealthMonitor(vehicle.vehicle_id,
                                heartbeat_interval_s=heartbeat_interval_s)
         roles = RoleManager(vehicle.vehicle_id, health)
+        comms = CommsEstimator(vehicle.vehicle_id,
+                               heartbeat_interval_s=heartbeat_interval_s)
         allocator = TaskAllocator(
             vehicle_id=vehicle.vehicle_id, board=board, link=link,
             weights=BidWeights(),
@@ -117,20 +140,38 @@ def build_allocating_team(scenario, adapter_factory, latency_s=0.0, loss_rate=0.
             bid_window_s=(DEFAULT_BID_WINDOW_S if bid_window_s is None
                           else bid_window_s),
             health=health)
+        kwargs = {}
+        if policy_factory is not None:
+            kwargs["policy"] = policy_factory(vehicle.vehicle_id, allocator)
+        if guardian_factory is not None:
+            kwargs["guardian"] = guardian_factory(vehicle.vehicle_id)
         agent = PersistentAgent(
             vehicle_id=vehicle.vehicle_id,
-            adapter=adapter_factory(vehicle.vehicle_id),
+            adapter=_placed(adapter_factory(vehicle.vehicle_id),
+                            vehicle.vehicle_id, vehicle.start),
             home=vehicle.start,
             battery_total_s=battery_s or vehicle.battery_s,
             cruise_altitude=scenario.sectors[0].altitude,
             sensor=sensor, roster=truth.roster(), sector_ids=truth.sector_ids(),
             link=link, message_log=bus.log, allocator=allocator,
-            health=health, role_manager=roles, max_steps=120)
+            health=health, role_manager=roles, comms=comms, max_steps=120,
+            **kwargs)
         agent.belief.brief(scenario)
         agents.append(agent)
 
     # no tasks dict: every agent starts empty-handed and bids for work
     return agents, {v.vehicle_id: None for v in scenario.vehicles}, bus, truth
+
+
+def _placed(adapter, vehicle_id, start):
+    """Start a vehicle on its own pad when the adapter supports being told.
+
+    The AirSim adapter does not - the simulator owns vehicle placement there,
+    via settings.json - so this is feature-tested rather than assumed.
+    """
+    if start is not None and hasattr(adapter, "place"):
+        adapter.place(vehicle_id, start)
+    return adapter
 
 
 def MissionTaskCopy(t):
