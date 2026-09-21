@@ -28,7 +28,8 @@ SUITES = [
     ("9",   "Roles + failure recovery",  "tests/test_roles_recovery.py", 22),
     ("10",  "Degraded comms model",      "tests/test_network.py", 30),
     ("11",  "Runtime-safety guardian",   "tests/test_guardian.py", 45),
-    ("3-11", "AirSim code path (fake sim)", "tests/test_airsim_path.py", 16),
+    ("12",  "LLM agent policy",          "tests/test_llm_policy.py", 60),
+    ("3-12", "AirSim code path (fake sim)", "tests/test_airsim_path.py", 17),
 ]
 
 DEMOS = [
@@ -43,6 +44,8 @@ DEMOS = [
     ("10", "Comms conditions study",  "scripts/run_comms_study.py"),
     ("11", "Guardian containment",    "scripts/run_guardian_demo.py --live"),
     ("11", "Guardian escalation",     "scripts/run_guardian_demo.py --live --repeat"),
+    ("12", "LLM agents (scripted)",   "scripts/run_llm_agents.py"),
+    ("12", "LLM failure modes",       "scripts/run_llm_agents.py --failures --unsafe"),
 ]
 
 
