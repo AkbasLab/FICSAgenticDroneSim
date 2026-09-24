@@ -38,7 +38,7 @@ cd D:\Research\CarlaAirSetup\CarlaAir-v0.1.7-Windows11-x86_64
 
 ```powershell
 conda activate carlaAir
-python baseline\llama_airsim_agent.py
+python baseline\open_loop_agent.py
 ```
 
 Type an instruction in plain English — `fly forward for 5 seconds then return
@@ -76,8 +76,8 @@ LLM helped", and the study has no contribution.
 
 ## The baseline this replaces
 
-Tag `v0.1-open-loop-baseline` marks the system the project sets out to improve
-on. In it:
+The baseline is the open-loop system the project sets out to improve on, written
+from scratch here as `baseline/open_loop_agent.py`. In it:
 
 - each drone receives a **separate** natural-language instruction;
 - the model generates a **complete action list before takeoff**;
@@ -87,7 +87,8 @@ on. In it:
 
 That last property is the one everything from Phase 5 onward exists to remove.
 The baseline stays runnable because every later architecture is measured against
-it, on the same ten missions.
+it, on the same ten missions. It is tagged `v0.1-open-loop-baseline` once it
+runs the mission set.
 
 Two properties of the current agent are worth stating plainly: **it is blind** —
 no camera image or drone state ever reaches the model — and **it never
@@ -115,9 +116,8 @@ decisions get made.
 ```
 docs/       RESEARCH_PLAN · SETUP · CONTROLS · BASELINE_ENVIRONMENT · BASELINE_MISSIONS
 phases/     one folder per phase: objectives, exit criterion, evidence, decisions
-baseline/   the frozen open-loop agents, plus PROVENANCE.md
-tools/      apply_logging.py — adds JSONL planning logs to the baseline agent
-patches/    baseline.patch — the delta against the upstream tag
+baseline/   the open-loop agent — original to this project
+tools/      helper scripts
 runs/       run output; the directory is tracked, its contents are not
 ```
 
@@ -137,11 +137,19 @@ change rather than four separate codebases.
 
 ## Provenance and licensing
 
-The code in `baseline/` is **not original to this repository**. It comes from
-`niranjanpillai2009-altr/AirSimRepo` at commit `e2b297d`, which declares **no
-licence** — meaning all rights reserved by default.
-[`baseline/PROVENANCE.md`](baseline/PROVENANCE.md) records the origin of every
-file and the three changes applied on top of the upstream tag.
+**All code here is original to this project.** No third-party agent code is
+vendored, imported or required at runtime. The only dependencies are the
+published libraries in `requirements.txt` — `airsim`, `carla`, `ollama` and the
+usual scientific stack.
 
-A licence grant or written permission is needed before this repository is
-published. See `AUV-21 — Ethics, Licensing and Publication Compliance`.
+An earlier prototype of the open-loop agent existed in an external repository
+that declares no licence, which under default copyright grants no right to
+redistribute or to build derivative works. Rather than seek a grant, the
+baseline was reimplemented from scratch and the external code was removed from
+this repository's history. The reasoning is recorded in
+[`docs/BASELINE_ENVIRONMENT.md`](docs/BASELINE_ENVIRONMENT.md) §9, and the
+choice in [`phases/phase-01-baseline-freeze/`](phases/phase-01-baseline-freeze/).
+
+That leaves this repository free to carry whatever licence the project chooses —
+settled in `AUV-21 — Ethics, Licensing and Publication Compliance` before Phase
+20 publishes the artifact.

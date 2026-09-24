@@ -190,9 +190,13 @@ For a first flight and the day-to-day commands, continue to
 
 ```powershell
 conda activate carlaAir
-python tools\apply_logging.py           # so raw output and latency are recorded
-python baseline\llama_airsim_agent.py
+python baseline\open_loop_agent.py
 ```
+
+The agent writes `runs/agent-log.jsonl` itself — one JSON object per planning
+call with the instruction, the model's raw output, the validated plan and
+`plan_seconds`. No patching step, and nothing to remember to turn on: a run that
+is not logged cannot be reported.
 
 The mission set, the run protocol and what to record per run are in
 [`BASELINE_MISSIONS.md`](BASELINE_MISSIONS.md).

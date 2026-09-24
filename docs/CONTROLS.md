@@ -137,7 +137,7 @@ Two windows. Simulator first, agent once the map is visible:
 
 ```powershell
 conda activate carlaAir
-python baseline\llama_airsim_agent.py
+python baseline\open_loop_agent.py
 ```
 
 The session runs as follows:

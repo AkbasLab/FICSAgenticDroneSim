@@ -126,18 +126,15 @@ A plan is **correct** only if its action sequence matches exactly — no missing
 steps and no invented ones. Partial credit is not recorded; extra actions are
 counted separately as `extra_steps`.
 
-### Logging is a prerequisite
+### Logging
 
-The baseline agent writes no log of its own. Apply the logging patch before
-running, or the raw output and latency fields cannot be filled:
+The agent logs every planning call itself, to `runs/agent-log.jsonl` — one JSON
+object per call carrying the instruction, the model's raw output, the validated
+plan, the model id and `plan_seconds`.
 
-```
-conda activate carlaAir
-python D:\Research\runs\apply_logging.py
-```
-
-This writes `D:\Research\runs\agent-log.jsonl`, one JSON object per planning
-call: instruction, raw output, model, and elapsed seconds.
+This is deliberately not optional and not a separate step. The fields above
+cannot be reconstructed after a run, so an agent that only prints to the console
+produces unrepeatable measurements.
 
 ---
 

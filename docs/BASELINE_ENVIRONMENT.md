@@ -244,51 +244,45 @@ invocations, which is why only the first plan of a session is slow.
 
 ## 9. Baseline code
 
-The baseline agent code is **AirSimRepo**, pinned by commit rather than copied.
+**The baseline agent is written from scratch for this project.** No third-party
+agent code is used, referenced at runtime, or vendored.
+
+### The decision, and why
+
+An earlier version of this document pinned the baseline to an external
+repository, `niranjanpillai2009-altr/AirSimRepo` at commit `e2b297d`, which
+declares **no licence**. Without an explicit licence, default copyright applies:
+no right to redistribute, and no right to create derivative works.
+
+That made it a publication blocker rather than a footnote, since Phase 20
+releases a public research artifact. Two exits existed — obtain a licence grant
+from the author, or reimplement independently. **On 2026-09-24 the project chose
+to reimplement**, and the external code was removed from this repository's
+history entirely.
 
 | | |
 |---|---|
-| Repository | `https://github.com/niranjanpillai2009-altr/AirSimRepo` |
-| Branch | `main` |
-| Commit | `e2b297df4378c67837072cfd796f714ad1c2121f` (2026-08-05) |
-| Local path | `D:\Research\AirSimRepo` |
-| Licence | **None.** No LICENSE file, no licence statement in the README |
+| Baseline agent | `baseline/open_loop_agent.py` — original to this project |
+| Licence | Ours to set; settled in `AUV-21` before publication |
+| External code used | **None** |
 
-> **The absent licence is a publication blocker, not a footnote.** Without an
-> explicit licence, default copyright applies: there is no granted right to
-> redistribute or to create derivative works. The code is therefore *referenced*
-> here, never vendored. Before any public research artifact is released, either
-> obtain a licence grant from the author or reimplement the baseline
-> independently. Carried to `AUV-21`.
+### What carries over, and what does not
 
-### Local modifications from upstream
+Facts, APIs and findings are not copyrightable; specific code is. The following
+are carried across as **specification**, and implemented independently:
 
-Three files differ. All are bug fixes; none change the open-loop property.
+- the eight-action plan vocabulary (`fly_to`, `fly_straight`, `fly_backward`,
+  `fly_left`, `fly_right`, `hover`, `set_altitude`, `land`);
+- the open-loop property itself — plan before takeoff, validate, execute
+  concurrently, never replan;
+- the finding that a JSON schema with an action `enum` fixes multi-step
+  collapse in small local models;
+- the NED convention and the Windows known-folder behaviour, both properties of
+  AirSim and Windows rather than of anyone's code.
 
-| File | Change |
-|---|---|
-| `llama_airsim_agent.py`, `mistral_airsim_agent.py`, `gemini_airsim_agent.py` | **Documents path.** `os.path.expanduser("~")` replaced with a `documents_dir()` helper calling `SHGetFolderPathW`, so `settings.json` is written where AirSim reads it under OneDrive redirection |
-| same three | **Drone1 dropped.** `range(2, num_agents + 1)` → `range(1, num_agents + 1)` with `X: (i - 1) * SPACING`. The original loop omitted Drone1 from the settings it wrote, and `json.dump` replaces the whole file — so writing it deleted Drone1 and its cameras |
-| `llama_airsim_agent.py` | **Inference options.** Added `num_predict: 512` and `num_thread: 12` |
-
-File hashes as frozen (SHA-256, first 16 hex characters):
-
-```
-llama_airsim_agent.py      d5a31b303d25de0a
-mistral_airsim_agent.py    4d49a23094b7c189
-gemini_airsim_agent.py     7d34b01676f545e8
-Multiple.py                535af9064a27ca28
-test_flight.py             79b53e80d83a2851
-```
-
-Reproduce the modified state with:
-
-```
-git clone https://github.com/niranjanpillai2009-altr/AirSimRepo.git
-cd AirSimRepo
-git checkout e2b297df4378c67837072cfd796f714ad1c2121f
-git apply <this repo>/patches/baseline.patch
-```
+The prior benchmark figures quoted in `BASELINE_MISSIONS.md` (`llama3.1:8b`
+scoring 0/3 on M05, 3/3 on M06, 1/3 on M07) remain **citations of that project's
+published results**, attributed as such, and are not measurements of this one.
 
 ---
 
@@ -314,8 +308,7 @@ foreach ($p in 2000,41451,11434) {
 
 ```
 conda activate carlaAir
-cd D:\Research\AirSimRepo
-python llama_airsim_agent.py
+python baseline\open_loop_agent.py
 ```
 
 Then: drone count → Enter once the map has loaded → one natural-language
