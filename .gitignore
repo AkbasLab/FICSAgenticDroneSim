@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Logging patch backups (the patch keeps its own .prelog.bak next to the target)
+*.prelog.bak
+*.bak
+
+# Run data: experiment output is large, machine-specific and regenerable.
+# The directory is tracked (see runs/.gitkeep); its contents are not.
+runs/*
+!runs/.gitkeep
+
+# Secrets. The Gemini agent reads an API key from the environment; never commit one.
+.env
+*.key
+
+# OS / editor
+Thumbs.db
+desktop.ini
+.DS_Store
+.idea/
+.vscode/
