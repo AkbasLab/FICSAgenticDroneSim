@@ -48,9 +48,13 @@ home and land`. The model plans it, the plan is validated, the drones fly it.
 
 ## Where the project is
 
-**Phase 1 — freezing and documenting the baseline.** Phase tracking lives in the
-vault note `AUV-22 — Phase Objectives Checklist`; each phase has a detail note
-`AUV-01` … `AUV-23`.
+**Phase 1 — freezing and documenting the baseline.**
+
+Each phase keeps its own record in [`phases/`](phases/): objectives, the exit
+criterion and whether it is actually met, deliverables, decisions taken, and the
+evidence. Start at [`phases/README.md`](phases/README.md) for the status of all
+21 phases. Objectives are mirrored from the vault note `AUV-22 — Phase
+Objectives Checklist`; each phase also has a detail note `AUV-01` … `AUV-23`.
 
 | Stage | Phases | State |
 |---|---|---|
@@ -110,11 +114,17 @@ decisions get made.
 
 ```
 docs/       RESEARCH_PLAN · SETUP · CONTROLS · BASELINE_ENVIRONMENT · BASELINE_MISSIONS
+phases/     one folder per phase: objectives, exit criterion, evidence, decisions
 baseline/   the frozen open-loop agents, plus PROVENANCE.md
 tools/      apply_logging.py — adds JSONL planning logs to the baseline agent
 patches/    baseline.patch — the delta against the upstream tag
 runs/       run output; the directory is tracked, its contents are not
 ```
+
+`docs/` says what the project intends; `phases/` records what it actually did,
+including the attempts that failed. Measurements land in
+`phases/phase-NN-*/results/`, exit-criterion proof in `evidence/`, and each
+completed phase is tagged `phase-NN-complete`.
 
 The module tree the project refactors into during Phase 2 — `agentic_uav/` with
 `core`, `simulator`, `control`, `agents`, `coordination`, `planners`,
