@@ -1,7 +1,8 @@
-# Agentic UAV — Decentralized Coordination Study
+# Adi-MLOps — Decentralized Agentic UAV Coordination
 
-Research repository for the study described in
-[`docs/RESEARCH_PLAN.md`](docs/RESEARCH_PLAN.md).
+Research repository for a study on whether decentralized teams of persistent UAV
+agents hold up better than centralized ones when the radio link degrades and
+drones drop out.
 
 > A decentralized team of persistent UAV agents that uses local belief states,
 > structured peer communication, dynamic task allocation and bounded replanning
@@ -9,145 +10,118 @@ Research repository for the study described in
 > and agent loss than centralized planning or independent non-coordinating
 > agents.
 
-The claim is about **resilience**, not speed. Under nominal communication a
-centralized controller is expected to win, and the plan says so in advance.
+The claim is deliberately modest. It is about **resilience, not speed** — under
+nominal communication a centralized controller is expected to win, and the plan
+says so in writing before any result is inspected.
 
-**Status:** Phase 1 — freezing and documenting the open-loop baseline.
-Detailed phase tracking lives in the vault note `AUV-22 — Phase Objectives
-Checklist`.
-
----
-
-## What the baseline is
-
-Tag `v0.1-open-loop-baseline` marks the system this project sets out to
-improve on. In it:
-
-- each drone receives a **separate** natural-language instruction;
-- the language model generates a **complete action list before takeoff**;
-- plans are **validated** before any vehicle arms;
-- drones execute **concurrently**, one thread each;
-- **no replanning happens after launch.**
-
-That last property is the one everything from Phase 5 onward exists to remove.
-The baseline is kept runnable so later architectures have a constant to be
-measured against.
+**Platform:** CarlaAir v0.1.7 — CARLA 0.9.16 and AirSim 1.8.1 in one Unreal
+Engine 4.26 process, on Windows 11.
 
 ---
 
-## Reproducing the baseline
+## Start here
 
-Everything below was recorded from the machine the baseline was measured on.
-Exact versions, hashes and the full rationale are in
-[`docs/BASELINE_ENVIRONMENT.md`](docs/BASELINE_ENVIRONMENT.md) — read it if any
-step surprises you.
-
-### 1. Prerequisites
-
-| Requirement | Detail |
+| I want to… | Go to |
 |---|---|
-| OS | Windows 11 x64 |
-| DirectX End-User Runtime (June 2010) | **Install first.** Unreal 4.26 links seven legacy DirectX DLLs that Windows 11 does not ship; without them the simulator will not start |
-| CarlaAir v0.1.7 | CARLA 0.9.16 + AirSim 1.8.1 in one Unreal process. Verify the archive against the SHA-256 in the environment doc |
-| Miniconda | Python **3.10.21** environment named `carlaAir`, created from conda-forge |
-| Ollama 0.34.x | With `llama3.2:3b` pulled. Model digests are recorded in the environment doc |
-| GPU | 4 GB VRAM is enough — models run on **CPU** (`num_gpu: 0`); see below |
+| Install the whole stack from scratch | [`docs/SETUP.md`](docs/SETUP.md) |
+| Fly something, or look up a command | [`docs/CONTROLS.md`](docs/CONTROLS.md) |
+| Understand what is being studied and why | [`docs/RESEARCH_PLAN.md`](docs/RESEARCH_PLAN.md) |
+| Reproduce the frozen baseline measurements | [`docs/BASELINE_MISSIONS.md`](docs/BASELINE_MISSIONS.md) |
+| Know exactly what machine produced them | [`docs/BASELINE_ENVIRONMENT.md`](docs/BASELINE_ENVIRONMENT.md) |
 
-### 2. Environment
-
-```powershell
-conda env create -f environment.yml
-conda activate carlaAir
-```
-
-`requirements.txt` is a `pip freeze` of the measured environment and is **not
-portable as generated**: its `carla` entry is a local file URL. Install that one
-wheel from your own CarlaAir install instead:
+First flight, assuming the stack is installed:
 
 ```powershell
-pip install <carlaair-root>\PythonAPI\carla\dist\carla-0.9.16-cp310-cp310-win_amd64.whl
-```
-
-Do not downgrade NumPy below 2 — the CARLA extension module and OpenCV here are
-built against the NumPy 2 ABI.
-
-### 3. AirSim settings
-
-AirSim reads `settings.json` from the Windows **Documents known folder**. With
-OneDrive Known Folder Move — the Windows 11 default — that is
-`%USERPROFILE%\OneDrive\Documents\AirSim\settings.json`, *not*
-`%USERPROFILE%\Documents\AirSim\`.
-
-The CarlaAir launcher deploys to the wrong one of those two on a redirected
-profile, so its deployment is inert and the file must be maintained by hand.
-The expected contents and SHA-256 are in the environment doc. It is read only at
-process start — changing it means restarting the simulator.
-
-### 4. Start the simulator
-
-```powershell
+cd D:\Research\CarlaAirSetup\CarlaAir-v0.1.7-Windows11-x86_64
 .\CarlaAir.ps1 Town10HD --no-traffic --quality Low
 ```
-
-No traffic: it removes a confound and frees GPU. Wait for both ports to report
-ready.
-
-### 5. Fly a mission
 
 ```powershell
 conda activate carlaAir
 python baseline\llama_airsim_agent.py
 ```
 
-Answer the drone-count prompt, then type an instruction in plain English —
-`fly forward for 5 seconds then return home and land`. The model plans, the plan
-is validated, the drones fly it.
-
-> Answering more than 1 to the drone-count prompt **rewrites `settings.json`
-> permanently** with that many drones, and the simulator boots with that count
-> from then on. Restore it afterwards or the single-drone missions become
-> invalid.
-
-### 6. Turn on logging before recording anything
-
-The baseline agent prints but does not log, so planning latency and raw model
-output cannot be recovered from a run afterwards.
-
-```powershell
-python tools\apply_logging.py           # patch
-python tools\apply_logging.py --check   # verify, change nothing
-python tools\apply_logging.py --revert  # undo
-```
-
-This appends one JSON object per planning call to `runs/agent-log.jsonl`:
-instruction, raw output, model id, drone, and `plan_seconds`.
+Type an instruction in plain English — `fly forward for 5 seconds then return
+home and land`. The model plans it, the plan is validated, the drones fly it.
 
 ---
 
-## The baseline mission set
+## Where the project is
 
-[`docs/BASELINE_MISSIONS.md`](docs/BASELINE_MISSIONS.md) defines ten fixed
-natural-language missions (M01–M10), three runs each, and what to record per
-run. The same ten are re-run against every later architecture, so improvements
-are measured against a constant.
+**Phase 1 — freezing and documenting the baseline.** Phase tracking lives in the
+vault note `AUV-22 — Phase Objectives Checklist`; each phase has a detail note
+`AUV-01` … `AUV-23`.
 
-**Do not edit a mission's instruction text after results are recorded.** If a
-mission is badly worded, add `M11` rather than changing `M05`.
+| Stage | Phases | State |
+|---|---|---|
+| 0 · Foundations | 0–1 | Phase 0 complete; Phase 1 in progress |
+| 1 · Platform | 2–4 | Not started |
+| 2 · One agent | 5–6 | Not started |
+| 3 · The team | 7–9 | Not started |
+| 4 · Adversity | 10–11 | Not started |
+| 5 · Intelligence | 12 | Not started |
+| 6 · Apparatus | 13–16 | Not started |
+| 7 · Science | 17–20 | Not started |
+
+The ordering is load-bearing. Deterministic decentralized coordination (arm C)
+is built and measured **before** any language model touches coordination (arm
+D) — otherwise there is no way to separate "decentralisation helped" from "the
+LLM helped", and the study has no contribution.
+
+---
+
+## The baseline this replaces
+
+Tag `v0.1-open-loop-baseline` marks the system the project sets out to improve
+on. In it:
+
+- each drone receives a **separate** natural-language instruction;
+- the model generates a **complete action list before takeoff**;
+- plans are **validated** before any vehicle arms;
+- drones execute **concurrently**, one thread each;
+- **no replanning happens after launch.**
+
+That last property is the one everything from Phase 5 onward exists to remove.
+The baseline stays runnable because every later architecture is measured against
+it, on the same ten missions.
+
+Two properties of the current agent are worth stating plainly: **it is blind** —
+no camera image or drone state ever reaches the model — and **it never
+replans**. Both are design properties of the baseline, not defects.
+
+---
+
+## The four architectures being compared
+
+They share one mission, the same vehicle skills, scenario manager, network model
+and safety guardian. They differ in exactly one dimension — how coordination
+decisions get made.
+
+| Arm | Coordination | Isolates |
+|---|---|---|
+| **A** Centralized | One controller assigns all tasks | Nominal-efficiency baseline |
+| **B** Independent | No negotiation between drones | Whether communication is worth anything |
+| **C** Deterministic decentralized | Contract-net protocol, **no LLM** | Whether decentralisation is worth anything |
+| **D** Agentic decentralized | Same protocol **plus** LLM policy | Whether the LLM is worth anything |
 
 ---
 
 ## Layout
 
 ```
-docs/       RESEARCH_PLAN.md · BASELINE_ENVIRONMENT.md · BASELINE_MISSIONS.md
+docs/       RESEARCH_PLAN · SETUP · CONTROLS · BASELINE_ENVIRONMENT · BASELINE_MISSIONS
 baseline/   the frozen open-loop agents, plus PROVENANCE.md
-tools/      apply_logging.py
+tools/      apply_logging.py — adds JSONL planning logs to the baseline agent
 patches/    baseline.patch — the delta against the upstream tag
-runs/       run output; contents are not tracked
+runs/       run output; the directory is tracked, its contents are not
 ```
 
-The module tree the project refactors into during Phase 2 is specified in the
-vault note `AUV-03 — Repository Architecture`.
+The module tree the project refactors into during Phase 2 — `agentic_uav/` with
+`core`, `simulator`, `control`, `agents`, `coordination`, `planners`,
+`experiments` — is specified in `AUV-03 — Repository Architecture`. Its shape
+encodes the experimental design: policies, planners and simulators are all
+interchangeable, which is what makes selecting an architecture a configuration
+change rather than four separate codebases.
 
 ---
 
@@ -156,9 +130,8 @@ vault note `AUV-03 — Repository Architecture`.
 The code in `baseline/` is **not original to this repository**. It comes from
 `niranjanpillai2009-altr/AirSimRepo` at commit `e2b297d`, which declares **no
 licence** — meaning all rights reserved by default.
-[`baseline/PROVENANCE.md`](baseline/PROVENANCE.md) records where each file came
-from and the three changes that were applied on top of the upstream tag.
+[`baseline/PROVENANCE.md`](baseline/PROVENANCE.md) records the origin of every
+file and the three changes applied on top of the upstream tag.
 
-A licence grant or written permission is required before this repository is
-published. See the vault note `AUV-21 — Ethics, Licensing and Publication
-Compliance`.
+A licence grant or written permission is needed before this repository is
+published. See `AUV-21 — Ethics, Licensing and Publication Compliance`.
