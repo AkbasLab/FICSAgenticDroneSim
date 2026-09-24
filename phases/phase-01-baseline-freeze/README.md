@@ -13,7 +13,7 @@
 - [ ] **1.1** Tag the baseline release — `v0.1-open-loop-baseline`
 - [x] **1.2** Record the exact environment — OS, Python, simulator, models, packages, settings, startup procedure
 - [x] 📄 `requirements.txt`, `environment.yml`, [`docs/BASELINE_ENVIRONMENT.md`](../../docs/BASELINE_ENVIRONMENT.md)
-- [ ] **1.0** Write the open-loop agent — *added 2026-09-24, see the record below*
+- [x] **1.0** Write the open-loop agent — *added 2026-09-24, see the record below*
 - [ ] **1.3** Run the ten-mission baseline set and record the results
 - [ ] ✅ **Exit criterion** — see below
 
@@ -30,7 +30,7 @@ outside the clone.
 
 | Artifact | Location | State |
 |---|---|---|
-| Open-loop agent | `baseline/open_loop_agent.py` | **Not written yet** |
+| Open-loop agent | [`baseline/open_loop_agent.py`](../../baseline/open_loop_agent.py) | Written; planner verified, flight untested |
 | Baseline tag | `v0.1-open-loop-baseline` | Pending — tagged once the agent runs the mission set |
 | Environment record | [`docs/BASELINE_ENVIRONMENT.md`](../../docs/BASELINE_ENVIRONMENT.md) | v1.0, §9 rewritten 2026-09-24 |
 | Mission set | [`docs/BASELINE_MISSIONS.md`](../../docs/BASELINE_MISSIONS.md) | Defined; **results empty** |
@@ -88,7 +88,58 @@ Removed with it: `tools/apply_logging.py`, which existed only to patch logging
 into someone else's script. The new agent logs natively, so measurement is not
 an opt-in step that can be forgotten.
 
-### Pending — 1.0 then 1.3
+### 2026-09-24 — agent written, planner verified without the simulator
+
+`baseline/open_loop_agent.py` written from the specification in §9 of
+`BASELINE_ENVIRONMENT.md`. Structure: schema-constrained planning → validation →
+concurrent execution, one thread per drone, no replanning.
+
+Choices worth recording:
+
+- **`--plan-only`** plans and validates without touching AirSim, so the planner
+  can be exercised without occupying the GPU. Every result below was obtained
+  that way.
+- **Nothing arms until every plan validates.** A half-flown mission is harder to
+  interpret than one that never started.
+- **Validation covers what the schema cannot**: parameters present for the
+  action that needs them, positive durations under a 60 s leg limit, altitudes
+  within a floor and ceiling.
+- **A positive `z` is normalised, not obeyed, and the normalisation is logged.**
+  In NED a positive z flies into the ground. Silently correcting it would hide a
+  real model failure mode, so the correction appears in the record.
+- **Logging is native**, one JSON object per planning call in
+  `runs/agent-log.jsonl`: instruction, raw output, validated plan, model,
+  `plan_seconds`, validity, and any normalisation.
+
+**A flaw I introduced and then removed.** The first draft's worked examples
+included `"before flying forward for 5 seconds, hover in place for 2 seconds"` —
+which is **M07 verbatim** — and a close paraphrase of M03. Either would have made
+those missions score correct because they sat in the prompt, not because the
+model solved them. Examples were replaced with phrasings absent from the mission
+set, and the affected missions re-planned. They still came out correct, so the
+result stands — but it would not have been a result before the fix.
+
+First planner pass, `llama3.2:3b`, one run each, uncontaminated prompt:
+
+| Mission | Plan produced | Expected | Latency |
+|---|---|---|---|
+| M01 | `fly_straight` | ✔ | 1.1 s |
+| M02 | `hover, land` | ✔ | 1.2 s |
+| M03 | `set_altitude, fly_straight, land` | ✔ | 3.0 s |
+| M04 | `fly_straight, fly_to, land` | ✔ | 2.2 s |
+| M05 | `fly_straight, fly_straight` | ✔ | 1.7 s |
+| M06 | `hover, hover, hover` | ✔ | 2.1 s |
+| M07 | `hover, fly_straight` | ✔ | 1.7 s |
+| M08 | `set_altitude, hover, fly_to, land` | unscored | 3.1 s |
+
+**This is not 1.3.** These are single planning passes with no flight, no
+repetition and no execution check; the protocol requires three runs per mission
+with execution. They are recorded as an early signal that the planner works, and
+because M05 and M07 are the two the prior project reported its model failing
+(0/3 and 1/3). That comparison is **not like-for-like** — different model,
+different prompt, different schema — and must not be reported as a replication.
+
+### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after
 the multi-drone missions, or the single-drone missions become invalid.
