@@ -25,6 +25,7 @@ Engine 4.26 process, on Windows 11.
 |---|---|
 | Install the whole stack from scratch | [`docs/SETUP.md`](docs/SETUP.md) |
 | Fly something, or look up a command | [`docs/CONTROLS.md`](docs/CONTROLS.md) |
+| Look up any simulator control, feature or API | [`docs/carlaair/`](docs/carlaair/) — ten-part reference set |
 | Understand what is being studied and why | [`docs/RESEARCH_PLAN.md`](docs/RESEARCH_PLAN.md) |
 | Reproduce the frozen baseline measurements | [`docs/BASELINE_MISSIONS.md`](docs/BASELINE_MISSIONS.md) |
 | Know exactly what machine produced them | [`docs/BASELINE_ENVIRONMENT.md`](docs/BASELINE_ENVIRONMENT.md) |

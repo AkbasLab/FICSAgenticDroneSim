@@ -5,6 +5,11 @@ flying by instruction. Condensed from *CarlaAir Command Reference v1.0*, whose
 API tables were produced by introspecting the installed `carla` 0.9.16 and
 `airsim` 1.8.1 modules.
 
+> **This is the short version.** For synchronous mode and tick control, the road
+> graph, weather, spawning traffic, sensors and perception, recording and replay,
+> or the full API index, see the ten-part reference set in
+> [`carlaair/`](carlaair/README.md).
+
 Two clients, always. They talk to the same Unreal process on different ports and
 neither knows about the other:
 
