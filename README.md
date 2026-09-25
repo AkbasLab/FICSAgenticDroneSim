@@ -116,10 +116,11 @@ decisions get made.
 ## Layout
 
 ```
-docs/       RESEARCH_PLAN · SETUP · CONTROLS · BASELINE_ENVIRONMENT · BASELINE_MISSIONS
+docs/       RESEARCH_PLAN · SETUP · CONTROLS · BASELINE_* · carlaair/ reference set
+configs/    missions/ — the mission set as data, edit here to add or change one
 phases/     one folder per phase: objectives, exit criterion, evidence, decisions
 baseline/   the open-loop agent — original to this project
-tools/      helper scripts
+tools/      run_missions.py · audit_repo.py · the doc generators
 runs/       run output; the directory is tracked, its contents are not
 ```
 

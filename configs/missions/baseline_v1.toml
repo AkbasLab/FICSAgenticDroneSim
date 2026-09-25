@@ -1,0 +1,196 @@
+# =============================================================================
+#  Baseline mission set v1 — the frozen instrument
+# =============================================================================
+#
+#  Ten fixed natural-language missions. The same ten are re-run against every
+#  later architecture, so improvements are measured against a constant.
+#
+#  This file is the SOURCE OF TRUTH for the mission set. docs/BASELINE_MISSIONS.md
+#  explains the reasoning; this defines what actually runs.
+#
+#  ---------------------------------------------------------------------------
+#  THE ONE RULE
+#  ---------------------------------------------------------------------------
+#  Do not edit a mission's `instruction` after results have been recorded
+#  against it. A changed instruction with an unchanged id silently invalidates
+#  every comparison that cites it. If a mission is badly worded, ADD M11 and
+#  leave M05 alone.
+#
+#  Everything else here is yours to change: add missions, change the protocol,
+#  point it at a different model.
+#
+#  ---------------------------------------------------------------------------
+#  HOW TO ADD A MISSION
+#  ---------------------------------------------------------------------------
+#      [[mission]]
+#      id          = "M11"
+#      category    = "what it probes"
+#      instruction = "the exact words typed at the prompt"
+#      expected    = ["fly_straight", "land"]   # action names, in order
+#      drones      = 1
+#      scoreable   = true
+#      note        = "why this mission exists"
+#
+#  `expected` is the action sequence a correct plan produces. A plan is correct
+#  only if it matches exactly — no missing steps, no invented ones. Extra steps
+#  are counted separately rather than partially credited.
+#
+#  For multi-drone missions, give `instructions` (plural) and `expected_per_drone`
+#  instead, one entry per drone, in vehicle order Drone1, Drone2, …
+#
+#  Set `scoreable = false` for a mission with no single correct answer. It still
+#  runs and is still logged; it just is not scored for accuracy.
+#
+#  The eight actions a plan may use:
+#      fly_to (x,y,z) · fly_straight (duration) · fly_backward (duration)
+#      fly_left (duration) · fly_right (duration) · hover (duration)
+#      set_altitude (z) · land
+# =============================================================================
+
+[set]
+name        = "baseline_v1"
+version     = "1.0"
+frozen      = "2026-09-18"
+description = "Ten missions spanning movement, repetition, ordering, ambiguity and multi-drone flight."
+
+# -----------------------------------------------------------------------------
+#  Protocol — how the set is run. Changing these changes the measurement, so a
+#  change here means the results that follow are a new series, not more of the
+#  old one.
+# -----------------------------------------------------------------------------
+[protocol]
+model       = "llama3.2:3b"   # primary. --model on the runner overrides
+repeats     = 3               # runs per mission, matching the upstream benchmark
+map         = "Town10HD"
+launch      = ".\\CarlaAir.ps1 Town10HD --no-traffic --quality Low"
+traffic     = false           # removes a confound and frees GPU
+
+# Frozen inference options. num_gpu 0 is forced by 4 GB VRAM already spoken for
+# by the simulator; temperature 0 is what makes repeated runs comparable.
+[protocol.options]
+num_gpu     = 0
+temperature = 0
+num_predict = 512
+num_thread  = 12
+
+# =============================================================================
+#  Single-drone missions
+# =============================================================================
+
+[[mission]]
+id          = "M01"
+category    = "simple movement"
+instruction = "fly forward for 5 seconds"
+expected    = ["fly_straight"]
+drones      = 1
+scoreable   = true
+note        = "The floor. If this fails, nothing else is worth reading."
+
+[[mission]]
+id          = "M02"
+category    = "multi-step movement"
+instruction = "hover for 3 seconds then land"
+expected    = ["hover", "land"]
+drones      = 1
+scoreable   = true
+note        = "Two steps. Unconstrained models collapse this to one, dropping the landing — the failure the JSON schema exists to prevent."
+
+[[mission]]
+id          = "M03"
+category    = "altitude change, multi-step"
+instruction = "go up to 15 meters, fly forward for 5 seconds, then land"
+expected    = ["set_altitude", "fly_straight", "land"]
+drones      = 1
+scoreable   = true
+note        = "Also probes the NED sign: 15 metres up is z = -15. A positive z would fly into the ground."
+
+[[mission]]
+id          = "M04"
+category    = "return and land"
+instruction = "fly forward for 5 seconds then return home and land"
+expected    = ["fly_straight", "fly_to", "land"]
+drones      = 1
+scoreable   = true
+note        = "'Return home' must become fly_to (0,0), not a reversed fly_backward."
+
+[[mission]]
+id          = "M05"
+category    = "repetition"
+instruction = "fly forward for 3 seconds, then do the exact same thing again"
+expected    = ["fly_straight", "fly_straight"]
+drones      = 1
+scoreable   = true
+note        = "The prior project reports llama3.1:8b scoring 0/3 here, emitting six actions for a two-action request. Cited, not reproduced — different model, prompt and schema."
+
+[[mission]]
+id          = "M06"
+category    = "repetition"
+instruction = "hover in place for 2 seconds, three times in a row"
+expected    = ["hover", "hover", "hover"]
+drones      = 1
+scoreable   = true
+note        = "Same family as M05, which that project's model handled (3/3). The contrast between M05 and M06 is the interesting part."
+
+[[mission]]
+id          = "M07"
+category    = "instruction order is not execution order"
+instruction = "before flying forward for 5 seconds, hover in place for 2 seconds"
+expected    = ["hover", "fly_straight"]
+drones      = 1
+scoreable   = true
+note        = "Requires reordering. Prior project reports 1/3 and inconsistency across runs."
+
+[[mission]]
+id          = "M08"
+category    = "ambiguous wording"
+instruction = "go up a bit, look around for a moment, then come back down safely"
+expected    = []
+drones      = 1
+scoreable   = false
+note        = "No single correct answer, so accuracy is not scored. Record what 'a bit', 'look around' and 'safely' became, and whether the same phrasing produced the same plan across runs. Consistency is the variable here, not correctness. The only mission that speaks to the ambiguity clause in H4."
+
+# =============================================================================
+#  Multi-drone missions
+#
+#  There is NO collision avoidance anywhere in this stack. Altitudes are
+#  staggered deliberately; spawn spacing (4 m on X) is the only other
+#  separation. Change these at your own risk.
+#
+#  Answering more than 1 to the drone-count prompt rewrites settings.json
+#  permanently, and the simulator boots with that count from then on. Restore it
+#  afterwards or the single-drone missions become invalid.
+# =============================================================================
+
+[[mission]]
+id        = "M09"
+category  = "two-drone simultaneous"
+drones    = 2
+scoreable = true
+note      = "Two plans generated before either drone arms, then flown concurrently."
+instructions = [
+  "go up to 25 meters, fly forward for 6 seconds, then return home and land",
+  "go up to 12 meters, fly right for 5 seconds, hover for 2 seconds, then land",
+]
+expected_per_drone = [
+  ["set_altitude", "fly_straight", "fly_to", "land"],
+  ["set_altitude", "fly_right", "hover", "land"],
+]
+
+[[mission]]
+id        = "M10"
+category  = "four-drone simultaneous"
+drones    = 4
+scoreable = true
+note      = "Altitudes staggered 30/24/18/12 m and headings spread, so the four never share a layer. Also the first real test of one AirSim client shared across four threads."
+instructions = [
+  "go up to 30 meters, fly forward for 5 seconds, then land",
+  "go up to 24 meters, fly right for 5 seconds, then land",
+  "go up to 18 meters, fly backward for 5 seconds, then land",
+  "go up to 12 meters, fly left for 5 seconds, then land",
+]
+expected_per_drone = [
+  ["set_altitude", "fly_straight", "land"],
+  ["set_altitude", "fly_right", "land"],
+  ["set_altitude", "fly_backward", "land"],
+  ["set_altitude", "fly_left", "land"],
+]

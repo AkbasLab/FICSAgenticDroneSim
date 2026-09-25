@@ -10,6 +10,15 @@ later architecture so that improvements are measured against a constant.
 **Do not edit the instruction text after results are recorded.** If a mission
 turns out to be badly worded, add `M11` rather than changing `M05`.
 
+> **The machine-readable set is
+> [`../configs/missions/baseline_v1.toml`](../configs/missions/baseline_v1.toml).**
+> That file is what actually runs, and it is where you add or change missions —
+> instruction, expected action sequence, drone count, and whether the mission is
+> scoreable at all. This document explains *why* each mission exists; the config
+> defines *what* runs. Execute the set with
+> [`../tools/run_missions.py`](../tools/run_missions.py), which scores the plans
+> and writes both raw JSONL and a summary table into the phase record.
+
 ---
 
 ## Coverage

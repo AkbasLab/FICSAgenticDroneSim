@@ -66,6 +66,41 @@ script itself still does not change.
 
 ---
 
+## Customising it
+
+Every knob is a module-level constant or one small function, deliberately: this
+is a script you are meant to be able to read end to end and change without
+tracing abstractions.
+
+| I want to… | Change | Notes |
+|---|---|---|
+| Use a different model | `--model llama3.1:8b`, or `MODEL` | 8B needs ~5.5 GB resident; close other applications. Both models are recorded per planning call, so runs stay attributable |
+| Change inference settings | `OLLAMA_OPTIONS` | These are the measurement protocol, not preferences. Changing them starts a new result series |
+| Add or remove an action | `ACTIONS`, then `PLAN_SCHEMA`, `SYSTEM_PROMPT`, `validate()`, `DroneRunner.step()` | All five, or the model will emit something the executor cannot fly. The `enum` in the schema is what stops invented actions |
+| Change how a step flies | `DroneRunner.step()` | One `elif` per action. Velocity moves must be followed by `hoverAsync()` — velocity commands do not brake |
+| Change cruise height, spacing, speed | `CRUISE_ALTITUDE`, `SPACING`, `MOVE_SPEED` | Speed multiplies every distance, because legs are specified in seconds, not metres |
+| Tighten or loosen safety checks | `validate()` | Currently: required parameters, positive durations under `MAX_DURATION`, altitude between `MIN_ALTITUDE` and `MAX_ALTITUDE`, positive `z` normalised |
+| Change the worked examples | `EXAMPLES` | **Never use a benchmark mission as an example.** It would score correct because it is in the prompt, not because the model solved it |
+| Log extra fields | `PlanRecord.as_json()` | One JSON object per planning call, appended to `runs/agent-log.jsonl` |
+| Use a different planner entirely | `plan_for()` | It returns a `PlanRecord`; anything that can produce one — another LLM, a rule-based policy, a stub for tests — drops straight in |
+
+The mission set itself is data, not code:
+[`../configs/missions/baseline_v1.toml`](../configs/missions/baseline_v1.toml).
+Add a mission there and [`../tools/run_missions.py`](../tools/run_missions.py)
+picks it up with no code change.
+
+```powershell
+python tools\run_missions.py --plan-only                       # whole set, scored
+python tools\run_missions.py --plan-only --missions M05,M07    # a subset
+python tools\run_missions.py --plan-only --model llama3.1:8b   # compare models
+```
+
+Results land in
+[`../phases/phase-01-baseline-freeze/results/`](../phases/phase-01-baseline-freeze/results/)
+as a JSONL of raw runs plus a Markdown summary table.
+
+---
+
 ## Rules for this directory
 
 1. **Do not refactor it** when the rest of the project is refactored.

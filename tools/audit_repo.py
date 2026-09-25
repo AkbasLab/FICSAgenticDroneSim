@@ -86,8 +86,10 @@ ALLOWED_CITATION = ("BASELINE_ENVIRONMENT.md", "phases/phase-01-baseline-freeze/
 for path in markdown + python:
     if path.startswith(HISTORICAL):
         continue                      # the record may name what was removed
-    if path == "tools/build_carlaair_docs.py":
-        continue                      # its substitution map must name what it rewrites
+    if path in ("tools/build_carlaair_docs.py", "tools/audit_repo.py"):
+        # The generator's substitution map and this file's own forbidden-string
+        # table must name what they rewrite and search for.
+        continue
     text = io.open(path, encoding="utf-8").read()
     for needle, what in FORBIDDEN.items():
         if needle in text:
