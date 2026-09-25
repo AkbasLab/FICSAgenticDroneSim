@@ -16,7 +16,7 @@ turns out to be badly worded, add `M11` rather than changing `M05`.
 > instruction, expected action sequence, drone count, and whether the mission is
 > scoreable at all. This document explains *why* each mission exists; the config
 > defines *what* runs. Execute the set with
-> [`../tools/run_missions.py`](../tools/run_missions.py), which scores the plans
+> [`../scripts/run_missions.py`](../scripts/run_missions.py), which scores the plans
 > and writes both raw JSONL and a summary table into the phase record.
 
 ---

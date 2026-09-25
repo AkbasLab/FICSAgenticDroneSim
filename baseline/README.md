@@ -86,13 +86,13 @@ tracing abstractions.
 
 The mission set itself is data, not code:
 [`../configs/missions/baseline_v1.toml`](../configs/missions/baseline_v1.toml).
-Add a mission there and [`../tools/run_missions.py`](../tools/run_missions.py)
+Add a mission there and [`../scripts/run_missions.py`](../scripts/run_missions.py)
 picks it up with no code change.
 
 ```powershell
-python tools\run_missions.py --plan-only                       # whole set, scored
-python tools\run_missions.py --plan-only --missions M05,M07    # a subset
-python tools\run_missions.py --plan-only --model llama3.1:8b   # compare models
+python scripts\run_missions.py --plan-only                       # whole set, scored
+python scripts\run_missions.py --plan-only --missions M05,M07    # a subset
+python scripts\run_missions.py --plan-only --model llama3.1:8b   # compare models
 ```
 
 Results land in

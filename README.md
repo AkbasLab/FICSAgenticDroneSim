@@ -118,10 +118,27 @@ decisions get made.
 ```
 docs/       RESEARCH_PLAN · SETUP · CONTROLS · BASELINE_* · carlaair/ reference set
 configs/    missions/ — the mission set as data, edit here to add or change one
+baseline/   the open-loop agent — original to this project, and frozen
+scripts/    experiment entry points: run_missions.py
+tools/      development tooling: audit_repo.py, the doc generators
+tests/      unit tests for the pure logic — no simulator, no model
 phases/     one folder per phase: objectives, exit criterion, evidence, decisions
-baseline/   the open-loop agent — original to this project
-tools/      run_missions.py · audit_repo.py · the doc generators
-runs/       run output; the directory is tracked, its contents are not
+runs/       raw run output; the directory is tracked, its contents are not
+```
+
+**`scripts/` versus `tools/`**: scripts run experiments and produce evidence;
+tools maintain the repository and never appear in a result. The split follows
+the module tree in `AUV-03`, which Phase 2 builds out.
+
+**Two output locations, deliberately.** `runs/agent-log.jsonl` is the raw,
+git-ignored log of *every* planning call ever made on this machine, whatever
+invoked it. `phases/phase-NN-*/results/` holds curated, tracked evidence for a
+specific scored series. Neither replaces the other: the first is a black box
+recorder, the second is the experimental record.
+
+```powershell
+python -m unittest discover tests     # 30 tests, no simulator needed
+python tools\audit_repo.py            # run before every commit
 ```
 
 `docs/` says what the project intends; `phases/` records what it actually did,
@@ -138,7 +155,18 @@ change rather than four separate codebases.
 
 ---
 
-## Provenance and licensing
+## Status, provenance and licensing
+
+> **This project is under active development and carries no licence yet.**
+> Nothing here is a finished result. The baseline has not flown the mission set,
+> no measurements have been recorded, and interfaces will change without notice
+> until Phase 2 settles the module structure.
+>
+> **No licence is granted.** Absent one, default copyright applies: this is
+> readable by those given access, not reusable. A licence is chosen deliberately
+> in `AUV-21 — Ethics, Licensing and Publication Compliance`, before Phase 20
+> publishes anything. Until then the repository stays private and unlicensed —
+> by decision, not by oversight.
 
 **All code here is original to this project.** No third-party agent code is
 vendored, imported or required at runtime. The only dependencies are the
@@ -153,6 +181,6 @@ this repository's history. The reasoning is recorded in
 [`docs/BASELINE_ENVIRONMENT.md`](docs/BASELINE_ENVIRONMENT.md) §9, and the
 choice in [`phases/phase-01-baseline-freeze/`](phases/phase-01-baseline-freeze/).
 
-That leaves this repository free to carry whatever licence the project chooses —
-settled in `AUV-21 — Ethics, Licensing and Publication Compliance` before Phase
-20 publishes the artifact.
+That leaves the repository free to carry whatever licence the project chooses
+when the time comes — which is the point of removing the dependency, and why
+the choice can wait rather than being forced by someone else's terms.

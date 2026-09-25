@@ -7,13 +7,13 @@ the same series, and the raw evidence is written to disk rather than read off a
 console.
 
     # planner only -- no simulator, no GPU, safe to run any time
-    python tools/run_missions.py --plan-only
+    python scripts/run_missions.py --plan-only
 
     # a subset, and a different model
-    python tools/run_missions.py --plan-only --missions M05,M07 --model llama3.1:8b
+    python scripts/run_missions.py --plan-only --missions M05,M07 --model llama3.1:8b
 
     # single run per mission, for a quick look
-    python tools/run_missions.py --plan-only --repeats 1
+    python scripts/run_missions.py --plan-only --repeats 1
 
 Outputs, both under phases/phase-01-baseline-freeze/results/:
 
@@ -172,7 +172,7 @@ def summarise(rows: list[dict[str, Any]], config: dict[str, Any], model: str) ->
     lines = [
         f"# {config['set']['name']} — {model}",
         "",
-        f"Generated {time.strftime('%Y-%m-%d %H:%M')} by `tools/run_missions.py`.",
+        f"Generated {time.strftime('%Y-%m-%d %H:%M')} by `scripts/run_missions.py`.",
         "",
         "| Mission | Category | Valid | Correct | Extra steps | Latency (s) |",
         "|---|---|---|---|---|---|",
