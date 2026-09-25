@@ -1,0 +1,31 @@
+# Line endings are normalised to LF everywhere, in the repository and in the
+# working tree, on every platform.
+#
+# Without this, Git for Windows checks files out as CRLF (its default
+# core.autocrlf=true), so what a collaborator has on disk depends on their Git
+# configuration rather than on the repository. For a research artifact whose
+# whole claim is reproducibility, "the files differ depending on your machine"
+# is a bad starting point -- and the generated documents under docs/carlaair/
+# are written LF by their generator regardless.
+* text=auto eol=lf
+
+# Explicit for the file types this project actually contains, so the intent
+# survives someone changing the line above.
+*.py    text eol=lf
+*.md    text eol=lf
+*.toml  text eol=lf
+*.yml   text eol=lf
+*.txt   text eol=lf
+*.json  text eol=lf
+*.jsonl text eol=lf
+
+# PowerShell is the exception: some Windows tooling is unhappy with LF-only
+# .ps1 files, and these are run by Windows, not by the experiment.
+*.ps1   text eol=crlf
+
+# Never touched: treating these as text would corrupt them.
+*.png   binary
+*.jpg   binary
+*.pdf   binary
+*.zip   binary
+*.whl   binary

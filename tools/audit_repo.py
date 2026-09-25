@@ -114,6 +114,13 @@ for path in markdown + python:
         normalised = ref.replace("\\", "/")   # docs quote Windows-style paths
         if normalised.endswith("/"):
             continue                          # a directory reference, not a file
+        if normalised.startswith("runs/"):
+            # Run output is produced at runtime and git-ignored, so it exists on
+            # a machine that has run something and not in a fresh clone. Docs
+            # legitimately name it. Found by cloning and auditing the clone --
+            # the check passed on the development machine and failed for the
+            # exact reader the Phase 1 exit criterion is about.
+            continue
         if not os.path.exists(normalised) and not any(
             # Placeholders in templates and instructions, where NN stands for a
             # number the reader fills in.
