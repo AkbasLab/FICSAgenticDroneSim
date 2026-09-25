@@ -192,8 +192,8 @@ tm.set_synchronous_mode(False)
 > **Important**
 >
 > **Always restore synchronous mode before your script exits**
-> If a script leaves the server in synchronous mode and then dies, {the
-> simulator freezes} — it is waiting for a `tick()` that will never arrive.
+> If a script leaves the server in synchronous mode and then dies, the
+> simulator freezes — it is waiting for a `tick()` that will never arrive.
 > It looks like a hang or a crash. Wrap the whole thing in
 > `try / finally` and restore the settings in the `finally` block.
 

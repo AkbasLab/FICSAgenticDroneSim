@@ -476,8 +476,8 @@ Select-String $L -Pattern 'stop processing: n_tokens'
 > **`stop processing: n_tokens` is the runaway detector**
 > A normal plan totals roughly 500--650 tokens. A figure near `n_ctx_slot`
 > — 4096 by default — means the model never stopped and generated until the
-> context filled. On this installation one such request ran for {5 minutes
-> 41 seconds} and returned a 500. Capping `num_predict` turns that into a
+> context filled. On this installation one such request ran for 5 minutes
+> 41 seconds and returned a 500. Capping `num_predict` turns that into a
 > clean failure in well under a minute.
 
 > **Careful**
@@ -548,8 +548,8 @@ CarlaUE4 <Map> -windowed -ResX=<w> -ResY=<h> -carla-rpc-port=<port>
 > 
 > On a machine with OneDrive Known Folder Move — the Windows 11 default —
 > AirSim reads `<OneDrive>.json`, while this copies
-> to `C:\<you>.json`. {The deployment
-> is inert.} Edits to `AirSimConfig.json` never reach the simulator,
+> to `C:\<you>.json`. The deployment
+> is inert. Edits to `AirSimConfig.json` never reach the simulator,
 > and the file AirSim does read is whatever was last put there by hand.
 
 Until the launcher is fixed, deploy the configuration yourself after editing it:

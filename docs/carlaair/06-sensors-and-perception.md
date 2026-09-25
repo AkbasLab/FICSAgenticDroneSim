@@ -114,8 +114,8 @@ c.simClearDetectionMeshNames(CAM, TYPE)
 >
 > **This is the shortest path to a seeing agent**
 > It gives labelled, ranged detections without a vision model, without image
-> transfer, and without GPU memory. For an agent that needs to know {what is
-> near me}, this is far cheaper than captioning an image with a vision-language
+> transfer, and without GPU memory. For an agent that needs to know what is
+> near me, this is far cheaper than captioning an image with a vision-language
 > model — and the radius filter maps naturally onto a sensor range.
 
 ### Line of sight

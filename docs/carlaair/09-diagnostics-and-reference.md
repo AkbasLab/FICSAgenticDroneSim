@@ -69,7 +69,7 @@ conda run -n carlaAir python -c "import carla; print(carla.Client('localhost',20
 | introspection of the installed `carla` 0.9.16 and `airsim` 1.8.1 |  |  |
 | modules. |  |  |
 
-{Slate}
+Slate
 Companion volume to the *CarlaAir Setup Guide v1.0*
 
-{document}
+document

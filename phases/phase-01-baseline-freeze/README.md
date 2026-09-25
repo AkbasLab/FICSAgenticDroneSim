@@ -158,6 +158,18 @@ the multi-drone missions, or the single-drone missions become invalid.
 
 ## Open questions
 
+- **One AirSim client shared across threads.** `DroneRunner` threads share a
+  single `MultirotorClient`. `msgpack-rpc-python` multiplexes one socket and is
+  not documented as thread-safe, so this is a plausible source of rare failures
+  under multi-drone load. Settle it at the first M09/M10 flight test — either
+  observe it working reliably, or give each thread its own client. Do not settle
+  it by assertion either way.
+- **Does CARLA synchronous mode gate AirSim physics?** Both plugins share one
+  UE4 tick loop, so it plausibly does, but the two APIs have no shared notion of
+  time and this has not been tested. It decides whether deterministic replay of
+  *flight* is possible at all, which Phase 10 depends on. Test: world in
+  synchronous mode, issue a velocity command, check whether the drone moves
+  without `world.tick()`.
 - **Absolute paths in the docs.** `SETUP.md` and `CONTROLS.md` quote this
   machine's paths (`D:\Research\...`, `D:\AllSetups\...`). A student on another
   machine meets them immediately, and the exit criterion is explicitly about

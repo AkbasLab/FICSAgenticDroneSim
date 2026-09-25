@@ -7,12 +7,19 @@ v0.1.7 — CARLA 0.9.16 and AirSim 1.8.1 inside one Unreal Engine 4.26 process.
 simulator and fly something. This is the long version: every control, feature
 and API surface the build exposes.
 
+**Writing your own agents against this platform?** Read
+[00 · Architecture and Integration](00-architecture.md) first. It covers how the
+pieces actually fit together — one Unreal process hosting two unrelated RPC
+servers — and the four ways to wire agents to it, which is the decision that is
+expensive to change later.
+
 ---
 
 ## The documents
 
 | | Covers |
 |---|---|
+| [00 · Architecture and Integration](00-architecture.md) | **Start here for integration work.** One process with two RPC servers, the launch chain, ports, the Python client model, concurrency and determinism, four patterns for attaching agents, ground truth versus belief |
 | [01 · Simulator Control](01-simulator-control.md) | Environment checks, launcher options, starting and stopping, **synchronous mode, ticking, pause, step and resume** |
 | [02 · Maps and Navigation](02-maps-and-navigation.md) | The six towns, switching maps, layered `_Opt` variants, waypoints, lanes, junctions, route planning |
 | [03 · World and Environment](03-world-and-environment.md) | Weather and time of day, street lighting and appearance, querying static scene objects |

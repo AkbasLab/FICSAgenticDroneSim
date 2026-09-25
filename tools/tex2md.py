@@ -42,6 +42,22 @@ def inline(text: str) -> str:
     return text.strip()
 
 
+def unwrap_braces(text: str) -> str:
+    """Drop braces left behind by a stripped macro.
+
+    Removing \\emph from "\\emph{the simulator freezes}" leaves the argument
+    wrapped, which reads as literal braces in the output. Only balanced pairs
+    with no nested brace are unwrapped, repeatedly, so nesting resolves inward
+    to outward. Runs after the whole document is assembled, because a macro's
+    argument can span source lines.
+    """
+    for _ in range(4):
+        text, count = re.subn(r"\{([^{}]*)\}", r"\1", text)
+        if not count:
+            break
+    return text
+
+
 def guess_language(body: str) -> str:
     if re.search(r"^\s*(import |from |client\.|world\.|print\()", body, re.M):
         return "python"
@@ -150,6 +166,13 @@ def convert(lines: list[str]) -> str:
         i += 1
 
     text = "\n".join(out)
+    # Unwrap leftover braces in prose only. Code samples use braces for real --
+    # PowerShell blocks, Python dicts -- so fenced segments are left untouched.
+    segments = text.split("```")
+    text = "```".join(
+        part if index % 2 else unwrap_braces(part)
+        for index, part in enumerate(segments)
+    )
     return re.sub(r"\n{3,}", "\n\n", text).strip() + "\n"
 
 

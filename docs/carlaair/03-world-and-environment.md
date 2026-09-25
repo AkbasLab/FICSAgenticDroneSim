@@ -17,7 +17,7 @@ world.set_weather(carla.WeatherParameters.WetCloudySunset)
 print(world.get_weather())
 ```
 
-| {4}{@{}l}{**`carla.WeatherParameters.<name>`**} |  |  |  |
+| 4@l**`carla.WeatherParameters.<name>`** |  |  |  |
 |---|---|---|---|
 | `Default` | `ClearNoon` | `ClearSunset` | `ClearNight` |
 | `CloudyNoon` | `CloudySunset` | `CloudyNight` | `WetNoon` |
