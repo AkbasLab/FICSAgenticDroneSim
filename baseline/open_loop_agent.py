@@ -379,40 +379,80 @@ def plan_for(instruction: str, drone: str, model: str = MODEL) -> PlanRecord:
 # ----------------------------------------------------------------- execution
 
 class DroneRunner:
-    """Flies one validated plan to completion. No decisions are taken here."""
+    """Flies one validated plan to completion. No decisions are taken here.
+
+    THIS CLASS IS THE OPEN LOOP. It receives a finished plan and executes it
+    step by step, never consulting the model, never re-examining the world, and
+    never abandoning a step because circumstances changed. Adding any of that
+    would make it a different architecture -- which is what Phase 5 onward is
+    for, in a different directory.
+
+    One instance per drone, one thread per instance. The AirSim client is
+    SHARED across instances, which is the open question recorded in
+    phases/phase-01-baseline-freeze/: msgpack-rpc multiplexes one socket and is
+    not documented as thread-safe. If multi-drone runs misbehave, give each
+    runner its own client before suspecting anything else.
+    """
 
     def __init__(self, client, name: str) -> None:
         self.client = client
-        self.name = name
-        self.ground_z = 0.0
+        self.name = name          # must match a vehicle in settings.json
+        self.ground_z = 0.0       # filled in by arm(), used by land()
 
     def _say(self, message: str) -> None:
+        # flush=True because several threads print concurrently; without it the
+        # interleaving is buffered into nonsense.
         print(f"[{self.name}] {message}", flush=True)
 
     def arm(self) -> None:
+        """Take control of the vehicle and record where the ground is."""
         import airsim  # noqa: F401  (kept local so --plan-only needs no install)
 
         self.client.enableApiControl(True, vehicle_name=self.name)
         self.client.armDisarm(True, vehicle_name=self.name)
         state = self.client.getMultirotorState(vehicle_name=self.name)
-        # Recorded before takeoff: this build has no terrain collision, so
-        # landing cannot wait for a physical touchdown.
+        # Recorded before takeoff because this build has NO TERRAIN COLLISION:
+        # the drone passes through the ground, so landing cannot wait for a
+        # physical touchdown and must descend to a remembered height instead.
+        #
+        # This is also the only simulator state the agent reads, and it never
+        # reaches the model. The agent is blind by design.
         self.ground_z = state.kinematics_estimated.position.z_val
         self._say(f"armed, ground z = {self.ground_z:.2f}")
 
     def take_off(self) -> None:
+        """Lift off and settle at cruise height before the plan begins."""
         self.client.takeoffAsync(vehicle_name=self.name).join()
         self.client.moveToZAsync(CRUISE_ALTITUDE, MOVE_SPEED, vehicle_name=self.name).join()
+        # Settle before executing: a velocity command issued mid-climb produces
+        # a curve rather than the straight leg the plan describes.
         time.sleep(TAKEOFF_SETTLE)
 
     def _velocity(self, vx: float, vy: float, duration: float) -> None:
+        """Fly a body-frame velocity leg, then stop.
+
+        Body frame means vx is forward RELATIVE TO THE DRONE'S HEADING, not
+        north. Since nothing in this agent ever yaws, the two coincide here --
+        but a future change that adds turning will make them diverge.
+        """
         self.client.moveByVelocityBodyFrameAsync(
             vx, vy, 0.0, duration, vehicle_name=self.name
         ).join()
         # Velocity commands do not brake -- they expire and the aircraft coasts.
+        # Without this hover, every leg overshoots by however far momentum
+        # carries it, and the overshoot compounds across a multi-step plan.
         self.client.hoverAsync(vehicle_name=self.name).join()
 
     def step(self, step: dict[str, Any]) -> None:
+        """Execute one validated plan step.
+
+        One branch per action. Adding an action means adding a branch HERE as
+        well as to ACTIONS, PLAN_SCHEMA, SYSTEM_PROMPT and validate() -- five
+        places, or the model will emit something this method cannot fly.
+
+        Every call is synchronous (`.join()`): within one drone the plan is a
+        sequence, and concurrency happens between drones, not inside one.
+        """
         action = step["action"]
         if action == "fly_straight":
             self._velocity(MOVE_SPEED, 0.0, step["duration"])
@@ -433,6 +473,10 @@ class DroneRunner:
                 MOVE_SPEED, vehicle_name=self.name,
             ).join()
         elif action == "land":
+            # Descend to just above the remembered ground height first, slowly
+            # (2 m/s rather than MOVE_SPEED), then hand over to landAsync. Going
+            # straight to landAsync from cruise means a fast descent onto a
+            # surface the physics does not model.
             self.client.moveToZAsync(
                 self.ground_z - 1.0, 2.0, vehicle_name=self.name
             ).join()
@@ -441,18 +485,35 @@ class DroneRunner:
             raise PlanError(f"unhandled action {action!r}")
 
     def fly(self, steps: list[dict[str, Any]]) -> None:
+        """Arm, take off, execute the whole plan, then release control.
+
+        This is the thread body. It never raises: an exception here would die
+        inside a worker thread where nobody sees it, leaving the vehicle armed
+        and under API control with no way to fly it manually. So failures are
+        caught, reported, and control is released in `finally` regardless.
+
+        The plan is executed to the end. A step that fails does NOT cancel the
+        rest -- open loop means exactly that, and pretending otherwise would
+        quietly make this a different architecture.
+        """
         try:
             self.arm()
             self.take_off()
             for position, step in enumerate(steps, start=1):
                 self._say(f"{position}/{len(steps)} {step['action']}")
                 self.step(step)
+            # A plan without a final land leaves the drone airborne. Hovering is
+            # the safe end state: it holds position instead of drifting on
+            # whatever velocity the last step left behind.
             if steps[-1]["action"] != "land":
                 self._say("plan ended without land; holding")
                 self.client.hoverAsync(vehicle_name=self.name).join()
         except Exception as exc:
             self._say(f"FAILED: {type(exc).__name__}: {exc}")
         finally:
+            # Best effort, and silent if it fails: if the connection is already
+            # gone there is nothing useful to do, and raising here would mask
+            # the original failure reported above.
             try:
                 self.client.armDisarm(False, vehicle_name=self.name)
                 self.client.enableApiControl(False, vehicle_name=self.name)
@@ -464,6 +525,13 @@ class DroneRunner:
 # ---------------------------------------------------------------------- main
 
 def collect_instructions(args, drones: list[str]) -> list[str]:
+    """Get one instruction per drone, from flags or by prompting.
+
+    `--instruction` may be given once for several drones, which repeats it --
+    convenient for "all four do the same thing" without typing it four times.
+    Any other count mismatch is an error rather than a guess: silently flying
+    three of four drones is worse than refusing.
+    """
     if args.instruction:
         if len(args.instruction) == 1 and len(drones) > 1:
             return args.instruction * len(drones)
@@ -493,6 +561,10 @@ def main() -> int:
         sys.exit("need at least one drone")
     drones = vehicle_names(count)
 
+    # settings.json declares the vehicle roster, and AirSim reads it ONLY at
+    # process start. Writing it is therefore useless without a restart, and
+    # flying on with a stale roster produces "vehicle not found" errors that
+    # look like a connection problem. Hence the explicit confirmation.
     if not args.plan_only:
         path, changed = write_settings(count)
         print(f"settings.json -> {path}")
@@ -521,6 +593,8 @@ def main() -> int:
             print(f"  raw output: {record.raw_output[:200]}")
         records.append(record)
 
+    # All-or-nothing. One rejected plan stops the whole mission, because a
+    # partially flown multi-drone run is neither a result nor a clean failure.
     if any(not record.valid for record in records):
         print("\nNo drone armed: at least one plan was rejected.")
         return 1
@@ -528,19 +602,32 @@ def main() -> int:
         print("\n--plan-only: not flying.")
         return 0
 
+    # AirSim is imported only on the flight path, so --plan-only works in an
+    # environment where airsim is not installed at all.
     import airsim
 
     client = airsim.MultirotorClient(ip=args.host, port=args.port)
     client.confirmConnection()
 
+    # Manual gate: the RPC port opens well before the map finishes loading, and
+    # arming into a half-loaded world produces failures that look like bugs.
     input("\nPress Enter once the map has loaded to launch all drones.  ")
 
+    # One thread per drone, all sharing the one client. Threads rather than
+    # AirSim's own async futures because each drone runs a SEQUENCE: within a
+    # plan the steps are ordered, and only the drones are concurrent.
+    #
+    # Note every runner gets the same `client` -- see the thread-safety caveat
+    # on DroneRunner. Changing to one client per thread is a two-line edit here
+    # if multi-drone runs prove unreliable.
     threads = [
         threading.Thread(target=DroneRunner(client, r.drone).fly, args=(r.plan,))
         for r in records
     ]
     for thread in threads:
         thread.start()
+    # Join every thread before returning: exiting with drones still flying
+    # leaves them armed and under API control.
     for thread in threads:
         thread.join()
 
