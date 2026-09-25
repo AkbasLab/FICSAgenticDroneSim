@@ -373,7 +373,7 @@ output is harder than it looks.
 #### The quick way — pipe to a file
 
 ```powershell
-python -u llama_airsim_agent.py 2>&1 | Tee-Object -FilePath D:\Research\runs\session-01.log
+python -u baseline/open_loop_agent.py 2>&1 | Tee-Object -FilePath D:\Research\runs\session-01.log
 ```
 
 `-u` is not optional. Without it Python buffers stdout when it is piped, and

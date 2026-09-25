@@ -64,9 +64,12 @@ DOCS = {
     ),
     "08-scripts-and-limits.md": (
         "Shipped Scripts and Known Limits",
-        "The example scripts that come with the build, the agent layer that sits "
-        "on top, and an explicit list of what this build does not do.",
-        [(2168, 2358)],
+        "The example scripts that come with the build, and an explicit list of "
+        "what this build does not do.\n\n"
+        "The manual's *LLM agent layer* section is deliberately **not** included: "
+        "it documents a third-party agent this project does not use. The agent "
+        "layer for this study is [`../../baseline/`](../../baseline/).",
+        [(2168, 2197), (2304, 2358)],
     ),
     "09-diagnostics-and-reference.md": (
         "Diagnostics and Reference",
@@ -81,6 +84,15 @@ DOCS = {
         "machine, so nothing present in the build is missing here.",
         [(2422, 3336)],
     ),
+}
+
+# The manual was written when the agent layer was a third-party script. This
+# project replaced it, so examples that invoke it by name are retargeted at our
+# own agent — the point of those examples is the surrounding technique, not
+# which file is being run.
+SUBSTITUTIONS = {
+    "python llama_airsim_agent.py": "python baseline/open_loop_agent.py",
+    "python -u llama_airsim_agent.py": "python -u baseline/open_loop_agent.py",
 }
 
 HEADER = """# {title}
@@ -108,8 +120,12 @@ for name, (title, lead, ranges) in DOCS.items():
             sys.exit("convert failed for %s: %s" % (name, result.stderr[:300]))
         body.append(result.stdout.strip())
 
+    text = "\n\n".join(body).rstrip() + "\n"
+    for old, new in SUBSTITUTIONS.items():
+        text = text.replace(old, new)
+
     path = os.path.join(OUT, name)
     with io.open(path, "w", encoding="utf-8", newline="\n") as handle:
         handle.write(HEADER.format(title=title, lead=lead))
-        handle.write("\n\n".join(body).rstrip() + "\n")
+        handle.write(text)
     print("  %-34s %6d bytes" % (name, os.path.getsize(path)))

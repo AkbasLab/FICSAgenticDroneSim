@@ -1,6 +1,8 @@
 # Shipped Scripts and Known Limits
 
-The example scripts that come with the build, the agent layer that sits on top, and an explicit list of what this build does not do.
+The example scripts that come with the build, and an explicit list of what this build does not do.
+
+The manual's *LLM agent layer* section is deliberately **not** included: it documents a third-party agent this project does not use. The agent layer for this study is [`../../baseline/`](../../baseline/).
 
 > Part of the CarlaAir reference set — see [`README.md`](README.md) for the
 > index. Generated from *CarlaAir Command Reference v1.0*; edit that manual and
@@ -28,85 +30,6 @@ python examples\aerial_surveillance.py --help
 
 All of them accept `--help`. Run that first — the option names differ
 between scripts.
-
-## The LLM agent layer
-
-### Ollama
-
-| **Command** | **Purpose** |
-|---|---|
-| `ollama --version` | Check it is installed |
-| `ollama list` | Models on disk |
-| `ollama ps` | Models loaded now, and on CPU or GPU |
-| `ollama pull llama3.2:3b` | Download a model |
-| `ollama stop <model>` | Unload from memory immediately |
-| `ollama rm <model>` | Delete from disk |
-| `ollama run <model>` | Interactive chat, for testing the model alone |
-| `ollama show <model>` | Parameters, context length, licence |
-
-> **Note**
->
-> **`ollama ps` is the diagnostic that matters**
-> It shows `PROCESSOR` as `100% CPU` or `100% GPU`. For this
-> installation it must read CPU — the agents pass `num_gpu: 0` so the
-> simulator keeps all 4 GB of VRAM. A model resident for five minutes after its
-> last call is normal; `ollama stop` frees it at once.
-
-### Running an agent
-
-Two terminals. Simulator in the first, agent in the second:
-
-```powershell
-conda activate carlaAir
-cd D:\Research\AirSimRepo
-
-python test_flight.py            # deterministic, no LLM -- prove the stack works
-python llama_airsim_agent.py     # natural language, local model
-python mistral_airsim_agent.py   # natural language, larger local model
-python gemini_airsim_agent.py    # natural language, Google cloud (needs a key)
-```
-
-| **Script** | **Planner** | **Notes** |
-|---|---|---|
-| `test_flight.py` | none | Takeoff, forward, land. Run this first |
-| `test_fly_forward.py` | none | Minimal forward flight |
-| `move_to_coord.py` | none | Absolute coordinate move |
-| `give_coords.py` | none | Print current position |
-| `llama_airsim_agent.py` | Ollama, local | Model set at line 14 |
-| `mistral_airsim_agent.py` | Ollama, local | Larger, slower |
-| `gemini_airsim_agent.py` | Google cloud | Needs `.env` and an API key |
-| `Multiple.py` | — | Thread-per-drone coordinator, imported by the agents |
-
-### Changing the model
-
-```powershell
-cd D:\Research\AirSimRepo
-(Get-Content llama_airsim_agent.py -Raw) -replace 'MODEL = "llama3.2:3b"','MODEL = "llama3.1:8b"' | Set-Content llama_airsim_agent.py -Encoding utf8
-```
-
-### Tunable constants
-
-At the top of each agent script:
-
-| **Constant** | **Default** | **Effect** |
-|---|---|---|
-| `ALTITUDE` | -8.0 | Cruise height after takeoff |
-| `SPACING` | 4.0 | Metres between drones at spawn |
-| `MOVE_SPEED` | 5.0 | m/s for all directional moves. **The only way to change speed** — no action exposes it |
-| `MODEL` | model name | Which Ollama model plans |
-
-### The eight actions the planner may use
-
-| **Action** | **Parameters** | **Meaning** |
-|---|---|---|
-| `fly_to` | x, y, z | Fly to an absolute coordinate |
-| `fly_straight` | duration | Forward, body frame |
-| `fly_backward` | duration | Backward, heading held |
-| `fly_left` | duration | Strafe left |
-| `fly_right` | duration | Strafe right |
-| `hover` | duration | Hold position |
-| `set_altitude` | z | Climb or descend (negative is higher) |
-| `land` | — | Descend to the recorded ground height |
 
 ## What this build does *not* include
 

@@ -778,7 +778,7 @@ client.replay_file("run01.log", 0, 0, 0)
 ollama list / ollama ps / ollama pull llama3.2:3b / ollama stop <model>
 cd D:\Research\AirSimRepo
 python test_flight.py                       # no LLM -- prove the stack
-python llama_airsim_agent.py                # natural language
+python baseline/open_loop_agent.py                # natural language
 
 --- CLEAN UP ---------------------------------------------------------------
 client.apply_batch([carla.command.DestroyActor(a)
