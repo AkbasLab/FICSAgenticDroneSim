@@ -34,6 +34,11 @@ python baseline\open_loop_agent.py --plan-only \
     --instruction "fly forward for 5 seconds then land" # no simulator needed
 ```
 
+**Teardown lands the aircraft.** When a plan ends without a `land` step — M01
+ends hovering, for instance — the harness lands it before releasing control,
+because disarming cuts the motors and would drop it. That landing is teardown,
+not a plan step: it is never scored and never appears in the plan record.
+
 `--plan-only` exercises the planner and validator without connecting to AirSim,
 which is how the planner is tested without occupying the GPU. Every planning
 call is appended to `runs/agent-log.jsonl` — instruction, raw model output,

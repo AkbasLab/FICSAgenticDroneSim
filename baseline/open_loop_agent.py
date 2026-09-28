@@ -68,6 +68,10 @@ MAX_DURATION = 60.0      # seconds; a single leg longer than this is rejected
 MAX_ALTITUDE = -120.0    # metres NED; roughly the legal ceiling for small UAS
 MIN_ALTITUDE = -2.0      # metres NED; below this is effectively ground level
 
+# How far above its arming height the vehicle must be for teardown to treat it
+# as airborne and land it first. Disarming while airborne cuts the motors.
+AIRBORNE_MARGIN = 1.0    # metres
+
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOG_PATH = os.path.join(REPO_ROOT, "runs", "agent-log.jsonl")
 
@@ -485,12 +489,15 @@ class DroneRunner:
             raise PlanError(f"unhandled action {action!r}")
 
     def fly(self, steps: list[dict[str, Any]]) -> None:
-        """Arm, take off, execute the whole plan, then release control.
+        """Arm, take off, execute the whole plan, then land and release control.
 
         This is the thread body. It never raises: an exception here would die
         inside a worker thread where nobody sees it, leaving the vehicle armed
         and under API control with no way to fly it manually. So failures are
-        caught, reported, and control is released in `finally` regardless.
+        caught, reported, and teardown runs in `finally` regardless.
+
+        Teardown lands the aircraft if it is still airborne -- see
+        `_land_and_release`. That landing is NOT a plan step and is not scored.
 
         The plan is executed to the end. A step that fails does NOT cancel the
         rest -- open loop means exactly that, and pretending otherwise would
@@ -502,24 +509,60 @@ class DroneRunner:
             for position, step in enumerate(steps, start=1):
                 self._say(f"{position}/{len(steps)} {step['action']}")
                 self.step(step)
-            # A plan without a final land leaves the drone airborne. Hovering is
-            # the safe end state: it holds position instead of drifting on
-            # whatever velocity the last step left behind.
+            # A plan without a final land leaves the drone airborne. Hover to
+            # stop it drifting on whatever velocity the last step left behind;
+            # teardown then brings it down.
             if steps[-1]["action"] != "land":
                 self._say("plan ended without land; holding")
                 self.client.hoverAsync(vehicle_name=self.name).join()
         except Exception as exc:
             self._say(f"FAILED: {type(exc).__name__}: {exc}")
         finally:
-            # Best effort, and silent if it fails: if the connection is already
-            # gone there is nothing useful to do, and raising here would mask
-            # the original failure reported above.
-            try:
-                self.client.armDisarm(False, vehicle_name=self.name)
-                self.client.enableApiControl(False, vehicle_name=self.name)
-                self._say("control released")
-            except Exception:
-                pass
+            self._land_and_release()
+
+    def _is_airborne(self) -> bool:
+        """True if the vehicle is meaningfully above where it armed."""
+        try:
+            state = self.client.getMultirotorState(vehicle_name=self.name)
+            z = state.kinematics_estimated.position.z_val
+        except Exception:
+            # If the state cannot be read, assume airborne: attempting a landing
+            # that was not needed is harmless, skipping one that was is not.
+            return True
+        # NED: more negative is higher.
+        return z < self.ground_z - AIRBORNE_MARGIN
+
+    def _land_and_release(self) -> None:
+        """Bring the aircraft down, then hand control back.
+
+        THIS IS TEARDOWN, NOT PART OF THE PLAN. It runs after the plan has
+        finished, or after it failed, and it is not scored: the plan is what the
+        model produced, and landing safely afterwards is the harness's job.
+
+        It exists because disarming cuts the motors. Doing that while the
+        aircraft is hovering -- which is exactly how a plan without a final
+        `land` ends -- drops it out of the sky. Found on the first real flight:
+        M01 took off, flew its leg, held position, and then fell when control
+        was released.
+        """
+        try:
+            if self._is_airborne():
+                self._say("teardown: landing before releasing control")
+                self.step({"action": "land"})
+        except Exception as exc:
+            # Report and continue to the release: leaving the vehicle armed and
+            # under API control is worse than an ungraceful landing.
+            self._say(f"teardown landing failed: {type(exc).__name__}: {exc}")
+
+        # Best effort, and silent if it fails: if the connection is already gone
+        # there is nothing useful to do, and raising here would mask whatever
+        # failure was reported above.
+        try:
+            self.client.armDisarm(False, vehicle_name=self.name)
+            self.client.enableApiControl(False, vehicle_name=self.name)
+            self._say("control released")
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------- main

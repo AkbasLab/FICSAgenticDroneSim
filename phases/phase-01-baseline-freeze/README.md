@@ -139,6 +139,41 @@ because M05 and M07 are the two the prior project reported its model failing
 (0/3 and 1/3). That comparison is **not like-for-like** — different model,
 different prompt, different schema — and must not be reported as a replication.
 
+### 2026-09-28 — first flight: M01 flew, then fell out of the sky
+
+First execution against the live simulator, Town10HD at default quality with
+traffic running (not the protocol's `--no-traffic --quality Low`; this was an
+executor test, not a scored run).
+
+**What worked.** Planning produced `fly_straight` in 13.4 s (cold, model
+loading). The drone armed, took off, climbed to cruise, and flew its forward
+leg. The executor's arm → takeoff → step path is sound.
+
+**What failed.** At the end of the plan the aircraft **dropped out of the air**.
+
+M01 has no `land` step, so the plan correctly ended with the drone hovering at
+roughly 8 m. Teardown then ran `armDisarm(False)` unconditionally, which cuts
+the motors. The code even commented that hovering was "the safe end state" two
+lines above the call that made it unsafe.
+
+This is exactly the class of defect `--plan-only` cannot find: every planner
+run had been correct, and the mistake was in the last four lines of execution.
+
+**Fix.** Teardown now checks whether the vehicle is above its arming height and
+lands it before releasing control (`_is_airborne`, `_land_and_release`). If the
+state cannot be read it assumes airborne, because an unnecessary landing is
+harmless and a skipped one is not. A failed teardown landing is reported but
+still proceeds to release control — leaving a vehicle armed and under API
+control is worse than an ungraceful landing.
+
+**The landing is teardown, not a plan step.** It is not scored and does not
+appear in the plan record: the plan is what the model produced, and getting the
+aircraft down afterwards is the harness's job. Keeping those separate matters
+for 1.3, where "did the plan execute" must not be contaminated by cleanup.
+
+Not yet re-verified in flight — the fix needs an M01 re-run, then M02, which is
+the first real exercise of the landing path.
+
 ### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after
