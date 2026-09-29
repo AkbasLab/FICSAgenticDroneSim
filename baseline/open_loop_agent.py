@@ -824,6 +824,22 @@ class DroneRunner:
             ended_landed = bool(executed) and executed[-1] == "land" and failure is None
             self._land_and_release(skip_landing=ended_landed)
 
+        # Where the aircraft actually finished. Recorded because for most of
+        # this project every flight ended roughly 17 m above the ground and
+        # nothing in the data showed it -- the run said "completed", the plan
+        # was correct, and the only witness was somebody watching the screen.
+        # A record that cannot show a drone hovering in mid air is not evidence.
+        try:
+            final = self.client.simGetVehiclePose(self.name).position
+            final_position = {"x": round(final.x_val, 2),
+                              "y": round(final.y_val, 2),
+                              "z": round(final.z_val, 2)}
+            # ground_z is where the ground was when this flight armed, so the
+            # comparison is to this flight's own ground, not a global constant.
+            landed_on_ground = abs(final.z_val - self.ground_z) < 1.5
+        except Exception:
+            final_position, landed_on_ground = None, None
+
         return {
             "drone": self.name,
             "planned": [s["action"] for s in steps],
@@ -833,6 +849,9 @@ class DroneRunner:
             "failure": failure,
             "flight_seconds": round(time.time() - started, 1),
             "ground_z": round(self.ground_z, 2),
+            "final_position": final_position,
+            # True only if the aircraft ended within 1.5 m of its own ground.
+            "landed_on_ground": landed_on_ground,
             # False means the drone was still moving when the ground was
             # read, so every altitude in this run is suspect.
             "ground_settled": self.ground_settled,
