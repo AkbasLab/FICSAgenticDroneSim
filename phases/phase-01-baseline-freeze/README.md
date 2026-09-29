@@ -376,7 +376,7 @@ The old values and the reason for the change are recorded in the config and in
 
 Town10HD, Epic, 1080p, traffic on — the protocol as revised earlier the same
 day. 24 runs. Raw data in
-[`results/baseline_v1-llama3.2_3b-20260928-212436.jsonl`](results/baseline_v1-llama3.2_3b-20260928-212436.jsonl),
+[`results/baseline_v1-llama3.2_3b-20260928-212436-blockA-M01-M08.jsonl`](results/baseline_v1-llama3.2_3b-20260928-212436-blockA-M01-M08.jsonl),
 summary beside it.
 
 **21/21 scored runs correct. 24/24 executed to completion. Zero collisions.**

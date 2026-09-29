@@ -372,6 +372,10 @@ def main() -> int:
                         help="plan and score without flying (no simulator needed)")
     parser.add_argument("--pause", action="store_true",
                         help="wait for a keypress between runs, to watch each one")
+    parser.add_argument("--block", metavar="LABEL",
+                        help="short label for this session, e.g. blockB-M09. "
+                             "Appears in every filename so a results folder "
+                             "reads as a list of sessions rather than timestamps")
     args = parser.parse_args()
 
     # The summary contains em dashes and middots. Files are written UTF-8
@@ -447,7 +451,16 @@ def main() -> int:
     # file at the end, producing two files holding the same 24 runs under
     # different names, with a summary matching only one of them.
     # The colon in "llama3.2:3b" is illegal in a Windows filename.
-    stem = f"{config['set']['name']}-{model.replace(':', '_')}-{time.strftime('%Y%m%d-%H%M%S')}"
+    # Naming convention, documented in results/README.md:
+    #   <set>-<model>-<stamp>[-<block>].jsonl        the runs
+    #   <set>-<model>-<stamp>[-<block>].md           the summary
+    #   <set>-<model>-<stamp>[-<block>]-code/        the code that flew them
+    #
+    # The block label is optional but worth passing: a folder of timestamps
+    # tells you when a session ran, not what it was.
+    label = f"-{args.block}" if args.block else ""
+    stem = (f"{config['set']['name']}-{model.replace(':', '_')}"
+            f"-{time.strftime('%Y%m%d-%H%M%S')}{label}")
     live_path = os.path.join(args.out, stem + ".jsonl")
 
     # Archive the code and config that are about to fly, before anything flies.

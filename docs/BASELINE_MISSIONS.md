@@ -169,7 +169,7 @@ Fill in as runs complete. `✔` correct, `✘` incorrect, `—` not applicable.
 ### `llama3.2:3b`
 
 Single-drone missions flown 2026-09-28, Town10HD, Epic, traffic on. Raw data:
-`phases/phase-01-baseline-freeze/results/baseline_v1-llama3.2_3b-20260928-212436.jsonl`
+`phases/phase-01-baseline-freeze/results/baseline_v1-llama3.2_3b-20260928-212436-blockA-M01-M08.jsonl`
 
 | Mission | Valid 3/3 | Correct | Consistent | Extra steps | Latency (s) | Executed | Notes |
 |---|---|---|---|---|---|---|---|
