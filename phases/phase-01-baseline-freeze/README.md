@@ -217,6 +217,48 @@ generates `settings.json` — Phase 4's scenario configs especially — should b
 A/B tested against a known-good file rather than trusted because it looks
 reasonable.
 
+### 2026-09-28 — M01 flown clean, both fixes verified in flight
+
+Re-run of M01 after the teardown and settings fixes, recorded on screen.
+
+| | |
+|---|---|
+| Mission | M01 — `fly forward for 5 seconds` |
+| Model | `llama3.2:3b`, plan `fly_straight` in 14.18 s (cold) |
+| Map | Town10HD, Epic quality |
+| Recording | `20260928-2018_phase01_M01_llama3.2-3b_Town10HD_run01.mp4` |
+| Outcome | **As expected throughout** |
+
+The drone armed, took off, climbed to cruise, flew its forward leg, held
+position, then **descended under control and settled** before control was
+released. No drop.
+
+That verifies both defects found earlier today:
+
+* **teardown disarming mid-air** — the aircraft now lands before control is
+  released, and the landing is visible in the recording;
+* **`settings.json` killing the simulator** — the run launched and completed
+  normally on a file written by the fixed `build_settings()`.
+
+Neither fix could have been confirmed without flying. The planner had been
+correct in every run while both defects were live.
+
+#### Recording convention
+
+```
+YYYYMMDD-HHMM_phaseNN_MISSION_model_map_runNN.mp4
+```
+
+Timestamp first so captures sort chronologically, then the context needed to
+identify a clip without opening it. No spaces or colons, so it is safe to quote
+in a shell and on any filesystem. **The outcome is deliberately not in the
+filename** — it belongs here, where it can be corrected without renaming a file
+that other documents already cite.
+
+Recordings live outside the repository. Video has no place in version control:
+this one clip is 64 MB, and a full mission set would be gigabytes in history
+that can never be removed.
+
 ### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after
