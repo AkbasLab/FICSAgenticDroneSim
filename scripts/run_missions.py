@@ -83,6 +83,44 @@ def score(actions: list[str], expected: list[str]) -> tuple[bool, int]:
     return actions == expected, max(0, len(actions) - len(expected))
 
 
+def snapshot_code(agent, out_dir: str, stem: str, config_path: str) -> dict[str, Any]:
+    """Archive the exact code and config this series ran, beside its data.
+
+    A git SHA identifies code only if the tree was clean, and in practice runs
+    are flown from uncommitted work -- most of this project's flights were. So
+    the actual files are copied into `<stem>-code/` next to the JSONL, and the
+    manifest records digests, the commit, and whether the tree was dirty.
+
+    One snapshot per series, not per run: every run in a series is flown by the
+    same code, and the per-row digests prove it. Three small text files against
+    two dozen runs is the right trade.
+
+    This is `AUV-14` §14.2 (experiment manifest) arriving early, because the
+    question "which agent produced this number" is already live.
+    """
+    import shutil
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    sources = {
+        "open_loop_agent.py": os.path.join(repo, "baseline", "open_loop_agent.py"),
+        "run_missions.py": os.path.abspath(__file__),
+        os.path.basename(config_path): os.path.abspath(config_path),
+    }
+
+    folder = os.path.join(out_dir, stem + "-code")
+    os.makedirs(folder, exist_ok=True)
+    digests = {}
+    for name, source in sources.items():
+        shutil.copy2(source, os.path.join(folder, name))
+        digests[name] = agent.file_digest(source)
+
+    manifest = dict(agent.provenance(), files=digests, snapshot=os.path.basename(folder))
+    with io.open(os.path.join(folder, "manifest.json"), "w",
+                 encoding="utf-8", newline="\n") as handle:
+        handle.write(json.dumps(manifest, indent=2) + "\n")
+    return manifest
+
+
 def current_roster(agent) -> list[str]:
     """The vehicles in settings.json right now.
 
@@ -423,6 +461,12 @@ def main() -> int:
     stem = f"{config['set']['name']}-{model.replace(':', '_')}-{time.strftime('%Y%m%d-%H%M%S')}"
     live_path = os.path.join(args.out, stem + ".jsonl")
 
+    # Archive the code and config that are about to fly, before anything flies.
+    manifest = snapshot_code(agent, args.out, stem, args.config)
+    print(f"code    : {manifest['commit']}"
+          f"{' (dirty tree)' if manifest['dirty'] else ''}"
+          f" -> {manifest['snapshot']}/")
+
     rows = []
     for mission in missions:
         for attempt in range(1, repeats + 1):
@@ -430,7 +474,8 @@ def main() -> int:
             # separate sessions, possibly days apart, and the config may be
             # edited between them; a row that cannot state its own conditions is
             # not evidence.
-            conditions = dict(config["protocol"], flown=not args.plan_only)
+            conditions = dict(config["protocol"], flown=not args.plan_only,
+                              code=manifest)
             if args.plan_only:
                 row = run_one(agent, mission, model, attempt, conditions)
             else:

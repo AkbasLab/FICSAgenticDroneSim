@@ -290,6 +290,8 @@ def log_execution(outcomes: list[dict[str, Any]], separation: dict[str, Any] | N
     record = {
         "t": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "kind": "execution",
+        # Which agent flew this. Cheap to record, impossible to reconstruct.
+        "code": provenance(),
         "drones": len(outcomes),
         "completed": all(o["completed"] for o in outcomes),
         "any_collision": any(
@@ -867,6 +869,56 @@ def reset_world(client, settle: float = 2.0) -> None:
     client.reset()
     time.sleep(settle)                 # physics needs a moment to settle
     client.confirmConnection()
+
+
+def file_digest(path: str) -> str | None:
+    """SHA-256 of a file, short form. None if it cannot be read."""
+    import hashlib
+
+    try:
+        with open(path, "rb") as handle:
+            return hashlib.sha256(handle.read()).hexdigest()[:16]
+    except OSError:
+        return None
+
+
+def provenance() -> dict[str, Any]:
+    """Which code produced this run.
+
+    Required by the plan (`AUV-14` §14.2: git SHA, versions, config) and by
+    anyone reading a result months later who needs the exact agent that flew it.
+
+    A commit SHA alone is not enough. Development happens with a dirty working
+    tree, and most runs in this project were flown from uncommitted code -- so
+    the digest of the agent file is recorded too, and `dirty` says whether the
+    tree had uncommitted changes at the time. A run whose digest matches no
+    commit can still be identified by the snapshot the runner archives beside
+    the data.
+    """
+    import subprocess
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    commit, dirty = None, None
+    try:
+        commit = subprocess.run(
+            ["git", "-c", "safe.directory=*", "rev-parse", "--short", "HEAD"],
+            cwd=repo, capture_output=True, text=True, timeout=10,
+        ).stdout.strip() or None
+        status = subprocess.run(
+            ["git", "-c", "safe.directory=*", "status", "--porcelain"],
+            cwd=repo, capture_output=True, text=True, timeout=10,
+        ).stdout
+        dirty = bool(status.strip())
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+    return {
+        "commit": commit,
+        "dirty": dirty,
+        "agent": os.path.basename(__file__),
+        "agent_sha256": file_digest(os.path.abspath(__file__)),
+        "python": sys.version.split()[0],
+    }
 
 
 def connect(host: str = "127.0.0.1", port: int = AIRSIM_PORT):

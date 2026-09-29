@@ -498,6 +498,31 @@ spacing, on the ground, before either took off. Exactly as intended.
 it, that 0.08 m flight would have been recorded as a success: both plans
 correct, both executed, no collision reported.
 
+### 2026-09-28 — every series now archives the code that flew it
+
+A result is only evidence if you can say which code produced it. A git SHA
+alone does not: development happens with a dirty tree, and **most flights in
+this project were flown from uncommitted work** — including all of Block A.
+
+Each series now writes `<stem>-code/` beside its data, holding the exact
+`open_loop_agent.py`, `run_missions.py` and mission config that ran, plus a
+`manifest.json` with the commit, a dirty-tree flag, per-file digests and the
+Python version. Every row in the JSONL carries the same manifest, so a single
+run can be traced to its code without opening anything else.
+
+One snapshot per series rather than per run, because every run in a series is
+flown by the same code and the per-row digests prove it. Three small text files
+against two dozen runs.
+
+This is `AUV-14` §14.2 — the experiment manifest — arriving nine phases early,
+because the question it answers is already live.
+
+**Block A predates this**, so its 24 runs carry conditions but no code
+snapshot. The agent has changed materially since (teardown landing, runtime
+spawning, per-thread connections), so those runs cannot be reproduced exactly
+from the current tree. That is an argument for re-flying Block A once the
+harness settles, and the reason is now recorded rather than discovered later.
+
 ### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after
