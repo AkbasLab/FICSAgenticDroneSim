@@ -1,0 +1,13 @@
+{
+  "commit": "ecd39af",
+  "dirty": true,
+  "agent": "open_loop_agent.py",
+  "agent_sha256": "c2bbf28e08baef54",
+  "python": "3.10.21",
+  "files": {
+    "open_loop_agent.py": "c2bbf28e08baef54",
+    "run_missions.py": "31897f9b155c94a8",
+    "baseline_v1.toml": "09a37316b0666822"
+  },
+  "snapshot": "baseline_v1-llama3.2_3b-20260928-233425-smoke-M01-code"
+}

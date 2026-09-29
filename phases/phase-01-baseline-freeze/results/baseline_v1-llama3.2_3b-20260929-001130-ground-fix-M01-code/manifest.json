@@ -1,0 +1,13 @@
+{
+  "commit": "ecd39af",
+  "dirty": true,
+  "agent": "open_loop_agent.py",
+  "agent_sha256": "cace60a59f0995c0",
+  "python": "3.10.21",
+  "files": {
+    "open_loop_agent.py": "cace60a59f0995c0",
+    "run_missions.py": "31897f9b155c94a8",
+    "baseline_v1.toml": "09a37316b0666822"
+  },
+  "snapshot": "baseline_v1-llama3.2_3b-20260929-001130-ground-fix-M01-code"
+}

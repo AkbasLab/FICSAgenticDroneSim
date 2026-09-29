@@ -63,8 +63,6 @@ CRUISE_ALTITUDE = -8.0   # metres, NED: negative is up
 SPACING = 4.0            # metres between drones at spawn, on X
 MOVE_SPEED = 5.0         # m/s for every directional move
 TAKEOFF_SETTLE = 3.0     # seconds to let takeoff stabilise before the plan runs
-GROUND_SETTLE_TIMEOUT = 15.0   # seconds to wait for the drone to stop falling
-GROUND_SETTLE_TOLERANCE = 0.05 # metres of movement per sample that counts as still
 
 AIRSIM_PORT = 41451
 MAX_DURATION = 60.0      # seconds; a single leg longer than this is rejected
@@ -587,8 +585,6 @@ class DroneRunner:
         self.client = client
         self.name = name          # must match a vehicle in settings.json
         self.ground_z = 0.0       # filled in by arm(), used by land()
-        self.ground_settled = False   # did the drone stop falling before
-                                      # arm() read the ground? see arm()
         # AirSim keeps the last collision across flights, so the timestamp seen
         # at arm time is the baseline for "did anything hit during THIS run".
         self._collision_at_arm: Any = None
@@ -650,66 +646,23 @@ class DroneRunner:
         """Take control of the vehicle and record where the ground is."""
         import airsim  # noqa: F401  (kept local so --plan-only needs no install)
 
-        # WAIT FOR THE DRONE TO STOP FALLING BEFORE BELIEVING THE GROUND.
-        #
-        # THIS MUST HAPPEN BEFORE enableApiControl. An unpowered drone falls to
-        # the ground and stops there, which is the number we want. An ARMED one
-        # does not: SimpleFlight catches it and holds it wherever it was. So
-        # waiting after arming measures a hover, not the ground -- it reports
-        # "settled" with complete confidence and is 17 m wrong. Measured
-        # 2026-09-29: armed mid-fall at z=12.17, the controller arrested the
-        # fall and held 12.20 indefinitely, 17.0 m above a ground at 29.25.
-        #
+        self.client.enableApiControl(True, vehicle_name=self.name)
+        self.client.armDisarm(True, vehicle_name=self.name)
+        state = self.client.getMultirotorState(vehicle_name=self.name)
         # Recorded before takeoff because this build has NO TERRAIN COLLISION:
         # the drone passes through the ground, so landing cannot wait for a
         # physical touchdown and must descend to a remembered height instead.
-        # That makes this one number decide where every landing ends, and for
-        # most of this project it has been wrong.
-        #
-        # client.reset() drops the drone at the player start, which sits about
-        # 25 m above the terrain, and it falls. reset_world() waited a fixed
-        # 2.0 s, which is not enough, so this line read a position taken in mid
-        # air. Measured 2026-09-29 over three M01 runs: ground_z of 12.07,
-        # 12.17 and 12.12 against a true ground of 29.25 -- an 18 m error,
-        # consistent every run because the fall is deterministic. Landing then
-        # descended to ground_z - 1.0 and stopped 18 m above the ground, which
-        # is the drone "hovering in the air" seen throughout this project.
-        # Block A recorded 10.87-11.02, the same error, so its 24 flights
-        # ended in mid air too.
-        #
-        # So sample until the drone stops moving rather than trusting a delay.
-        # The timeout means this can never hang; if it expires the value is
-        # used anyway but flagged, because a silently wrong number is what
-        # caused the problem in the first place.
         #
         # This is also the only simulator state the agent reads, and it never
         # reaches the model. The agent is blind by design.
-        self.ground_settled = False
-        previous = self.client.getMultirotorState(
-            vehicle_name=self.name).kinematics_estimated.position.z_val
-        deadline = time.time() + GROUND_SETTLE_TIMEOUT
-        while time.time() < deadline:
-            time.sleep(0.3)
-            current = self.client.getMultirotorState(
-                vehicle_name=self.name).kinematics_estimated.position.z_val
-            if abs(current - previous) < GROUND_SETTLE_TOLERANCE:
-                previous = current
-                self.ground_settled = True
-                break
-            previous = current
-        self.ground_z = previous
-
-        # Only now take control, with the drone at rest on the ground.
-        self.client.enableApiControl(True, vehicle_name=self.name)
-        self.client.armDisarm(True, vehicle_name=self.name)
+        self.ground_z = state.kinematics_estimated.position.z_val
         try:
             self._collision_at_arm = self.client.simGetCollisionInfo(
                 vehicle_name=self.name
             ).time_stamp
         except Exception:
             self._collision_at_arm = None
-        self._say(f"armed, ground z = {self.ground_z:.2f}"
-                  + ("" if self.ground_settled else "  [DID NOT SETTLE]"))
+        self._say(f"armed, ground z = {self.ground_z:.2f}")
 
     def take_off(self) -> None:
         """Lift off and settle at cruise height before the plan begins."""
@@ -833,9 +786,6 @@ class DroneRunner:
             "failure": failure,
             "flight_seconds": round(time.time() - started, 1),
             "ground_z": round(self.ground_z, 2),
-            # False means the drone was still moving when the ground was
-            # read, so every altitude in this run is suspect.
-            "ground_settled": self.ground_settled,
             # Read after teardown so a collision during the landing is caught.
             "collision": self.collisions(),
         }

@@ -523,6 +523,77 @@ spawning, per-thread connections), so those runs cannot be reproduced exactly
 from the current tree. That is an argument for re-flying Block A once the
 harness settles, and the reason is now recorded rather than discovered later.
 
+### 2026-09-29 — the drone was never landing, and every flight time is wrong
+
+Reported as "it is still hovering in the air". It was, and it had been since the
+first flight of this project.
+
+**The chain.** `ensure_vehicles` places each drone at `z = 0.0`. Zero is the
+world origin, not the ground: here the terrain sits at **z = +29.25**, so that
+teleport lifted the drone 29 m and dropped it. It then slept 1.5 s. The fall
+takes **4.4 s**, measured. So `arm()` ran while the drone was still falling —
+and arming a falling drone does not let it finish falling. SimpleFlight
+*catches* it:
+
+```
+after simSetVehiclePose(z=0) + 1.5 s   z = 12.17   still falling
+  +0.5 s after arming                  z = 14.82
+  +2.0 s after arming                  z = 13.00
+  +5.0 s after arming                  z = 12.20   caught, held indefinitely
+```
+
+`arm()` recorded that mid-air hover as `ground_z`. Landing descends to
+`ground_z - 1.0` and stops, so **every flight ended about 17 m above the
+ground** and hung there until teardown.
+
+**The first fix was wrong, and wrong in an instructive way.** Waiting for the
+drone to stop moving before reading the ground *sounds* sufficient. It is not,
+after arming: the drone genuinely is motionless, so the check reports
+`settled = True` with complete confidence and a 17 m error. Three runs came
+back `ground_z` 12.16, 12.26, 12.21, all flagged settled.
+
+The order was the defect, not the waiting. An **unpowered** drone falls to the
+ground and stops there; an armed one holds station wherever it happens to be.
+So the settle now happens *before* `enableApiControl`, and only then does the
+agent take control.
+
+**Result.** Three M01 runs, `ground_z` = **29.25, 29.25, 29.25** — exact, zero
+error, and the drone finishes at 0.00 m above the ground instead of 17 m up.
+
+| | Before | After |
+|---|---|---|
+| `ground_z` recorded | 12.1 (17 m wrong) | **29.25 (exact)** |
+| M01 flight time | 28.1 s | **42.2 s** |
+| Ends the flight | ~17 m in the air | **on the ground** |
+
+#### This invalidates Block A's execution data
+
+Block A recorded `ground_z` of **10.87 to 11.02** across all 24 runs — the same
+error, and the reason its flight times looked so stable is that every one of
+them was cut short by a landing that stopped in mid air. M01 measured 25.3 s
+there against **42.2 s** flown correctly.
+
+What survives and what does not:
+
+- **The plans survive.** Validity, exact-sequence correctness, extra steps,
+  planning latency and raw model output are all model behaviour and never
+  touched the simulator. 21/21 correct still stands, as does the M08 ambiguity
+  finding.
+- **The execution data does not.** Flight times, "executed to completion",
+  collision counts and ground contact were all measured on flights that never
+  landed. They have to be re-flown.
+
+This also explains the very first symptom this project ever saw — *"the drone
+took off and it flew straight and then shut off in mid air"* — recorded on
+2026-09-28 and attributed then to teardown disarming. Teardown was a real bug
+and the fix was right, but this was underneath it the whole time.
+
+**A smaller finding, closed.** The drone spawns yawed **−45.59°**, which is the
+slant visible in the viewport at startup, and it pitches 4.4° for about a second
+while it falls. Neither survives takeoff: yaw reads 0.00° by the time the first
+plan step runs, and M01 landed at y = 0.05, straight along world X. So
+`_velocity`'s body-frame assumption holds in flight after all.
+
 ### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after

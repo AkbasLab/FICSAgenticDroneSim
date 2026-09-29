@@ -186,6 +186,25 @@ Single-drone missions flown 2026-09-28, Town10HD, Epic, traffic on. Raw data:
 
 **21/21 scored runs correct · 24/24 executed to completion · 0 collisions.**
 
+> ### ⚠ The execution columns above are invalid. Re-fly required.
+>
+> **Found 2026-09-29.** Every Block A flight ended roughly 17 m above the
+> ground, not on it. `arm()` read `ground_z` while the drone was still falling
+> after being placed, and arming a falling drone makes the controller catch and
+> hold it — so the recorded "ground" was a mid-air hover. Block A logged
+> `ground_z` of 10.87–11.02 against a true ground of 29.25.
+>
+> **The planning columns are unaffected** — validity, correctness, consistency,
+> extra steps, latency and raw output are model behaviour and never touched the
+> simulator. 21/21 correct stands, as does the M08 ambiguity result.
+>
+> **Flight time, "Executed", collisions and ground contact do not stand.** M01
+> measured 25.3 s here; flown correctly after the fix it is **42.2 s**.
+>
+> Fixed in `arm()` — the drone must settle *before* API control is enabled.
+> Details in
+> [`../phases/phase-01-baseline-freeze/`](../phases/phase-01-baseline-freeze/).
+
 #### Two results the table cannot carry
 
 **M08 got the direction of "down" wrong, consistently.** All three runs read

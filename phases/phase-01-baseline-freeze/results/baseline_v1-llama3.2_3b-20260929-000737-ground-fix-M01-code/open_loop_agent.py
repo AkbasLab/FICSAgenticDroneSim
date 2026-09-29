@@ -650,15 +650,10 @@ class DroneRunner:
         """Take control of the vehicle and record where the ground is."""
         import airsim  # noqa: F401  (kept local so --plan-only needs no install)
 
+        self.client.enableApiControl(True, vehicle_name=self.name)
+        self.client.armDisarm(True, vehicle_name=self.name)
+
         # WAIT FOR THE DRONE TO STOP FALLING BEFORE BELIEVING THE GROUND.
-        #
-        # THIS MUST HAPPEN BEFORE enableApiControl. An unpowered drone falls to
-        # the ground and stops there, which is the number we want. An ARMED one
-        # does not: SimpleFlight catches it and holds it wherever it was. So
-        # waiting after arming measures a hover, not the ground -- it reports
-        # "settled" with complete confidence and is 17 m wrong. Measured
-        # 2026-09-29: armed mid-fall at z=12.17, the controller arrested the
-        # fall and held 12.20 indefinitely, 17.0 m above a ground at 29.25.
         #
         # Recorded before takeoff because this build has NO TERRAIN COLLISION:
         # the drone passes through the ground, so landing cannot wait for a
@@ -698,10 +693,6 @@ class DroneRunner:
                 break
             previous = current
         self.ground_z = previous
-
-        # Only now take control, with the drone at rest on the ground.
-        self.client.enableApiControl(True, vehicle_name=self.name)
-        self.client.armDisarm(True, vehicle_name=self.name)
         try:
             self._collision_at_arm = self.client.simGetCollisionInfo(
                 vehicle_name=self.name
