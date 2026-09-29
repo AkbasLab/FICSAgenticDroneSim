@@ -132,6 +132,22 @@ class TaskAllocator:
     def has_capacity(self, now):
         return len(self.my_tasks(now)) < self.max_concurrent
 
+    def _believed_busy(self, vehicle_id, now):
+        """Whether we believe another drone is already holding work.
+
+        Read from our own copy of the board, so it stays a local judgement made
+        from delivered messages - no shared state, no central view.
+        """
+        for t in self.board.all():
+            if t.assigned_agent != vehicle_id:
+                continue
+            if t.status in (TaskStatus.COMPLETE, TaskStatus.FAILED):
+                continue
+            if t.is_open(now):          # its lease lapsed; it is not really busy
+                continue
+            return True
+        return False
+
     # --- inbound messages ---
 
     def on_message(self, msg, belief):
@@ -335,7 +351,16 @@ class TaskAllocator:
             if window_open and known_peers and len(heard) <= known_peers:
                 continue
 
-            winner = best_bid(list(heard.values()))
+            # A bid from a drone that has since taken on work is stale. Leaving
+            # it in the pool deadlocks the round: the busy drone still has the
+            # best number so nobody else may claim, but it has no capacity so it
+            # cannot claim either, and the task sits open until it happens to
+            # free up. Invisible while every drone bid an identical value; fatal
+            # the moment they did not.
+            live = [b for b in heard.values()
+                    if b.vehicle_id == self.vehicle_id
+                    or not self._believed_busy(b.vehicle_id, now)]
+            winner = best_bid(live)
             if winner is None or winner.vehicle_id != self.vehicle_id:
                 continue
 
