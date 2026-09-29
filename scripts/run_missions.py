@@ -215,7 +215,14 @@ def run_one(agent, mission: dict[str, Any], model: str, attempt: int) -> dict[st
         # that emits unflyable plans has failed the mission, and dropping those
         # runs would quietly flatter the results.
         actions = [step["action"] for step in record.plan] if record.valid else []
-        correct, extra = score(actions, expectations[index]) if record.valid else (False, 0)
+        if record.valid and mission.get("scoreable", True):
+            correct, extra = score(actions, expectations[index])
+        else:
+            # An unscoreable mission has no expected sequence, so comparing
+            # against an empty list would report every step as "extra" -- M08
+            # showed 12 extra steps for three perfectly reasonable 4-step plans.
+            # A rejected plan is likewise not scored, only recorded.
+            correct, extra = False, 0
         per_drone.append({
             "drone": name,
             "instruction": instruction,
@@ -292,7 +299,8 @@ def summarise(rows: list[dict[str, Any]], config: dict[str, Any], model: str) ->
             correct_total += correct
         lines.append(
             f"| {mission_id} | {runs[0]['category']} | {valid}/{attempts} | "
-            f"{f'{correct}/{attempts}' if scoreable else '—'} | {extra} | "
+            f"{f'{correct}/{attempts}' if scoreable else '—'} | "
+            f"{extra if scoreable else '—'} | "
             f"{statistics.mean(times):.1f} |"
         )
 

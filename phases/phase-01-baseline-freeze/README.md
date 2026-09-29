@@ -372,6 +372,66 @@ The old values and the reason for the change are recorded in the config and in
   to compare against once traffic is running. If flight seconds move, suspect
   this first.
 
+### 2026-09-28 — Block A: the eight single-drone missions flown, 3 repeats each
+
+Town10HD, Epic, 1080p, traffic on — the protocol as revised earlier the same
+day. 24 runs. Raw data in
+[`results/baseline_v1-llama3.2_3b-20260928-212436.jsonl`](results/baseline_v1-llama3.2_3b-20260928-212436.jsonl),
+summary beside it.
+
+**21/21 scored runs correct. 24/24 executed to completion. Zero collisions.**
+
+| | M01 | M02 | M03 | M04 | M05 | M06 | M07 | M08 |
+|---|---|---|---|---|---|---|---|---|
+| Correct | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | — |
+| Flight s | 25.3 | 21.2 | 31.0 | 31.2 | 26.3 | 24.2 | 27.0 | 29.3 |
+| Plan s | 1.2 | 1.4 | 2.5 | 2.8 | 2.1 | 2.6 | 2.2 | 3.3 |
+
+#### The frame-rate question is answered, for one drone
+
+Changing the protocol to Epic with traffic accepted a risk: AirSim physics
+advances with the Unreal tick, so a heavier scene might stretch flights. It did
+not. Every mission repeated within ~0.1 s, and M02 measured 21.2/21.2/21.2 s
+with traffic against 21.2/21.0/21.2 s without it.
+
+That closes the question for single-drone flight. It says nothing yet about four
+drones, where the scene is heavier still.
+
+#### M08 produced a real ambiguity failure
+
+All three runs read *"go up a bit, look around for a moment, then come back down
+safely"* as climb to 10 m, hover, **climb to 20 m**, land. In NED −20 is higher
+than −10, so "come back down" became a climb; the landing rescued the mission.
+Consistency 2/3 — attempt 1 used `fly_to(0,0,-20)` where the others used
+`set_altitude(-20)`.
+
+M08 is the only mission touching H4's ambiguity clause, and it has produced a
+concrete, repeatable failure rather than a vague one. Worth keeping in mind when
+that hypothesis is tested properly in the perturbation sub-experiment.
+
+#### M05 and M07 both passed 3/3
+
+These are the two the prior project reported its model failing — 0/3 on
+repetition, 1/3 on instruction reordering. **This is not a replication**:
+different model, different prompt, different schema. What it does show is that a
+3B model with a constrained schema handles both reliably here, which is the
+finding that matters for running this study on available hardware.
+
+#### One anomaly worth watching
+
+M07 attempt 2 armed at `ground_z 9.14` where the other runs armed at 10.87 and
+10.95 — 1.8 m higher, no collision recorded, normal flight. The likely cause is
+the reset placing the drone on or beside a traffic vehicle, which is exactly the
+confound the original protocol avoided by turning traffic off. If it recurs, the
+fix is a spawn-clearance check before arming.
+
+#### A scoring artifact, fixed
+
+The first summary reported **12 extra steps** for M08 — an artifact of comparing
+four sensible actions against an empty `expected` list. Unscoreable missions now
+report `—` for both correctness and extra steps, and the Block A summary was
+regenerated from the same raw data rather than re-flown.
+
 ### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after

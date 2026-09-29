@@ -168,18 +168,47 @@ Fill in as runs complete. `✔` correct, `✘` incorrect, `—` not applicable.
 
 ### `llama3.2:3b`
 
+Single-drone missions flown 2026-09-28, Town10HD, Epic, traffic on. Raw data:
+`phases/phase-01-baseline-freeze/results/baseline_v1-llama3.2_3b-20260928-212436.jsonl`
+
 | Mission | Valid 3/3 | Correct | Consistent | Extra steps | Latency (s) | Executed | Notes |
 |---|---|---|---|---|---|---|---|
-| M01 | | /3 | | | | | |
-| M02 | | /3 | | | | | |
-| M03 | | /3 | | | | | |
-| M04 | | /3 | | | | | |
-| M05 | | /3 | | | | | |
-| M06 | | /3 | | | | | |
-| M07 | | /3 | | | | | |
-| M08 | | — | | — | | | ambiguous — record plan, not correctness |
-| M09 | | /3 | | | | | 2 drones |
-| M10 | | /3 | | | | | 4 drones |
+| M01 | ✔ 3/3 | 3/3 | ✔ | 0 | 1.2 (12.4 cold) | 3/3 | flight 25.3 s, σ ≈ 0.1 |
+| M02 | ✔ 3/3 | 3/3 | ✔ | 0 | 1.4 | 3/3 | flight 21.2 s ×3 |
+| M03 | ✔ 3/3 | 3/3 | ✔ | 0 | 2.5 | 3/3 | flight 31.0 s |
+| M04 | ✔ 3/3 | 3/3 | ✔ | 0 | 2.8 | 3/3 | `return home` → `fly_to(0,0)` every time |
+| M05 | ✔ 3/3 | 3/3 | ✔ | 0 | 2.1 | 3/3 | repetition handled; upstream reports 0/3 for `8b` |
+| M06 | ✔ 3/3 | 3/3 | ✔ | 0 | 2.6 | 3/3 | |
+| M07 | ✔ 3/3 | 3/3 | ✔ | 0 | 2.2 | 3/3 | reordering handled; one run armed 1.8 m high — see below |
+| M08 | ✔ 3/3 | — | **2/3** | — | 3.3 | 3/3 | ambiguous; "come back down" became a **climb** — see below |
+| M09 | | /3 | | | | | 2 drones — not yet flown |
+| M10 | | /3 | | | | | 4 drones — not yet flown |
+
+**21/21 scored runs correct · 24/24 executed to completion · 0 collisions.**
+
+#### Two results the table cannot carry
+
+**M08 got the direction of "down" wrong, consistently.** All three runs read
+*"go up a bit, look around for a moment, then come back down safely"* as
+`set_altitude(-10) → hover(1) → [climb to -20] → land`. In NED, −20 is *higher*
+than −10, so "come back down" produced a climb. The landing saved it. Two runs
+were identical; attempt 1 used `fly_to(0,0,-20)` instead of `set_altitude(-20)`,
+hence consistency 2/3.
+
+This is the only mission that speaks to H4's ambiguity clause, and it produced a
+concrete, repeatable ambiguity failure rather than a vague one.
+
+**Flight timing is stable, and traffic did not disturb it.** Every mission's
+flight time repeated within ~0.1 s. M02 measured 21.2/21.2/21.2 s with traffic
+against 21.2/21.0/21.2 s without it, which settles — for a single drone — the
+open question about whether a heavier scene stretches flights because AirSim
+physics advances with the Unreal tick.
+
+**One anomaly.** M07 attempt 2 armed at `ground_z 9.14` against 10.87 and 10.95
+elsewhere: 1.8 m higher, with no collision recorded and a normal flight. Most
+likely the reset placed the drone on or beside a traffic vehicle — the confound
+the original protocol avoided by disabling traffic. Worth watching; if it
+recurs, a spawn-clearance check before arming is the fix.
 
 ### `llama3.1:8b`
 
