@@ -83,6 +83,101 @@ def score(actions: list[str], expected: list[str]) -> tuple[bool, int]:
     return actions == expected, max(0, len(actions) - len(expected))
 
 
+def current_roster(agent) -> list[str]:
+    """The vehicles in settings.json right now.
+
+    Read rather than assumed: the file is what the *running* simulator loaded
+    at startup, and a mismatch is the difference between a flight and a pile of
+    "vehicle not found" errors.
+    """
+    import json as _json
+    path = os.path.join(agent.documents_dir(), "AirSim", "settings.json")
+    try:
+        with io.open(path, encoding="utf-8-sig") as handle:
+            return list(_json.load(handle).get("Vehicles", {}))
+    except (OSError, ValueError):
+        return []
+
+
+def describe(row: dict[str, Any], attempt: int, repeats: int) -> str:
+    """One line per run for the console, readable while a set is flying."""
+    mark = "ok  " if row["all_correct"] else ("--  " if not row["scoreable"] else "MISS")
+    actions = " ".join(row["per_drone"][0]["actions"]) or "(rejected)"
+    line = (f"{row['mission']} {attempt}/{repeats}  {mark}  "
+            f"plan {row['plan_seconds']:5.1f}s  {actions}")
+
+    execution = row.get("execution")
+    if not execution:
+        return line
+    if not execution.get("flown"):
+        return line + f"  | not flown: {execution.get('reason')}"
+
+    flight = max((o["flight_seconds"] for o in execution["outcomes"]), default=0)
+    line += f"  | flew {flight:.0f}s {'complete' if execution['completed'] else 'INCOMPLETE'}"
+    if execution["collision"]:
+        line += "  COLLISION"
+    separation = execution.get("separation") or {}
+    if separation.get("measured"):
+        line += f"  min sep {separation['min_separation_m']}m"
+    return line
+
+
+def fly_one(agent, client, mission: dict[str, Any], model: str, attempt: int) -> dict[str, Any]:
+    """Plan and FLY one mission, once. Same record as run_one plus `execution`.
+
+    The order is deliberate:
+
+    1. **Reset the world**, so every repeat starts from the same pose. Without
+       it each run begins where the last ended -- ground height drifted from
+       29.25 to 27.27 across runs in practice, which would make three
+       "repeats" three different experiments.
+    2. **Plan before anything arms**, so a rejected plan costs no flight time.
+    3. **Fly through the agent's own `fly_plans`**, not a copy, so a scored run
+       and a hand-flown run are the same procedure.
+    """
+    row = run_one(agent, mission, model, attempt)        # plan and score first
+
+    if not row["all_valid"]:
+        row["execution"] = {"flown": False, "reason": "plan rejected"}
+        return row
+
+    agent.reset_world(client)
+
+    records = [
+        agent.PlanRecord(
+            drone=drone["drone"],
+            instruction=drone["instruction"],
+            raw_output=drone["raw_output"],
+            plan=drone["plan_steps"],
+            plan_seconds=drone["plan_seconds"],
+            valid=True,
+            model=model,
+        )
+        for drone in row["per_drone"]
+    ]
+
+    outcomes, separation = agent.fly_plans(client, records)
+    agent.log_execution(outcomes, separation)
+
+    row["execution"] = {
+        "flown": True,
+        "completed": all(o["completed"] for o in outcomes),
+        # A collision only counts if it is new this flight AND not the ground:
+        # every landing registers terrain contact, so counting that would make
+        # the metric meaningless.
+        "collision": any(
+            o.get("collision", {}).get("has_collided")
+            and o["collision"].get("new_this_flight")
+            and not o["collision"].get("is_ground")
+            for o in outcomes
+        ),
+        "ground_contact": any(o.get("collision", {}).get("is_ground") for o in outcomes),
+        "separation": separation,
+        "outcomes": outcomes,
+    }
+    return row
+
+
 def run_one(agent, mission: dict[str, Any], model: str, attempt: int) -> dict[str, Any]:
     """Plan every drone's instruction for one mission, once.
 
@@ -133,6 +228,9 @@ def run_one(agent, mission: dict[str, Any], model: str, attempt: int) -> dict[st
             "plan_seconds": round(record.plan_seconds, 2),
             "normalised": record.normalised,
             "raw_output": record.raw_output,
+            # The validated steps with their parameters, not just action names:
+            # a flight needs the durations and coordinates too.
+            "plan_steps": record.plan if record.valid else None,
         })
 
     # M08 has no correct answer, so it runs and is logged but never scored.
@@ -219,6 +317,8 @@ def main() -> int:
     parser.add_argument("--missions", help="comma-separated ids, e.g. M05,M07")
     parser.add_argument("--plan-only", action="store_true",
                         help="plan and score without flying (no simulator needed)")
+    parser.add_argument("--pause", action="store_true",
+                        help="wait for a keypress between runs, to watch each one")
     args = parser.parse_args()
 
     # The summary contains em dashes and middots. Files are written UTF-8
@@ -247,37 +347,71 @@ def main() -> int:
     if not missions:
         sys.exit("no missions selected")
 
-    # Flight is refused rather than half-supported. See the module docstring:
-    # multi-drone missions rewrite settings.json and need a simulator restart,
-    # and a script that does that unprompted can invalidate the single-drone
-    # runs sitting in the same results directory.
-    if not args.plan_only:
-        sys.exit(
-            "Flight runs are not automated end to end.\n"
-            "Multi-drone missions rewrite settings.json and need a simulator restart,\n"
-            "which this script will not do behind your back. Use --plan-only here, and\n"
-            "fly missions with:  python baseline/open_loop_agent.py --drones N ...\n"
-        )
-
     # Imported here, not at module scope: the import pulls in the agent, which
     # pulls in ollama on first use. Keeping it late means --help and a bad
     # mission id fail instantly instead of after a model client loads.
     import open_loop_agent as agent
 
+    client = None
+    if not args.plan_only:
+        # The roster in settings.json must already match what these missions
+        # need. AirSim reads that file only at process start, so the runner
+        # cannot fix a mismatch -- it stops and says what to restart with,
+        # rather than flying at vehicles that do not exist.
+        needed = sorted({m.get("drones", 1) for m in missions})
+        if len(needed) > 1:
+            sys.exit(
+                f"missions need different drone counts {needed}; run them in\n"
+                f"separate passes, because changing the roster needs a simulator restart:\n"
+                + "".join(f"  --missions {','.join(m['id'] for m in missions if m.get('drones',1)==n)}\n"
+                          for n in needed)
+            )
+        count = needed[0]
+        roster = current_roster(agent)
+        if len(roster) != count:
+            sys.exit(
+                f"simulator has {len(roster)} drone(s) {roster}, these missions need {count}.\n"
+                f"Write the roster and restart the simulator, then re-run:\n"
+                f"  python baseline/open_loop_agent.py --drones {count} --plan-only "
+                f"--instruction \"noop\"   # writes settings.json\n"
+                f"  .\\CarlaAir.ps1 Town10HD                                  # restart\n"
+            )
+
+        import airsim
+        client = airsim.MultirotorClient(ip="127.0.0.1", port=41451)
+        client.confirmConnection()
+
+    mode = "planning only" if args.plan_only else f"FLYING, {count} drone(s)"
     print(f"set     : {config['set']['name']} v{config['set']['version']}")
     print(f"model   : {model}")
-    print(f"missions: {len(missions)} × {repeats} repeats")
+    print(f"missions: {len(missions)} × {repeats} repeats  ({mode})")
     print()
+
+    os.makedirs(args.out, exist_ok=True)
+    stamp_early = time.strftime("%Y%m%d-%H%M%S")
+    stem_early = f"{config['set']['name']}-{model.replace(':', '_')}-{stamp_early}"
+    live_path = os.path.join(args.out, stem_early + ".jsonl")
 
     rows = []
     for mission in missions:
         for attempt in range(1, repeats + 1):
-            row = run_one(agent, mission, model, attempt)
+            if args.plan_only:
+                row = run_one(agent, mission, model, attempt)
+            else:
+                row = fly_one(agent, client, mission, model, attempt)
             rows.append(row)
-            mark = "ok " if row["all_correct"] else ("—  " if not row["scoreable"] else "MISS")
-            actions = " ".join(row["per_drone"][0]["actions"]) or "(rejected)"
-            print(f"  {row['mission']} {attempt}/{repeats}  {mark}  "
-                  f"{row['plan_seconds']:5.1f}s  {actions}")
+
+            # Append as we go. A crash or a hung flight three hours into a set
+            # must not cost the runs that already succeeded.
+            with io.open(live_path, "a", encoding="utf-8", newline="\n") as handle:
+                handle.write(json.dumps(row) + "\n")
+
+            print("  " + describe(row, attempt, repeats))
+
+            # Step-by-step: stop after each run so the simulator can be watched
+            # and the result read before the next one starts.
+            if args.pause and not (mission is missions[-1] and attempt == repeats):
+                input("    [enter] next run  ")
 
     os.makedirs(args.out, exist_ok=True)
     # Timestamped filenames, never overwritten: a second run is a second series,

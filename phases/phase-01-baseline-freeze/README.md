@@ -297,6 +297,50 @@ landing.
 Timing-dependent state checks are worth distrusting generally here; this is the
 second time a plausible one has been wrong.
 
+### 2026-09-28 — mission-by-mission flight harness
+
+1.3 needs each mission flown, repeated, and recorded in a form that survives
+the session. The pieces that were missing:
+
+**Collision and proximity capture.** Section 1.3 requires "collision or
+proximity events" and nothing recorded them. Collisions now come from
+`simGetCollisionInfo`; proximity from a `SeparationMonitor` that samples
+inter-drone distance at 4 Hz during flight and keeps the closest approach and
+when it happened. Closest approach is invisible from start and end states, so
+it has to be watched while flying.
+
+Two corrections the first live capture forced:
+
+* **Every landing registers a terrain collision.** The first capture returned
+  `Town10HD_Terrain_Ground_64` at zero penetration depth — a drone sitting
+  correctly on the ground. Ground contact is now classified separately, or the
+  metric would read "collision" on every successful mission. Note this also
+  contradicts the manual's claim that the build has no terrain collision.
+* **AirSim keeps the last collision across flights.** The raw flag says nothing
+  about *this* run, so the timestamp at arm time is the baseline and
+  `new_this_flight` is derived from it.
+
+**Reset between runs.** Each flight previously began where the last one ended —
+M01 flies 25 m and lands there, so the next mission armed from different ground.
+Observed drifting 29.25 → 27.27. `reset_world()` now restores the start pose
+before every run. Verified over three repeats of M02: ground height 10.95,
+10.59, 10.97 (0.4 m of settling noise) and flight time 21.2, 21.0, 21.2 s.
+Without it, three "repeats" were three different experiments.
+
+**One flight path, not two.** `fly_plans()` is extracted into the agent and used
+by both the interactive script and the runner. Had they diverged, a scored run
+and a hand-flown run would not have been the same procedure.
+
+**`scripts/run_missions.py` now flies.** Per run it resets, plans, flies, scores
+and appends to JSONL immediately — a hang three hours into a set must not cost
+the runs already completed. `--pause` waits between runs for watching each one.
+It refuses to start when the roster in `settings.json` does not match what the
+missions need, and refuses a mixed set outright, because changing the roster
+requires a simulator restart it cannot perform.
+
+Verified end to end on M02: planned, reset, flown, scored, logged — plan
+`hover, land` executed, 21 s, no collision, no ground contact flagged.
+
 ### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after

@@ -37,6 +37,7 @@ import argparse
 import ctypes
 import ctypes.wintypes
 import json
+import math
 import os
 import sys
 import threading
@@ -187,7 +188,94 @@ class PlanRecord:
         }
 
 
-def log_execution(outcomes: list[dict[str, Any]]) -> None:
+# Object names AirSim reports for ground contact. Touching these on landing is
+# the mission working, not a fault, so they are classified separately.
+GROUND_OBJECTS = ("terrain", "ground", "landscape", "road", "sidewalk")
+
+
+def is_ground(object_name: str) -> bool:
+    """True if a collision object is the ground rather than an obstacle."""
+    lowered = (object_name or "").lower()
+    return any(marker in lowered for marker in GROUND_OBJECTS)
+
+
+class SeparationMonitor:
+    """Samples inter-drone distance while a multi-drone mission flies.
+
+    Section 1.3 asks for "collision or proximity events". Collisions are read
+    from AirSim afterwards; proximity has to be watched *during* the flight,
+    because the closest approach is not visible from the start and end states.
+
+    Runs in its own thread at a fixed interval and keeps only the minimum
+    separation seen and when it happened -- enough to answer "did they come
+    dangerously close", without writing a position trace per sample.
+
+    There is no collision avoidance anywhere in this stack. Vertical staggering
+    and spawn spacing are the only separation M09 and M10 have, so this is the
+    measurement that says whether that was enough.
+    """
+
+    def __init__(self, client, names: list[str], interval: float = 0.25) -> None:
+        self.client = client
+        self.names = names
+        self.interval = interval
+        self.min_distance: float | None = None
+        self.min_at: float | None = None
+        self.samples = 0
+        self.errors = 0
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._started = 0.0
+
+    def _positions(self) -> dict[str, tuple[float, float, float]]:
+        found = {}
+        for name in self.names:
+            state = self.client.getMultirotorState(vehicle_name=name)
+            p = state.kinematics_estimated.position
+            found[name] = (p.x_val, p.y_val, p.z_val)
+        return found
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            try:
+                positions = self._positions()
+                self.samples += 1
+                names = list(positions)
+                for i in range(len(names)):
+                    for j in range(i + 1, len(names)):
+                        a, b = positions[names[i]], positions[names[j]]
+                        distance = math.dist(a, b)
+                        if self.min_distance is None or distance < self.min_distance:
+                            self.min_distance = distance
+                            self.min_at = round(time.time() - self._started, 1)
+            except Exception:
+                # A sampling failure must never disturb a flight; count it so a
+                # monitor that silently failed cannot look like a clean run.
+                self.errors += 1
+            self._stop.wait(self.interval)
+
+    def start(self) -> None:
+        if len(self.names) < 2:
+            return                       # nothing to measure with one drone
+        self._started = time.time()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> dict[str, Any]:
+        self._stop.set()
+        if self._thread:
+            self._thread.join(timeout=5.0)
+        return {
+            "measured": self._thread is not None,
+            "samples": self.samples,
+            "sample_errors": self.errors,
+            "min_separation_m": None if self.min_distance is None else round(self.min_distance, 2),
+            "min_separation_at_s": self.min_at,
+            "interval_s": self.interval,
+        }
+
+
+def log_execution(outcomes: list[dict[str, Any]], separation: dict[str, Any] | None = None) -> None:
     """Append one execution record for a flown mission.
 
     Written to the same JSONL as the planning records, tagged `"kind":
@@ -204,6 +292,10 @@ def log_execution(outcomes: list[dict[str, Any]]) -> None:
         "kind": "execution",
         "drones": len(outcomes),
         "completed": all(o["completed"] for o in outcomes),
+        "any_collision": any(
+            o.get("collision", {}).get("has_collided") for o in outcomes
+        ),
+        "separation": separation,
         "outcomes": outcomes,
     }
     try:
@@ -467,11 +559,62 @@ class DroneRunner:
         self.client = client
         self.name = name          # must match a vehicle in settings.json
         self.ground_z = 0.0       # filled in by arm(), used by land()
+        # AirSim keeps the last collision across flights, so the timestamp seen
+        # at arm time is the baseline for "did anything hit during THIS run".
+        self._collision_at_arm: Any = None
 
     def _say(self, message: str) -> None:
         # flush=True because several threads print concurrently; without it the
         # interleaving is buffered into nonsense.
         print(f"[{self.name}] {message}", flush=True)
+
+    def collisions(self) -> dict[str, Any]:
+        """Collision state for this vehicle, as AirSim reports it.
+
+        Required by the plan: section 1.3 asks for "collision or proximity
+        events" per run, and nothing recorded them until now.
+
+        AirSim keeps only the MOST RECENT collision, not a tally, and it
+        persists across flights -- so the raw flag alone says nothing about
+        *this* run. `time_stamp` is compared against the value read at arm time
+        to decide whether the collision is new.
+
+        Ground contact is separated from obstacle contact, because **every
+        landing registers a terrain collision**: the first live capture returned
+        `Town10HD_Terrain_Ground_64` with zero penetration depth, which is a
+        drone sitting on the ground having landed correctly. Counting that as a
+        collision would make the metric meaningless.
+        """
+        try:
+            info = self.client.simGetCollisionInfo(vehicle_name=self.name)
+        except Exception as exc:
+            return {"available": False, "error": f"{type(exc).__name__}: {exc}"}
+
+        collided = bool(getattr(info, "has_collided", False))
+        stamp = getattr(info, "time_stamp", None)
+        name = getattr(info, "object_name", "") if collided else ""
+
+        record: dict[str, Any] = {
+            "available": True,
+            "has_collided": collided,
+            # Did this happen during this flight, or is it left over from the
+            # previous one? AirSim does not clear it between runs.
+            "new_this_flight": bool(collided and stamp != self._collision_at_arm),
+            "object": name,
+            "is_ground": is_ground(name),
+        }
+        if collided:
+            position = getattr(info, "impact_point", None)
+            record.update({
+                "penetration_depth": round(float(getattr(info, "penetration_depth", 0.0)), 3),
+                "time_stamp": stamp,
+                "impact_point": None if position is None else {
+                    "x": round(position.x_val, 2),
+                    "y": round(position.y_val, 2),
+                    "z": round(position.z_val, 2),
+                },
+            })
+        return record
 
     def arm(self) -> None:
         """Take control of the vehicle and record where the ground is."""
@@ -487,6 +630,12 @@ class DroneRunner:
         # This is also the only simulator state the agent reads, and it never
         # reaches the model. The agent is blind by design.
         self.ground_z = state.kinematics_estimated.position.z_val
+        try:
+            self._collision_at_arm = self.client.simGetCollisionInfo(
+                vehicle_name=self.name
+            ).time_stamp
+        except Exception:
+            self._collision_at_arm = None
         self._say(f"armed, ground z = {self.ground_z:.2f}")
 
     def take_off(self) -> None:
@@ -611,6 +760,8 @@ class DroneRunner:
             "failure": failure,
             "flight_seconds": round(time.time() - started, 1),
             "ground_z": round(self.ground_z, 2),
+            # Read after teardown so a collision during the landing is caught.
+            "collision": self.collisions(),
         }
 
     def _is_airborne(self) -> bool:
@@ -673,6 +824,63 @@ class DroneRunner:
             self._say("control released")
         except Exception:
             pass
+
+
+# ---------------------------------------------------------------- flying them
+
+def reset_world(client, settle: float = 2.0) -> None:
+    """Return every vehicle to its start pose.
+
+    Without this, each run begins wherever the previous one ended -- M01 flies
+    25 m forward and lands there, so the next mission arms from a different
+    place, at a different ground height, over different terrain. Observed in
+    practice: `ground z` moved from 29.25 to 27.27 between runs.
+
+    For a one-off flight that hardly matters. For 1.3, where three repeats of a
+    mission are meant to be the same mission, it is the difference between
+    repeats and a drift.
+    """
+    client.reset()
+    time.sleep(settle)                 # physics needs a moment to settle
+    client.confirmConnection()
+
+
+def fly_plans(client, records: list[PlanRecord]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Fly one validated plan per drone, concurrently. Returns (outcomes, separation).
+
+    Shared by the interactive agent and the mission runner ON PURPOSE. If the
+    two flew missions differently -- a different thread model, a different
+    monitor, a different teardown -- then scored runs and hand-flown runs would
+    not be the same experiment, and nobody would notice until the numbers
+    disagreed.
+    """
+    outcomes: list[dict[str, Any]] = []
+    lock = threading.Lock()
+
+    def run(record: PlanRecord) -> None:
+        outcome = DroneRunner(client, record.drone).fly(record.plan)
+        with lock:                     # list.append is atomic, but be explicit
+            outcomes.append(outcome)
+
+    # Proximity is only meaningful between drones, so the monitor no-ops for a
+    # single-drone mission. Started before the threads so the climb is covered.
+    monitor = SeparationMonitor(client, [r.drone for r in records])
+    monitor.start()
+
+    threads = [threading.Thread(target=run, args=(r,)) for r in records]
+    for thread in threads:
+        thread.start()
+    # Join every thread before returning: exiting with drones still flying
+    # leaves them armed and under API control.
+    for thread in threads:
+        thread.join()
+
+    separation = monitor.stop()
+    if separation["measured"]:
+        print(f"\nclosest approach: {separation['min_separation_m']} m "
+              f"at t+{separation['min_separation_at_s']}s "
+              f"({separation['samples']} samples)")
+    return outcomes, separation
 
 
 # ---------------------------------------------------------------------- main
@@ -778,32 +986,10 @@ def main() -> int:
     if not args.yes:
         input("\nPress Enter once the map has loaded to launch all drones.  ")
 
-    # One thread per drone, all sharing the one client. Threads rather than
-    # AirSim's own async futures because each drone runs a SEQUENCE: within a
-    # plan the steps are ordered, and only the drones are concurrent.
-    #
-    # Note every runner gets the same `client` -- see the thread-safety caveat
-    # on DroneRunner. Changing to one client per thread is a two-line edit here
-    # if multi-drone runs prove unreliable.
-    outcomes: list[dict[str, Any]] = []
-    lock = threading.Lock()
-
-    def run(record: PlanRecord) -> None:
-        outcome = DroneRunner(client, record.drone).fly(record.plan)
-        with lock:                     # list.append is atomic, but be explicit
-            outcomes.append(outcome)
-
-    threads = [threading.Thread(target=run, args=(r,)) for r in records]
-    for thread in threads:
-        thread.start()
-    # Join every thread before returning: exiting with drones still flying
-    # leaves them armed and under API control.
-    for thread in threads:
-        thread.join()
-
-    # Execution record, one line per run, beside the planning records. Written
-    # here rather than in the thread so a multi-drone mission is one entry.
-    log_execution(outcomes)
+    # fly_plans owns the thread model, the separation monitor and teardown, and
+    # is shared with scripts/run_missions.py so both fly the same way.
+    outcomes, separation = fly_plans(client, records)
+    log_execution(outcomes, separation)
 
     print("\nAll drones finished.")
     return 0
