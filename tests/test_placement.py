@@ -72,21 +72,25 @@ class FakeSim:
     fake that deadlocks would condemn correct code.
 
     Modelled instead as a stack: among drones within PIN_RADIUS of each other,
-    only the one nearest the top is free, and declaration order is the stacking
-    order. So a drone is pinned exactly when some drone declared before it is
-    sitting on it. That reproduces the measurement -- Drone1 free, Drone2
-    pinned -- and it unblocks progressively as drones leave, which is why the
-    two-pass scatter terminates.
+    only the one nearest the top is free. A drone is pinned exactly when some
+    drone above it in `stack` is sitting on it, which unblocks progressively as
+    drones leave.
+
+    `stack` is a parameter because WHICH drone is on top is not predictable in
+    the real simulator: with both drones declared in settings.json, Drone1 was
+    free and Drone2 pinned; with Drone2 added at runtime it went on top
+    instead. Tests therefore run both orders, because code that only handles
+    one of them passes half the time and strands drones the other half.
 
     Refused requests return None and change nothing, exactly like the real API.
     """
 
     PIN_RADIUS = 1.0
 
-    def __init__(self, names, ground_z=29.25):
+    def __init__(self, names, ground_z=29.25, stack=None):
         # Everything spawns at the player start, a few centimetres apart --
         # the measured reality, not the declared layout.
-        self.order = list(names)
+        self.order = list(stack) if stack else list(names)
         self.poses = {
             name: [0.0 + 0.02 * index, 0.0 - 0.02 * index, ground_z]
             for index, name in enumerate(names)
@@ -129,31 +133,49 @@ class PlacementTests(unittest.TestCase):
     wall-clock wait, and 0.6 s per request made the suite take 47 seconds."""
 
     def setUp(self):
-        self._settle = agent.PLACEMENT_SETTLE
-        agent.PLACEMENT_SETTLE = 0.0
+        # These delays exist for a real simulator's tick and its habit of
+        # ignoring a freshly teleported vehicle. The fake needs no wall clock,
+        # and at real values the suite took 47 seconds.
+        self._saved = {k: getattr(agent, k) for k in
+                       ("PLACEMENT_SETTLE", "PLACEMENT_PHASE_GAP",
+                        "PLACEMENT_MAX_BACKOFF")}
+        for k in self._saved:
+            setattr(agent, k, 0.0)
 
     def tearDown(self):
-        agent.PLACEMENT_SETTLE = self._settle
+        for k, v in self._saved.items():
+            setattr(agent, k, v)
+
+    def _both_stack_orders(self, names):
+        """The same fleet with either end of the pile on top."""
+        return [FakeSim(names, stack=names),
+                FakeSim(names, stack=list(reversed(names)))]
 
     def test_two_drones_end_up_separated(self):
-        sim = FakeSim(["Drone1", "Drone2"])
-        agent.ensure_vehicles(sim, ["Drone1", "Drone2"])
-        self.assertAlmostEqual(sim.poses["Drone1"][0], 0.0, places=2)
-        self.assertAlmostEqual(sim.poses["Drone2"][0], agent.SPACING, places=2)
+        names = ["Drone1", "Drone2"]
+        for sim in self._both_stack_orders(names):
+            with self.subTest(top=sim.order[0]):
+                agent.ensure_vehicles(sim, names)
+                for index, name in enumerate(names):
+                    self.assertAlmostEqual(sim.poses[name][0],
+                                           index * agent.SPACING, places=2)
 
     def test_four_drones_end_up_separated(self):
         names = [f"Drone{i}" for i in range(1, 5)]
-        sim = FakeSim(names)
-        agent.ensure_vehicles(sim, names)
-        for index, name in enumerate(names):
-            self.assertAlmostEqual(sim.poses[name][0], index * agent.SPACING, places=2)
+        for sim in self._both_stack_orders(names):
+            with self.subTest(top=sim.order[0]):
+                agent.ensure_vehicles(sim, names)
+                for index, name in enumerate(names):
+                    self.assertAlmostEqual(sim.poses[name][0],
+                                           index * agent.SPACING, places=2)
 
     def test_closest_pair_clears_the_floor(self):
         names = ["Drone1", "Drone2", "Drone3"]
-        sim = FakeSim(names)
-        agent.ensure_vehicles(sim, names)
-        closest = agent.min_pairwise_separation(sim, names)
-        self.assertGreaterEqual(closest, agent.MIN_SPAWN_SEPARATION)
+        for sim in self._both_stack_orders(names):
+            with self.subTest(top=sim.order[0]):
+                agent.ensure_vehicles(sim, names)
+                self.assertGreaterEqual(agent.min_pairwise_separation(sim, names),
+                                        agent.MIN_SPAWN_SEPARATION)
 
     def test_altitude_is_preserved_not_reset(self):
         """Placement must slide drones along the ground, not lift and drop them.

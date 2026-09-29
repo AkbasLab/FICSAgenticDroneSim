@@ -540,7 +540,7 @@ partly this grinding and partly the protocol's own cost: 3862 MiB of 4096 and
 added only ~60 MiB and the scene at Epic with traffic is the real expense.
 
 **2. A drone pinned inside another cannot be moved at all.** This is the part
-that made the first fix wrong. Tested as a matrix immediately after
+that made the first two fixes wrong. Tested as a matrix immediately after
 `client.reset()`:
 
 | Condition | Result |
@@ -555,10 +555,31 @@ Only breaking the pile works. The call returns `None` either way, so nothing
 reports failure. `ensure_vehicles` issued all its pose requests back to back
 and slept once at the end, and since the first drone's target *is* the pile
 position, that request was a no-op, the pile was never broken, and every
-subsequent drone stayed trapped. Placement is now two passes — scatter the
-drones to negative staging slots, repeating until each has moved, then position
-them from empty ground — and verified per drone with retries. Three
-consecutive trials from a stacked reset: **4.00 m every time**, in 6.5 s.
+subsequent drone stayed trapped.
+
+Two further facts had to be measured before this worked, each one killing a fix
+that looked obviously correct:
+
+**Which drone is on top is not predictable.** With both drones declared in
+`settings.json`, Drone1 was free and Drone2 pinned. With Drone2 added at
+runtime — which is the path the missions actually use — it went on top instead.
+So "handle them in reverse order" is wrong too. The code asks rather than
+assumes.
+
+**A drone that was just teleported ignores further pose requests for a while,
+and each new request appears to restart that window.** Six requests at 0.6 s
+all failed; the same request issued once, thirty seconds later, succeeded
+immediately. So retries must back off rather than hammer, and there has to be a
+deliberate pause between breaking the pile and placing the drones — without it,
+the second phase asks a drone to move that the first phase has only just
+teleported, and is ignored. This is what made the first rewrite fail on the
+runtime-spawn path while passing three times with declared drones.
+
+Placement is therefore: break the pile by moving whichever drone *can* move to
+a temporary slot, repeating until the pile is gone; pause; then move everyone
+from open ground to their real slots, verified in the world frame with backoff.
+Three consecutive trials from a stacked reset on the runtime-spawn path:
+**4.00 m every time**, in 6.2 s.
 
 **3. Our own safety check was reading a frame that lies.** The guard meant to
 refuse stacked drones read `kinematics_estimated.position`, which is expressed
@@ -569,12 +590,13 @@ earlier multi-drone entry: placement had silently failed then too, and the
 check could not see it. Verification now reads `simGetVehiclePose`, and the
 gate is on the closest pair rather than on per-drone x.
 
-Two smaller things fell out of it. Placement hard-coded `z = -1.0`, but the
-ground at this player start is at **z = +29.25** — twenty-nine metres below the
-world origin — so every placement lifted each drone 29 m and dropped it. It now
-preserves the drone's current z and slides it sideways. And the separation gate
-was sampling mid-fall, reading 10.18 m for drones 4 m apart, so measurement now
-waits for motion to stop.
+Two smaller things fell out of it. Placement hard-coded `z = -1.0` while the
+ground is neither flat nor near the origin: at `x = 0` it sits at **z = +29.25**
+and at the temporary slots `x = -4` and `x = -8` at **z = +10.4**, nineteen
+metres higher. So every placement lifted each drone tens of metres above
+whatever it was standing on and dropped it. It now preserves the drone's
+current z. And the separation gate was sampling mid-fall, reading 10.18 m for
+drones 4 m apart, so measurement now waits for motion to stop.
 
 ### Pending — 1.3
 

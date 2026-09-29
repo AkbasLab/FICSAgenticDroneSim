@@ -359,6 +359,9 @@ PLACEMENT_TRIES = 6
 PLACEMENT_SETTLE = 0.6
 PLACEMENT_TOLERANCE = 1.0        # metres of slack on the requested x
 MIN_SPAWN_SEPARATION = 2.0       # metres; below this the drones are touching
+PLACEMENT_MAX_BACKOFF = 5.0      # seconds; cap on the retry backoff
+PLACEMENT_PHASE_GAP = 2.5        # seconds between breaking the pile and
+                                 # placing, so requests are not ignored
 
 
 def _wait_until_still(client, names: list[str], timeout: float = 6.0) -> bool:
@@ -1052,7 +1055,7 @@ def ensure_vehicles(client, names: list[str]) -> dict[str, Any]:
     # So place them explicitly afterwards. Every drone is positioned, not only
     # the new ones, because a drone that exists may have been left wherever a
     # previous flight ended.
-    # PLACEMENT IS A TWO-PASS OPERATION, AND IT HAS TO BE.
+    # PLACEMENT, AND WHY IT IS THIS COMPLICATED.
     #
     # Every drone in this build spawns at the player start regardless of what
     # settings.json or simAddVehicle asks for, so they arrive stacked inside one
@@ -1061,39 +1064,50 @@ def ensure_vehicles(client, names: list[str]) -> dict[str, Any]:
     # and the physics engine grinds them apart a few centimetres per tick, which
     # on screen looks exactly like a drone vibrating in mid air.
     #
-    # The trap is that a drone buried inside another CANNOT BE MOVED. Measured
-    # 2026-09-28 on a clean session, as a matrix of five conditions, each tried
-    # immediately after client.reset():
+    # Three measured facts shape this code, all from 2026-09-28. Each one killed
+    # a simpler design that looked obviously correct.
     #
-    #     plain simSetVehiclePose(Drone2 -> x=4)          ignored
-    #     after enableApiControl on Drone2                 ignored
-    #     after enableApiControl on both                   ignored
-    #     after waiting nine seconds                       ignored
-    #     after moving Drone1 out of the pile first        MOVED
+    # 1. A drone pinned inside another cannot be repositioned at all. Tried
+    #    plain, with API control on one drone, on both, and after a nine-second
+    #    wait -- every one ignored. Only moving the drone on top out of the pile
+    #    first worked. simSetVehiclePose returns None either way, so nothing
+    #    reports the failure. This kills "ask every drone for its slot once":
+    #    the first drone's slot IS the pile, so that request is a no-op, the
+    #    pile never breaks, and every other drone stays trapped. That is the
+    #    real cause of the 0.08 m near-miss recorded earlier.
     #
-    # Only breaking the pile works. Retrying does not, waiting does not, and the
-    # call returns None either way, so a naive loop reports success having moved
-    # nothing. The drone on top can always move; the one underneath is pinned.
+    # 2. Which drone is on top is NOT predictable. With two drones declared in
+    #    settings.json, Drone1 was free and Drone2 was pinned. With Drone2 added
+    #    at runtime it went on top instead. So the order cannot be assumed, and
+    #    "handle them in reverse" is wrong too. The code asks, and finds out.
     #
-    # Hence: scatter first, position second. Pass one walks the drones out to
-    # negative staging slots, repeating until every drone has moved -- at least
-    # one is always free, so each round frees the next. Pass two moves them from
-    # staging to their real slots, which are now empty ground.
+    # 3. A drone that was just teleported ignores further pose requests for a
+    #    while, and each fresh request appears to restart that window. Six
+    #    requests at 0.6 s intervals all failed, while the same request issued
+    #    once, thirty seconds later, succeeded immediately. This is why retries
+    #    back off instead of hammering, and why there is a deliberate pause
+    #    between the two phases below -- without it, phase two asks a drone to
+    #    move that phase one has only just teleported, and is ignored.
     #
-    # Staging is negative and the targets are non-negative, so a drone leaving
-    # staging never lands on a drone still waiting in it.
+    # Hence two phases. Phase one breaks the pile by moving whichever drone
+    # CAN move to a temporary slot, repeating until the pile is gone -- at least
+    # one drone is always free, so each round frees the next. Phase two then
+    # moves everyone from open ground to their real slots. Temporary slots are
+    # negative and real slots are not, so a drone going home never lands on one
+    # still waiting.
     def _request(name: str, x: float) -> float:
         """Ask for a pose, wait for the tick, return the world x actually seen.
 
-        Only x is commanded. The drone's CURRENT z is preserved deliberately: at
-        this player start the ground sits at z = +29.25, twenty-nine metres below
-        the world origin, so a hard-coded z of -1.0 lifted each drone 29 m into
-        the air and dropped it. They survived the fall and settled, but a 29 m
-        drop before every flight is gratuitous, and while they were falling the
-        separation gate read a transient 10.18 m for drones 4 m apart.
+        Only x is commanded; the drone's CURRENT z is preserved. A hard-coded z
+        is wrong because the ground is not flat: measured in one session, the
+        ground at x = 0 sits at z = +29.25 while the temporary slots at x = -4
+        and x = -8 sit at z = +10.4, nineteen metres higher. An earlier version
+        used z = -1.0 and so lifted every drone tens of metres above whatever it
+        was standing on and dropped it, before every flight.
 
-        Keeping z means the drone slides sideways along the ground it is already
-        resting on, which is all placement ever needed to do.
+        Keeping z slides the drone along the ground it already rests on, and
+        lets it settle the short distance to the new ground height -- which is
+        all placement ever needed to do.
         """
         current = client.simGetVehiclePose(name).position
         client.simSetVehiclePose(
@@ -1104,43 +1118,53 @@ def ensure_vehicles(client, names: list[str]) -> dict[str, Any]:
         time.sleep(PLACEMENT_SETTLE)
         return client.simGetVehiclePose(name).position.x_val
 
-    def _move(name: str, x: float) -> bool:
-        """Move one drone, verified in the world frame. Retries are cheap."""
-        for _ in range(PLACEMENT_TRIES):
+    def _move(name: str, x: float, passes: int = PLACEMENT_TRIES) -> bool:
+        """Move one drone to x, verified in the world frame, backing off."""
+        delay = PLACEMENT_SETTLE
+        for _ in range(passes):
             if abs(_request(name, x) - x) <= PLACEMENT_TOLERANCE:
                 return True
+            time.sleep(delay)                    # fact 3: give it room
+            delay = min(delay * 1.8, PLACEMENT_MAX_BACKOFF)
         return False
 
     if len(names) > 1:
-        # Pass one: out of the pile, one slot each.
+        # Phase one: empty the pile. Whoever can move, moves; repeat.
         waiting = list(names)
-        staging = {}
+        parked = 0
         while waiting:
             freed = []
             for name in waiting:
-                slot = -SPACING * (len(staging) + 1)
-                if _move(name, slot):
-                    staging[name] = slot
+                if _move(name, -SPACING * (parked + 1), passes=2):
+                    parked += 1
                     freed.append(name)
             if not freed:
+                positions = {n: round(client.simGetVehiclePose(n).position.x_val, 2)
+                             for n in waiting}
                 raise RuntimeError(
-                    f"could not move any of {waiting} out of the spawn pile; "
-                    f"every drone is pinned inside another and none will "
-                    f"reposition. Restart the simulator."
+                    f"could not move any of {positions} out of the spawn pile; "
+                    f"every drone appears pinned inside another. Restart the "
+                    f"simulator and try again."
                 )
             waiting = [n for n in waiting if n not in freed]
 
-    # Pass two: staging (or the spawn point, for a single drone) to real slots.
-    placed = []
+        # Fact 3: everything in the pile was just teleported. Let the simulator
+        # stop ignoring them before asking again, or phase two fails on drones
+        # that are perfectly free.
+        time.sleep(PLACEMENT_PHASE_GAP)
+
+    # Phase two: open ground to real slots.
     for index, name in enumerate(names):
         target_x = index * SPACING
         if not _move(name, target_x):
+            actual = client.simGetVehiclePose(name).position.x_val
             raise RuntimeError(
-                f"{name} would not move to x={target_x} after "
-                f"{PLACEMENT_TRIES} attempts; refusing to fly drones that may "
-                f"be stacked"
+                f"{name} would not move to x={target_x} (still at "
+                f"x={actual:.2f}); refusing to fly drones that may be stacked. "
+                f"Restart the simulator and try again."
             )
-        placed.append(name)
+
+    placed = list(names)
 
     # Wait for motion to stop before measuring anything. Gating on a separation
     # sampled while drones are still moving measures a transient, not the
