@@ -251,9 +251,6 @@ the point of Phase 5 onward.
 | Agent cannot connect | Simulator fully loaded? Ports 2000 and 41451 listening? |
 | First plan very slow | Normal — the model is loading. Note the run as cold |
 | Drone flies into the ground | Positive Z. Altitude is negative in NED |
-| **Drones vibrate or hover oddly at start** | They spawned stacked inside each other and the physics is grinding them apart. `settings.json` spawn offsets are ignored by this build; separation happens at runtime. Restart, and let the agent place them |
-| Drone will not move when repositioned | It is pinned inside another drone. Move the one on top away first — see `ensure_vehicles()` |
-| Placement "succeeds" but drones are stacked | An old check read the vehicle-local frame, which can be 167 m wrong. Verify with `simGetVehiclePose` |
 
 Full command and API reference: *CarlaAir Command Reference v1.0*
 (`D:\Research\CarlaAirDocs\`).

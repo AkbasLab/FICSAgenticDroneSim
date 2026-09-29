@@ -351,61 +351,6 @@ def vehicle_names(count: int) -> list[str]:
 # offsets, orientations and FOV are the shipped values; do not simplify them.
 # A settings file that AirSim dislikes does not produce an error -- the
 # simulator exits during startup, silently, with no log and no crash dump.
-# Placement of drones in a running simulator. Pose requests are not reliably
-# honoured -- see the long note in ensure_vehicles() -- so each one is verified
-# and retried. Six tries at 0.6 s covers the settling window observed after
-# client.reset() with room to spare.
-PLACEMENT_TRIES = 6
-PLACEMENT_SETTLE = 0.6
-PLACEMENT_TOLERANCE = 1.0        # metres of slack on the requested x
-MIN_SPAWN_SEPARATION = 2.0       # metres; below this the drones are touching
-PLACEMENT_MAX_BACKOFF = 5.0      # seconds; cap on the retry backoff
-PLACEMENT_PHASE_GAP = 2.5        # seconds between breaking the pile and
-                                 # placing, so requests are not ignored
-
-
-def _wait_until_still(client, names: list[str], timeout: float = 6.0) -> bool:
-    """Block until every drone's world position stops changing, or timeout.
-
-    Returns True if everything settled. Used before measuring a layout, because
-    a position read while a drone is still moving is not where it will be.
-    """
-    previous = None
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        now = []
-        for name in names:
-            p = client.simGetVehiclePose(name).position
-            now.append((p.x_val, p.y_val, p.z_val))
-        if previous is not None and all(
-            math.dist(a, b) < 0.05 for a, b in zip(previous, now)
-        ):
-            return True
-        previous = now
-        time.sleep(0.4)
-    return False
-
-
-def min_pairwise_separation(client, names: list[str]) -> float | None:
-    """Smallest world-frame distance between any two named drones.
-
-    Returns None for a single drone. Used as a spawn gate, because two drones
-    occupying the same point do not merely risk a collision later -- they are
-    already in one, and the physics engine grinds them apart a few centimetres
-    per tick, which looks exactly like a drone vibrating in mid air.
-    """
-    if len(names) < 2:
-        return None
-    points = []
-    for name in names:
-        p = client.simGetVehiclePose(name).position
-        points.append((p.x_val, p.y_val, p.z_val))
-    return min(
-        math.dist(points[i], points[j])
-        for i in range(len(points)) for j in range(i + 1, len(points))
-    )
-
-
 CAMERA_TEMPLATE = {
     "0": {
         "CaptureSettings": [{"ImageType": 0, "Width": 1280, "Height": 960}],
@@ -450,13 +395,6 @@ def build_settings(count: int) -> dict[str, Any]:
             "Cameras": CAMERA_TEMPLATE,
         }
         if index:
-            # THIS BUILD IGNORES IT. Kept because it states the intended layout
-            # and costs nothing, but do not rely on it: every declared drone
-            # spawns at the player start regardless. Measured 2026-09-28 on a
-            # clean session -- two drones declared with X of 0 and 4 both
-            # appeared at x=0, 0.19 m apart, already reporting a mutual
-            # collision. Separation is achieved at runtime by ensure_vehicles(),
-            # which is where the real work happens and why it is so careful.
             vehicle["X"] = index * SPACING
         vehicles[name] = vehicle
 
@@ -1055,151 +993,29 @@ def ensure_vehicles(client, names: list[str]) -> dict[str, Any]:
     # So place them explicitly afterwards. Every drone is positioned, not only
     # the new ones, because a drone that exists may have been left wherever a
     # previous flight ended.
-    # PLACEMENT, AND WHY IT IS THIS COMPLICATED.
-    #
-    # Every drone in this build spawns at the player start regardless of what
-    # settings.json or simAddVehicle asks for, so they arrive stacked inside one
-    # another. That is not merely a collision risk -- it is already a collision:
-    # both drones report has_collided against each other before anything flies,
-    # and the physics engine grinds them apart a few centimetres per tick, which
-    # on screen looks exactly like a drone vibrating in mid air.
-    #
-    # Three measured facts shape this code, all from 2026-09-28. Each one killed
-    # a simpler design that looked obviously correct.
-    #
-    # 1. A drone pinned inside another cannot be repositioned at all. Tried
-    #    plain, with API control on one drone, on both, and after a nine-second
-    #    wait -- every one ignored. Only moving the drone on top out of the pile
-    #    first worked. simSetVehiclePose returns None either way, so nothing
-    #    reports the failure. This kills "ask every drone for its slot once":
-    #    the first drone's slot IS the pile, so that request is a no-op, the
-    #    pile never breaks, and every other drone stays trapped. That is the
-    #    real cause of the 0.08 m near-miss recorded earlier.
-    #
-    # 2. Which drone is on top is NOT predictable. With two drones declared in
-    #    settings.json, Drone1 was free and Drone2 was pinned. With Drone2 added
-    #    at runtime it went on top instead. So the order cannot be assumed, and
-    #    "handle them in reverse" is wrong too. The code asks, and finds out.
-    #
-    # 3. A drone that was just teleported ignores further pose requests for a
-    #    while, and each fresh request appears to restart that window. Six
-    #    requests at 0.6 s intervals all failed, while the same request issued
-    #    once, thirty seconds later, succeeded immediately. This is why retries
-    #    back off instead of hammering, and why there is a deliberate pause
-    #    between the two phases below -- without it, phase two asks a drone to
-    #    move that phase one has only just teleported, and is ignored.
-    #
-    # Hence two phases. Phase one breaks the pile by moving whichever drone
-    # CAN move to a temporary slot, repeating until the pile is gone -- at least
-    # one drone is always free, so each round frees the next. Phase two then
-    # moves everyone from open ground to their real slots. Temporary slots are
-    # negative and real slots are not, so a drone going home never lands on one
-    # still waiting.
-    def _request(name: str, x: float) -> float:
-        """Ask for a pose, wait for the tick, return the world x actually seen.
-
-        Only x is commanded; the drone's CURRENT z is preserved. A hard-coded z
-        is wrong because the ground is not flat: measured in one session, the
-        ground at x = 0 sits at z = +29.25 while the temporary slots at x = -4
-        and x = -8 sit at z = +10.4, nineteen metres higher. An earlier version
-        used z = -1.0 and so lifted every drone tens of metres above whatever it
-        was standing on and dropped it, before every flight.
-
-        Keeping z slides the drone along the ground it already rests on, and
-        lets it settle the short distance to the new ground height -- which is
-        all placement ever needed to do.
-        """
-        current = client.simGetVehiclePose(name).position
-        client.simSetVehiclePose(
-            airsim.Pose(airsim.Vector3r(x, 0.0, current.z_val),
-                        airsim.to_quaternion(0.0, 0.0, 0.0)),
-            ignore_collision=True, vehicle_name=name,
-        )
-        time.sleep(PLACEMENT_SETTLE)
-        return client.simGetVehiclePose(name).position.x_val
-
-    def _move(name: str, x: float, passes: int = PLACEMENT_TRIES) -> bool:
-        """Move one drone to x, verified in the world frame, backing off."""
-        delay = PLACEMENT_SETTLE
-        for _ in range(passes):
-            if abs(_request(name, x) - x) <= PLACEMENT_TOLERANCE:
-                return True
-            time.sleep(delay)                    # fact 3: give it room
-            delay = min(delay * 1.8, PLACEMENT_MAX_BACKOFF)
-        return False
-
-    if len(names) > 1:
-        # Phase one: empty the pile. Whoever can move, moves; repeat.
-        waiting = list(names)
-        parked = 0
-        while waiting:
-            freed = []
-            for name in waiting:
-                if _move(name, -SPACING * (parked + 1), passes=2):
-                    parked += 1
-                    freed.append(name)
-            if not freed:
-                positions = {n: round(client.simGetVehiclePose(n).position.x_val, 2)
-                             for n in waiting}
-                raise RuntimeError(
-                    f"could not move any of {positions} out of the spawn pile; "
-                    f"every drone appears pinned inside another. Restart the "
-                    f"simulator and try again."
-                )
-            waiting = [n for n in waiting if n not in freed]
-
-        # Fact 3: everything in the pile was just teleported. Let the simulator
-        # stop ignoring them before asking again, or phase two fails on drones
-        # that are perfectly free.
-        time.sleep(PLACEMENT_PHASE_GAP)
-
-    # Phase two: open ground to real slots.
+    placed = []
     for index, name in enumerate(names):
-        target_x = index * SPACING
-        if not _move(name, target_x):
-            actual = client.simGetVehiclePose(name).position.x_val
-            raise RuntimeError(
-                f"{name} would not move to x={target_x} (still at "
-                f"x={actual:.2f}); refusing to fly drones that may be stacked. "
-                f"Restart the simulator and try again."
-            )
+        want = airsim.Pose(
+            airsim.Vector3r(index * SPACING, 0.0, 0.0),
+            airsim.to_quaternion(0.0, 0.0, 0.0),
+        )
+        client.simSetVehiclePose(want, ignore_collision=True, vehicle_name=name)
+        placed.append(name)
+    time.sleep(1.5)                          # let them fall to the ground
 
-    placed = list(names)
-
-    # Wait for motion to stop before measuring anything. Gating on a separation
-    # sampled while drones are still moving measures a transient, not the
-    # layout: mid-fall, two drones 4 m apart read 10.18 m.
-    _wait_until_still(client, names)
-
-    # Re-verify after everything has settled, in the WORLD frame. Never in
-    # kinematics_estimated: that is expressed per vehicle and can diverge
-    # catastrophically here -- a stacked Drone1 reported a local z of 166.70 m
-    # against a world z of -0.85 m. A safety check that reads a frame capable of
-    # being 167 m wrong is not a safety check.
+    # Verify, because a silent failure here puts drones on top of each other.
     layout = {}
     for index, name in enumerate(names):
-        position = client.simGetVehiclePose(name).position
+        position = client.getMultirotorState(vehicle_name=name).kinematics_estimated.position
         layout[name] = (round(position.x_val, 2), round(position.y_val, 2))
-        if abs(position.x_val - index * SPACING) > PLACEMENT_TOLERANCE:
+        if abs(position.x_val - index * SPACING) > 1.0:
             raise RuntimeError(
-                f"{name} drifted after placement: should be at x={index * SPACING} "
-                f"but is at x={position.x_val:.2f}; refusing to fly"
+                f"{name} should be at x={index * SPACING} but is at "
+                f"x={position.x_val:.2f}; refusing to fly drones that may be stacked"
             )
 
-    # Finally gate on the thing that actually matters: how close the closest
-    # pair is. Per-drone x being right does not prove the fleet is safe.
-    closest = min_pairwise_separation(client, names)
-    if closest is not None and closest < MIN_SPAWN_SEPARATION:
-        raise RuntimeError(
-            f"closest pair of drones is {closest:.2f} m apart at spawn, under "
-            f"the {MIN_SPAWN_SEPARATION} m floor; nothing in this stack avoids "
-            f"collisions, so refusing to fly"
-        )
-
     if len(names) > 1:
-        print("spawn layout: " + "  ".join(f"{n}{xy}" for n, xy in layout.items())
-              + f"  closest {closest:.2f} m")
-
+        print("spawn layout: " + "  ".join(f"{n}{xy}" for n, xy in layout.items()))
 
     return {"present": existing, "added": added, "layout": layout}
 

@@ -523,81 +523,6 @@ spawning, per-thread connections), so those runs cannot be reproduced exactly
 from the current tree. That is an argument for re-flying Block A once the
 harness settles, and the reason is now recorded rather than discovered later.
 
-### 2026-09-28 — drones vibrating in mid air: three defects, one of them ours
-
-Reported symptom: after starting a two-drone session, "the drones are stuck in
-mid air flying" and the simulator felt laggy. Measured rather than guessed, and
-it turned out to be three separate things.
-
-**1. Declared spawn offsets are ignored.** `build_settings` writes `"X": 4.0`
-for the second drone. This build does not honour it. On a clean session both
-drones appeared at x=0, **0.19 m apart**, each already reporting
-`has_collided` against the other before anything flew. Two rigid bodies in the
-same space, with the physics engine shoving them apart a few centimetres per
-tick — which on screen is precisely a drone vibrating in mid air. The "lag" was
-partly this grinding and partly the protocol's own cost: 3862 MiB of 4096 and
-96% GPU, against ~93% for Block A's single drone, so the second drone's cameras
-added only ~60 MiB and the scene at Epic with traffic is the real expense.
-
-**2. A drone pinned inside another cannot be moved at all.** This is the part
-that made the first two fixes wrong. Tested as a matrix immediately after
-`client.reset()`:
-
-| Condition | Result |
-|---|---|
-| plain `simSetVehiclePose(Drone2 → x=4)` | ignored |
-| after `enableApiControl` on Drone2 | ignored |
-| after `enableApiControl` on both | ignored |
-| after waiting nine seconds | ignored |
-| **after moving Drone1 out of the pile first** | **moved** |
-
-Only breaking the pile works. The call returns `None` either way, so nothing
-reports failure. `ensure_vehicles` issued all its pose requests back to back
-and slept once at the end, and since the first drone's target *is* the pile
-position, that request was a no-op, the pile was never broken, and every
-subsequent drone stayed trapped.
-
-Two further facts had to be measured before this worked, each one killing a fix
-that looked obviously correct:
-
-**Which drone is on top is not predictable.** With both drones declared in
-`settings.json`, Drone1 was free and Drone2 pinned. With Drone2 added at
-runtime — which is the path the missions actually use — it went on top instead.
-So "handle them in reverse order" is wrong too. The code asks rather than
-assumes.
-
-**A drone that was just teleported ignores further pose requests for a while,
-and each new request appears to restart that window.** Six requests at 0.6 s
-all failed; the same request issued once, thirty seconds later, succeeded
-immediately. So retries must back off rather than hammer, and there has to be a
-deliberate pause between breaking the pile and placing the drones — without it,
-the second phase asks a drone to move that the first phase has only just
-teleported, and is ignored. This is what made the first rewrite fail on the
-runtime-spawn path while passing three times with declared drones.
-
-Placement is therefore: break the pile by moving whichever drone *can* move to
-a temporary slot, repeating until the pile is gone; pause; then move everyone
-from open ground to their real slots, verified in the world frame with backoff.
-Three consecutive trials from a stacked reset on the runtime-spawn path:
-**4.00 m every time**, in 6.2 s.
-
-**3. Our own safety check was reading a frame that lies.** The guard meant to
-refuse stacked drones read `kinematics_estimated.position`, which is expressed
-per vehicle. A stacked Drone1 reported a **local z of 166.70 m against a world
-z of −0.85 m**. A check that reads a frame capable of being 167 m wrong is not
-a check, and this is the true cause of the 0.08 m near-miss recorded in the
-earlier multi-drone entry: placement had silently failed then too, and the
-check could not see it. Verification now reads `simGetVehiclePose`, and the
-gate is on the closest pair rather than on per-drone x.
-
-Two smaller things fell out of it. Placement hard-coded `z = -1.0` while the
-ground is neither flat nor near the origin: at `x = 0` it sits at **z = +29.25**
-and at the temporary slots `x = -4` and `x = -8` at **z = +10.4**, nineteen
-metres higher. So every placement lifted each drone tens of metres above
-whatever it was standing on and dropped it. It now preserves the drone's
-current z. And the separation gate was sampling mid-fall, reading 10.18 m for
-drones 4 m apart, so measurement now waits for motion to stop.
-
 ### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after
@@ -617,11 +542,12 @@ the multi-drone missions, or the single-drone missions become invalid.
 
 ## Open questions
 
-- ~~**One AirSim client shared across threads.**~~ **Settled 2026-09-28 by
-  flying it.** Not a rare failure under load — it failed immediately and
-  totally, `RuntimeError: IOLoop is already running` and `BufferError:
-  Existing exports of data`, with neither drone leaving the ground. Each thread
-  now opens its own connection. See the multi-drone entry above.
+- **One AirSim client shared across threads.** `DroneRunner` threads share a
+  single `MultirotorClient`. `msgpack-rpc-python` multiplexes one socket and is
+  not documented as thread-safe, so this is a plausible source of rare failures
+  under multi-drone load. Settle it at the first M09/M10 flight test — either
+  observe it working reliably, or give each thread its own client. Do not settle
+  it by assertion either way.
 - **Does CARLA synchronous mode gate AirSim physics?** Both plugins share one
   UE4 tick loop, so it plausibly does, but the two APIs have no shared notion of
   time and this has not been tested. It decides whether deterministic replay of

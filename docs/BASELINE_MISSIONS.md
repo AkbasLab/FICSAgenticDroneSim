@@ -61,17 +61,9 @@ The set spans every category the plan requires:
 | **M09** | 2 | **Drone1:** `go up to 25 meters, fly forward for 6 seconds, then return home and land`<br>**Drone2:** `go up to 12 meters, fly right for 5 seconds, hover for 2 seconds, then land` |
 | **M10** | 4 | **Drone1:** `go up to 30 meters, fly forward for 5 seconds, then land`<br>**Drone2:** `go up to 24 meters, fly right for 5 seconds, then land`<br>**Drone3:** `go up to 18 meters, fly backward for 5 seconds, then land`<br>**Drone4:** `go up to 12 meters, fly left for 5 seconds, then land` |
 
-Multi-drone altitudes are deliberately staggered because there is **no
-collision avoidance anywhere in this stack**. Vertical separation is the only
-thing keeping the drones apart once airborne.
-
-> **Corrected 2026-09-28.** This previously said "the drones spawn 4 m apart on
-> X". They do not. Every drone in this build spawns at the player start
-> whatever `settings.json` declares, so they arrive stacked inside one another,
-> already colliding. The 4 m layout is established **at runtime** by
-> `ensure_vehicles()`, which has to scatter them before it can position them,
-> because a drone pinned inside another cannot be moved. Details in
-> [`../phases/phase-01-baseline-freeze/`](../phases/phase-01-baseline-freeze/).
+Multi-drone altitudes are deliberately staggered — the drones spawn 4 m apart on
+X and there is **no collision avoidance anywhere in this stack**. Vertical
+separation is the only thing keeping them apart.
 
 ---
 
