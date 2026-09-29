@@ -407,32 +407,21 @@ def main() -> int:
 
     client = None
     if not args.plan_only:
-        # The roster in settings.json must already match what these missions
-        # need. AirSim reads that file only at process start, so the runner
-        # cannot fix a mismatch -- it stops and says what to restart with,
-        # rather than flying at vehicles that do not exist.
+        # Mixed drone counts in one pass are fine now. Vehicles a mission needs
+        # are spawned into the running simulator by ensure_vehicles(), so M09
+        # (two drones) and M10 (four) can follow M01-M08 (one) without a
+        # restart between them.
+        #
+        # This previously refused a mixed set and demanded a settings.json edit
+        # plus a restart per block. That was wrong: simAddVehicle adds vehicles
+        # to a running simulator, which was documented in this project's own
+        # reference set the whole time.
         needed = sorted({m.get("drones", 1) for m in missions})
-        if len(needed) > 1:
-            sys.exit(
-                f"missions need different drone counts {needed}; run them in\n"
-                f"separate passes, because changing the roster needs a simulator restart:\n"
-                + "".join(f"  --missions {','.join(m['id'] for m in missions if m.get('drones',1)==n)}\n"
-                          for n in needed)
-            )
-        count = needed[0]
+        count = max(needed)
         roster = current_roster(agent)
-        # A LARGER roster is fine: a simulator booted with four drones flies a
-        # two-drone mission using Drone1 and Drone2, leaving the others parked.
-        # Only too few vehicles is a problem, because the missing ones cannot be
-        # created without a restart.
-        if len(roster) < count:
-            sys.exit(
-                f"simulator has {len(roster)} drone(s) {roster}, these missions need {count}.\n"
-                f"Write the roster and restart the simulator, then re-run:\n"
-                f"  python baseline/open_loop_agent.py --drones {count} --plan-only "
-                f"--instruction \"noop\"   # writes settings.json\n"
-                f"  .\\CarlaAir.ps1 Town10HD                                  # restart\n"
-            )
+        print(f"roster  : {len(roster)} declared in settings.json; "
+              f"missions need up to {count} "
+              f"({'spawned at runtime as required' if count > len(roster) else 'sufficient'})")
 
         import airsim
         client = airsim.MultirotorClient(ip="127.0.0.1", port=41451)
