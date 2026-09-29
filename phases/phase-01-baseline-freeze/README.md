@@ -558,6 +558,75 @@ untested settings key is exactly what killed the simulator silently a few days
 ago. The documented `simGetImages` path was taken instead. `SubWindows` remains
 worth testing later, deliberately and not on the eve of a scored run.
 
+### 2026-09-28 — drones vibrating in mid air: three defects, one of them ours
+
+Reported symptom: after starting a two-drone session, "the drones are stuck in
+mid air flying" and the simulator felt laggy. Measured rather than guessed, and
+it turned out to be three separate things.
+
+**1. Declared spawn offsets are ignored.** `build_settings` writes `"X": 4.0`
+for the second drone. This build does not honour it. On a clean session both
+drones appeared at x=0, **0.19 m apart**, each already reporting
+`has_collided` against the other before anything flew. Two rigid bodies in the
+same space, with the physics engine shoving them apart a few centimetres per
+tick — which on screen is precisely a drone vibrating in mid air. The "lag" was
+partly this grinding and partly the protocol's own cost: 3862 MiB of 4096 and
+96% GPU, against ~93% for Block A's single drone, so the second drone's cameras
+added only ~60 MiB and the scene at Epic with traffic is the real expense.
+
+**2. A drone pinned inside another cannot be moved at all.** This is the part
+that made the first fix wrong. Tested as a matrix immediately after
+`client.reset()`:
+
+| Condition | Result |
+|---|---|
+| plain `simSetVehiclePose(Drone2 → x=4)` | ignored |
+| after `enableApiControl` on Drone2 | ignored |
+| after `enableApiControl` on both | ignored |
+| after waiting nine seconds | ignored |
+| **after moving Drone1 out of the pile first** | **moved** |
+
+Only breaking the pile works. The call returns `None` either way, so nothing
+reports failure. `ensure_vehicles` issued all its pose requests back to back
+and slept once at the end, and since the first drone's target *is* the pile
+position, that request was a no-op, the pile was never broken, and every
+subsequent drone stayed trapped. Placement is now two passes — scatter the
+drones to negative staging slots, repeating until each has moved, then position
+them from empty ground — and verified per drone with retries. Three
+consecutive trials from a stacked reset: **4.00 m every time**, in 6.5 s.
+
+**3. Our own safety check was reading a frame that lies.** The guard meant to
+refuse stacked drones read `kinematics_estimated.position`, which is expressed
+per vehicle. A stacked Drone1 reported a **local z of 166.70 m against a world
+z of −0.85 m**. A check that reads a frame capable of being 167 m wrong is not
+a check, and this is the true cause of the 0.08 m near-miss recorded in the
+earlier multi-drone entry: placement had silently failed then too, and the
+check could not see it. Verification now reads `simGetVehiclePose`, and the
+gate is on the closest pair rather than on per-drone x.
+
+Two smaller things fell out of it. Placement hard-coded `z = -1.0`, but the
+ground at this player start is at **z = +29.25** — twenty-nine metres below the
+world origin — so every placement lifted each drone 29 m and dropped it. It now
+preserves the drone's current z and slides it sideways. And the separation gate
+was sampling mid-fall, reading 10.18 m for drones 4 m apart, so measurement now
+waits for motion to stop.
+
+#### The camera views cost more than they are worth during a scored run
+
+One viewer frame measured **500–980 ms for two drones** at 1280×960 — 1–2 fps,
+not the 5 the default asks for. Each capture forces an extra scene render and a
+readback stall on a GPU already at 87–96%.
+
+Flight timing is otherwise the most stable thing in these results: M02 repeated
+21.2 s three times, and traffic on versus off moved it by 0.2 s. A viewer that
+stalls the simulator for up to a second per frame would swamp that, and flight
+duration is part of what the missions measure.
+
+So the scored flight and the watched flight are separated: **M09 is scored with
+the viewer off**, and any recording with camera views is flown separately and
+labelled a demonstration rather than scored. Recording the simulator viewport
+of the scored run remains free, because it renders nothing extra.
+
 ### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after

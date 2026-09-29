@@ -351,6 +351,58 @@ def vehicle_names(count: int) -> list[str]:
 # offsets, orientations and FOV are the shipped values; do not simplify them.
 # A settings file that AirSim dislikes does not produce an error -- the
 # simulator exits during startup, silently, with no log and no crash dump.
+# Placement of drones in a running simulator. Pose requests are not reliably
+# honoured -- see the long note in ensure_vehicles() -- so each one is verified
+# and retried. Six tries at 0.6 s covers the settling window observed after
+# client.reset() with room to spare.
+PLACEMENT_TRIES = 6
+PLACEMENT_SETTLE = 0.6
+PLACEMENT_TOLERANCE = 1.0        # metres of slack on the requested x
+MIN_SPAWN_SEPARATION = 2.0       # metres; below this the drones are touching
+
+
+def _wait_until_still(client, names: list[str], timeout: float = 6.0) -> bool:
+    """Block until every drone's world position stops changing, or timeout.
+
+    Returns True if everything settled. Used before measuring a layout, because
+    a position read while a drone is still moving is not where it will be.
+    """
+    previous = None
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        now = []
+        for name in names:
+            p = client.simGetVehiclePose(name).position
+            now.append((p.x_val, p.y_val, p.z_val))
+        if previous is not None and all(
+            math.dist(a, b) < 0.05 for a, b in zip(previous, now)
+        ):
+            return True
+        previous = now
+        time.sleep(0.4)
+    return False
+
+
+def min_pairwise_separation(client, names: list[str]) -> float | None:
+    """Smallest world-frame distance between any two named drones.
+
+    Returns None for a single drone. Used as a spawn gate, because two drones
+    occupying the same point do not merely risk a collision later -- they are
+    already in one, and the physics engine grinds them apart a few centimetres
+    per tick, which looks exactly like a drone vibrating in mid air.
+    """
+    if len(names) < 2:
+        return None
+    points = []
+    for name in names:
+        p = client.simGetVehiclePose(name).position
+        points.append((p.x_val, p.y_val, p.z_val))
+    return min(
+        math.dist(points[i], points[j])
+        for i in range(len(points)) for j in range(i + 1, len(points))
+    )
+
+
 CAMERA_TEMPLATE = {
     "0": {
         "CaptureSettings": [{"ImageType": 0, "Width": 1280, "Height": 960}],
@@ -395,6 +447,13 @@ def build_settings(count: int) -> dict[str, Any]:
             "Cameras": CAMERA_TEMPLATE,
         }
         if index:
+            # THIS BUILD IGNORES IT. Kept because it states the intended layout
+            # and costs nothing, but do not rely on it: every declared drone
+            # spawns at the player start regardless. Measured 2026-09-28 on a
+            # clean session -- two drones declared with X of 0 and 4 both
+            # appeared at x=0, 0.19 m apart, already reporting a mutual
+            # collision. Separation is achieved at runtime by ensure_vehicles(),
+            # which is where the real work happens and why it is so careful.
             vehicle["X"] = index * SPACING
         vehicles[name] = vehicle
 
@@ -993,29 +1052,130 @@ def ensure_vehicles(client, names: list[str]) -> dict[str, Any]:
     # So place them explicitly afterwards. Every drone is positioned, not only
     # the new ones, because a drone that exists may have been left wherever a
     # previous flight ended.
-    placed = []
-    for index, name in enumerate(names):
-        want = airsim.Pose(
-            airsim.Vector3r(index * SPACING, 0.0, 0.0),
-            airsim.to_quaternion(0.0, 0.0, 0.0),
-        )
-        client.simSetVehiclePose(want, ignore_collision=True, vehicle_name=name)
-        placed.append(name)
-    time.sleep(1.5)                          # let them fall to the ground
+    # PLACEMENT IS A TWO-PASS OPERATION, AND IT HAS TO BE.
+    #
+    # Every drone in this build spawns at the player start regardless of what
+    # settings.json or simAddVehicle asks for, so they arrive stacked inside one
+    # another. That is not merely a collision risk -- it is already a collision:
+    # both drones report has_collided against each other before anything flies,
+    # and the physics engine grinds them apart a few centimetres per tick, which
+    # on screen looks exactly like a drone vibrating in mid air.
+    #
+    # The trap is that a drone buried inside another CANNOT BE MOVED. Measured
+    # 2026-09-28 on a clean session, as a matrix of five conditions, each tried
+    # immediately after client.reset():
+    #
+    #     plain simSetVehiclePose(Drone2 -> x=4)          ignored
+    #     after enableApiControl on Drone2                 ignored
+    #     after enableApiControl on both                   ignored
+    #     after waiting nine seconds                       ignored
+    #     after moving Drone1 out of the pile first        MOVED
+    #
+    # Only breaking the pile works. Retrying does not, waiting does not, and the
+    # call returns None either way, so a naive loop reports success having moved
+    # nothing. The drone on top can always move; the one underneath is pinned.
+    #
+    # Hence: scatter first, position second. Pass one walks the drones out to
+    # negative staging slots, repeating until every drone has moved -- at least
+    # one is always free, so each round frees the next. Pass two moves them from
+    # staging to their real slots, which are now empty ground.
+    #
+    # Staging is negative and the targets are non-negative, so a drone leaving
+    # staging never lands on a drone still waiting in it.
+    def _request(name: str, x: float) -> float:
+        """Ask for a pose, wait for the tick, return the world x actually seen.
 
-    # Verify, because a silent failure here puts drones on top of each other.
-    layout = {}
-    for index, name in enumerate(names):
-        position = client.getMultirotorState(vehicle_name=name).kinematics_estimated.position
-        layout[name] = (round(position.x_val, 2), round(position.y_val, 2))
-        if abs(position.x_val - index * SPACING) > 1.0:
-            raise RuntimeError(
-                f"{name} should be at x={index * SPACING} but is at "
-                f"x={position.x_val:.2f}; refusing to fly drones that may be stacked"
-            )
+        Only x is commanded. The drone's CURRENT z is preserved deliberately: at
+        this player start the ground sits at z = +29.25, twenty-nine metres below
+        the world origin, so a hard-coded z of -1.0 lifted each drone 29 m into
+        the air and dropped it. They survived the fall and settled, but a 29 m
+        drop before every flight is gratuitous, and while they were falling the
+        separation gate read a transient 10.18 m for drones 4 m apart.
+
+        Keeping z means the drone slides sideways along the ground it is already
+        resting on, which is all placement ever needed to do.
+        """
+        current = client.simGetVehiclePose(name).position
+        client.simSetVehiclePose(
+            airsim.Pose(airsim.Vector3r(x, 0.0, current.z_val),
+                        airsim.to_quaternion(0.0, 0.0, 0.0)),
+            ignore_collision=True, vehicle_name=name,
+        )
+        time.sleep(PLACEMENT_SETTLE)
+        return client.simGetVehiclePose(name).position.x_val
+
+    def _move(name: str, x: float) -> bool:
+        """Move one drone, verified in the world frame. Retries are cheap."""
+        for _ in range(PLACEMENT_TRIES):
+            if abs(_request(name, x) - x) <= PLACEMENT_TOLERANCE:
+                return True
+        return False
 
     if len(names) > 1:
-        print("spawn layout: " + "  ".join(f"{n}{xy}" for n, xy in layout.items()))
+        # Pass one: out of the pile, one slot each.
+        waiting = list(names)
+        staging = {}
+        while waiting:
+            freed = []
+            for name in waiting:
+                slot = -SPACING * (len(staging) + 1)
+                if _move(name, slot):
+                    staging[name] = slot
+                    freed.append(name)
+            if not freed:
+                raise RuntimeError(
+                    f"could not move any of {waiting} out of the spawn pile; "
+                    f"every drone is pinned inside another and none will "
+                    f"reposition. Restart the simulator."
+                )
+            waiting = [n for n in waiting if n not in freed]
+
+    # Pass two: staging (or the spawn point, for a single drone) to real slots.
+    placed = []
+    for index, name in enumerate(names):
+        target_x = index * SPACING
+        if not _move(name, target_x):
+            raise RuntimeError(
+                f"{name} would not move to x={target_x} after "
+                f"{PLACEMENT_TRIES} attempts; refusing to fly drones that may "
+                f"be stacked"
+            )
+        placed.append(name)
+
+    # Wait for motion to stop before measuring anything. Gating on a separation
+    # sampled while drones are still moving measures a transient, not the
+    # layout: mid-fall, two drones 4 m apart read 10.18 m.
+    _wait_until_still(client, names)
+
+    # Re-verify after everything has settled, in the WORLD frame. Never in
+    # kinematics_estimated: that is expressed per vehicle and can diverge
+    # catastrophically here -- a stacked Drone1 reported a local z of 166.70 m
+    # against a world z of -0.85 m. A safety check that reads a frame capable of
+    # being 167 m wrong is not a safety check.
+    layout = {}
+    for index, name in enumerate(names):
+        position = client.simGetVehiclePose(name).position
+        layout[name] = (round(position.x_val, 2), round(position.y_val, 2))
+        if abs(position.x_val - index * SPACING) > PLACEMENT_TOLERANCE:
+            raise RuntimeError(
+                f"{name} drifted after placement: should be at x={index * SPACING} "
+                f"but is at x={position.x_val:.2f}; refusing to fly"
+            )
+
+    # Finally gate on the thing that actually matters: how close the closest
+    # pair is. Per-drone x being right does not prove the fleet is safe.
+    closest = min_pairwise_separation(client, names)
+    if closest is not None and closest < MIN_SPAWN_SEPARATION:
+        raise RuntimeError(
+            f"closest pair of drones is {closest:.2f} m apart at spawn, under "
+            f"the {MIN_SPAWN_SEPARATION} m floor; nothing in this stack avoids "
+            f"collisions, so refusing to fly"
+        )
+
+    if len(names) > 1:
+        print("spawn layout: " + "  ".join(f"{n}{xy}" for n, xy in layout.items())
+              + f"  closest {closest:.2f} m")
+
 
     return {"present": existing, "added": added, "layout": layout}
 

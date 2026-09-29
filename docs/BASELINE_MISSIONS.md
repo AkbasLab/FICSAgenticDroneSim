@@ -61,9 +61,17 @@ The set spans every category the plan requires:
 | **M09** | 2 | **Drone1:** `go up to 25 meters, fly forward for 6 seconds, then return home and land`<br>**Drone2:** `go up to 12 meters, fly right for 5 seconds, hover for 2 seconds, then land` |
 | **M10** | 4 | **Drone1:** `go up to 30 meters, fly forward for 5 seconds, then land`<br>**Drone2:** `go up to 24 meters, fly right for 5 seconds, then land`<br>**Drone3:** `go up to 18 meters, fly backward for 5 seconds, then land`<br>**Drone4:** `go up to 12 meters, fly left for 5 seconds, then land` |
 
-Multi-drone altitudes are deliberately staggered — the drones spawn 4 m apart on
-X and there is **no collision avoidance anywhere in this stack**. Vertical
-separation is the only thing keeping them apart.
+Multi-drone altitudes are deliberately staggered because there is **no
+collision avoidance anywhere in this stack**. Vertical separation is the only
+thing keeping the drones apart once airborne.
+
+> **Corrected 2026-09-28.** This previously said "the drones spawn 4 m apart on
+> X". They do not. Every drone in this build spawns at the player start
+> whatever `settings.json` declares, so they arrive stacked inside one another,
+> already colliding. The 4 m layout is established **at runtime** by
+> `ensure_vehicles()`, which has to scatter them before it can position them,
+> because a drone pinned inside another cannot be moved. Details in
+> [`../phases/phase-01-baseline-freeze/`](../phases/phase-01-baseline-freeze/).
 
 ---
 
@@ -88,6 +96,15 @@ be scored for correctness. Record instead:
 
 Consistency on M08 is the interesting variable, not accuracy. It is also the
 only mission that speaks to the ambiguity clause in H4.
+
+**M09 / M10 — camera views are a separate flight.** Watching each drone's
+onboard camera needs the drones **declared** in `settings.json`, because a
+runtime-spawned drone gets no cameras. But a viewer frame costs 500–980 ms for
+two drones at 1280×960 — an extra scene render and a readback stall each time —
+and flight duration is one of the things these missions measure. So a scored
+multi-drone run is flown with the viewer **off**, and any camera-view recording
+is a separate demonstration flight, labelled as such and not scored. Recording
+the simulator viewport during a scored run costs nothing and stays fine.
 
 **M09 / M10 — a side effect to expect.** Answering more than 1 to *"How many
 drones?"* causes the agent to **rewrite `settings.json` permanently** with that

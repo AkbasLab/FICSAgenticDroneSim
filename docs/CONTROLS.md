@@ -242,12 +242,30 @@ drones, declare two before starting the simulator:
 python tools\write_roster.py 2
 ```
 
-The viewer is a viewer. It reads images over the API and displays them; it
-records nothing, scores nothing, and the baseline agent never sees an image --
-it is blind by design. Each frame does cost a full 1280x960 capture per drone
-over RPC, on a machine already near its VRAM limit, which is why the default is
-5 fps rather than 30. If it disturbs a flight, drop the camera resolution in
-`settings.json` rather than raising `--fps`.
+### Do not run it during a scored flight
+
+Measured on this machine, 2026-09-28: **one viewer frame costs 500-980 ms for
+two drones.** That is 1-2 fps, not the 5 the default asks for. Each capture
+forces an extra scene render from the drone's viewpoint and a readback stall,
+on a GPU already sitting at 87-96% of its 4 GB.
+
+That matters because flight timing here is otherwise remarkably stable --
+mission flight times repeat within about 0.1 s. A viewer that stalls the
+simulator for up to a second per frame would swamp that, and flight duration is
+part of what the missions measure.
+
+So the scored run and the watched run are **two separate flights**:
+
+| | Scored | Demonstration |
+|---|---|---|
+| Viewer | off | on |
+| Purpose | the numbers | the recording |
+| Recorded in results | yes | labelled a demo, not scored |
+
+The viewer is a viewer. It records nothing, scores nothing, and the baseline
+agent never sees an image -- it is blind by design. To make a demonstration
+flight smoother, drop the camera resolution in `settings.json` (1280x960 is
+generous for a preview) rather than raising `--fps`.
 
 ---
 
@@ -280,6 +298,9 @@ over RPC, on a machine already near its VRAM limit, which is why the default is
 | Agent cannot connect | Simulator fully loaded? Ports 2000 and 41451 listening? |
 | First plan very slow | Normal — the model is loading. Note the run as cold |
 | Drone flies into the ground | Positive Z. Altitude is negative in NED |
+| **Drones vibrate or hover oddly at start** | They spawned stacked inside each other and the physics is grinding them apart. `settings.json` spawn offsets are ignored by this build; separation happens at runtime. Restart, and let the agent place them |
+| Drone will not move when repositioned | It is pinned inside another drone. Move the one on top away first — see `ensure_vehicles()` |
+| Placement "succeeds" but drones are stacked | An old check read the vehicle-local frame, which can be 167 m wrong. Verify with `simGetVehiclePose` |
 
 Full command and API reference: *CarlaAir Command Reference v1.0*
 (`D:\Research\CarlaAirDocs\`).
