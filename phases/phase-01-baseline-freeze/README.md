@@ -30,7 +30,7 @@ outside the clone.
 
 | Artifact | Location | State |
 |---|---|---|
-| Open-loop agent | [`baseline/open_loop_agent.py`](../../baseline/open_loop_agent.py) | Written; planner verified, flight untested |
+| Open-loop agent | [`baseline/open_loop_agent.py`](../../baseline/open_loop_agent.py) | Written; planner and single-drone flight verified (M01, M02). Multi-drone unflown |
 | Baseline tag | `v0.1-open-loop-baseline` | Pending — tagged once the agent runs the mission set |
 | Environment record | [`docs/BASELINE_ENVIRONMENT.md`](../../docs/BASELINE_ENVIRONMENT.md) | v1.0, §9 rewritten 2026-09-24 |
 | Mission set | [`docs/BASELINE_MISSIONS.md`](../../docs/BASELINE_MISSIONS.md) | Defined; **results empty** |
