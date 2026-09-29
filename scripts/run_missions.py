@@ -122,7 +122,8 @@ def describe(row: dict[str, Any], attempt: int, repeats: int) -> str:
     return line
 
 
-def fly_one(agent, client, mission: dict[str, Any], model: str, attempt: int) -> dict[str, Any]:
+def fly_one(agent, client, mission: dict[str, Any], model: str, attempt: int,
+            protocol: dict[str, Any] | None = None) -> dict[str, Any]:
     """Plan and FLY one mission, once. Same record as run_one plus `execution`.
 
     The order is deliberate:
@@ -135,7 +136,7 @@ def fly_one(agent, client, mission: dict[str, Any], model: str, attempt: int) ->
     3. **Fly through the agent's own `fly_plans`**, not a copy, so a scored run
        and a hand-flown run are the same procedure.
     """
-    row = run_one(agent, mission, model, attempt)        # plan and score first
+    row = run_one(agent, mission, model, attempt, protocol)   # plan and score first
 
     if not row["all_valid"]:
         row["execution"] = {"flown": False, "reason": "plan rejected"}
@@ -178,7 +179,8 @@ def fly_one(agent, client, mission: dict[str, Any], model: str, attempt: int) ->
     return row
 
 
-def run_one(agent, mission: dict[str, Any], model: str, attempt: int) -> dict[str, Any]:
+def run_one(agent, mission: dict[str, Any], model: str, attempt: int,
+            protocol: dict[str, Any] | None = None) -> dict[str, Any]:
     """Plan every drone's instruction for one mission, once.
 
     Returns one result record, which is appended verbatim to the JSONL output.
@@ -253,6 +255,11 @@ def run_one(agent, mission: dict[str, Any], model: str, attempt: int) -> dict[st
         "model": model,
         "drones": drones,
         "scoreable": scoreable,
+        # The conditions this run flew under, copied into the row rather than
+        # left implicit in the config. A series can span several simulator
+        # sessions and several days, and the config may be edited between them;
+        # a row that cannot state its own conditions is not evidence.
+        "protocol": protocol,
         # A multi-drone mission passes only if EVERY drone's plan is right. One
         # correct plan out of four is a failed mission, not a partial success.
         "all_valid": all(d["valid"] for d in per_drone),
@@ -396,17 +403,34 @@ def main() -> int:
     print()
 
     os.makedirs(args.out, exist_ok=True)
-    stamp_early = time.strftime("%Y%m%d-%H%M%S")
-    stem_early = f"{config['set']['name']}-{model.replace(':', '_')}-{stamp_early}"
-    live_path = os.path.join(args.out, stem_early + ".jsonl")
+
+    # ONE stem per invocation, fixed before the first run, timestamped so a
+    # re-run never overwrites an earlier one.
+    #
+    # One file per block ON PURPOSE: M01-M08, M09 and M10 each need their own
+    # simulator session for the roster, and keeping their logs separate means
+    # each file is short enough to read. A merged log would be one long file
+    # covering three sessions.
+    #
+    # An earlier version stamped the live file at the start and wrote a second
+    # file at the end, producing two files holding the same 24 runs under
+    # different names, with a summary matching only one of them.
+    # The colon in "llama3.2:3b" is illegal in a Windows filename.
+    stem = f"{config['set']['name']}-{model.replace(':', '_')}-{time.strftime('%Y%m%d-%H%M%S')}"
+    live_path = os.path.join(args.out, stem + ".jsonl")
 
     rows = []
     for mission in missions:
         for attempt in range(1, repeats + 1):
+            # Each row carries the conditions it flew under. Blocks are flown in
+            # separate sessions, possibly days apart, and the config may be
+            # edited between them; a row that cannot state its own conditions is
+            # not evidence.
+            conditions = dict(config["protocol"], flown=not args.plan_only)
             if args.plan_only:
-                row = run_one(agent, mission, model, attempt)
+                row = run_one(agent, mission, model, attempt, conditions)
             else:
-                row = fly_one(agent, client, mission, model, attempt)
+                row = fly_one(agent, client, mission, model, attempt, conditions)
             rows.append(row)
 
             # Append as we go. A crash or a hung flight three hours into a set
@@ -421,27 +445,16 @@ def main() -> int:
             if args.pause and not (mission is missions[-1] and attempt == repeats):
                 input("    [enter] next run  ")
 
-    os.makedirs(args.out, exist_ok=True)
-    # Timestamped filenames, never overwritten: a second run is a second series,
-    # not a correction of the first. Losing a run because it was rerun is the
-    # kind of data loss nobody notices until the analysis disagrees with itself.
-    # The colon in "llama3.2:3b" is illegal in a Windows filename, hence the
-    # substitution.
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    stem = f"{config['set']['name']}-{model.replace(':', '_')}-{stamp}"
-
-    jsonl_path = os.path.join(args.out, stem + ".jsonl")
-    with io.open(jsonl_path, "w", encoding="utf-8", newline="\n") as handle:
-        for row in rows:
-            handle.write(json.dumps(row) + "\n")
-
+    # The JSONL was written row by row as the runs completed; nothing more to
+    # write here. The summary describes this block only, and sits beside its
+    # own data with the same stem.
     md_path = os.path.join(args.out, stem + ".md")
     with io.open(md_path, "w", encoding="utf-8", newline="\n") as handle:
         handle.write(summarise(rows, config, model))
 
     print()
     print(summarise(rows, config, model))
-    print(f"raw     : {jsonl_path}")
+    print(f"raw     : {live_path}")
     print(f"summary : {md_path}")
     return 0
 
