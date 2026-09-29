@@ -341,6 +341,37 @@ requires a simulator restart it cannot perform.
 Verified end to end on M02: planned, reset, flown, scored, logged — plan
 `hover, land` executed, 21 s, no collision, no ground contact flagged.
 
+### 2026-09-28 — protocol changed: Epic quality, traffic on
+
+The mission protocol, written 2026-09-18, specified
+`.\CarlaAir.ps1 Town10HD --no-traffic --quality Low` with the stated reason
+that traffic is a confound and Low quality frees GPU. The flights run so far
+were at Epic, 1080p, no traffic — so the config no longer described what the
+project actually did.
+
+**Decision: change the protocol rather than the practice.** The study measures
+this platform, and the platform is used with traffic at full quality. Results
+recorded under a protocol nobody follows are the quiet kind of wrong.
+
+Nothing had been measured under the old protocol, so no result is invalidated.
+The old values and the reason for the change are recorded in the config and in
+`BASELINE_MISSIONS.md` rather than deleted.
+
+**What this accepts, stated plainly:**
+
+* **Traffic adds variance** that has nothing to do with whether a plan
+  executed — vehicles and pedestrians move, contend for GPU, and change frame
+  timing run to run. That was the original author's point and it remains true.
+* **VRAM is at the limit.** Town10HD at Epic and 1080p measured 3827 MiB of
+  4096 MiB, so texture streaming is already dropping detail, and traffic adds
+  to it.
+* **An open question worth watching:** whether flight timing moves with frame
+  rate. AirSim's physics advances with the Unreal tick, so a heavier scene
+  could lengthen wall-clock flights even if simulated durations hold. The M02
+  repeats measured 21.2 / 21.0 / 21.2 s without traffic — that is the baseline
+  to compare against once traffic is running. If flight seconds move, suspect
+  this first.
+
 ### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after

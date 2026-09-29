@@ -58,12 +58,24 @@ description = "Ten missions spanning movement, repetition, ordering, ambiguity a
 #  change here means the results that follow are a new series, not more of the
 #  old one.
 # -----------------------------------------------------------------------------
+#
+#  CHANGED 2026-09-28. Was: --no-traffic --quality Low, traffic = false, on the
+#  grounds that traffic is a confound and Low frees GPU. Changed by decision to
+#  measure the platform as it is actually used, at full quality with traffic
+#  running. Nothing had been measured under the old protocol, so no results are
+#  invalidated. See phases/phase-01-baseline-freeze/ for the reasoning and the
+#  risk this accepts.
+#
 [protocol]
 model       = "llama3.2:3b"   # primary. --model on the runner overrides
 repeats     = 3               # runs per mission, matching the upstream benchmark
 map         = "Town10HD"
-launch      = ".\\CarlaAir.ps1 Town10HD --no-traffic --quality Low"
-traffic     = false           # removes a confound and frees GPU
+launch      = ".\\CarlaAir.ps1 Town10HD"
+quality     = "Epic"          # launcher default
+resolution  = "1920x1080"     # native panel; 1280x720 left screen captures padded
+traffic     = true            # as the platform is actually used
+vehicles    = 30              # launcher defaults for auto_traffic.py
+walkers     = 50
 
 # Frozen inference options. num_gpu 0 is forced by 4 GB VRAM already spoken for
 # by the simulator; temperature 0 is what makes repeated runs comparable.

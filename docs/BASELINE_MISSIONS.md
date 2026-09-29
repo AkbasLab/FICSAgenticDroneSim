@@ -111,8 +111,23 @@ directly comparable.
 | Model | `llama3.2:3b` (primary) — repeat with `llama3.1:8b` where memory allows |
 | Options | `num_gpu: 0`, `temperature: 0`, `num_predict: 512`, `num_thread: 12` |
 | Map | Town10HD |
-| Launch | `.\CarlaAir.ps1 Town10HD --no-traffic --quality Low` |
-| Traffic | none — removes a confound and frees GPU |
+| Launch | `.\CarlaAir.ps1 Town10HD` |
+| Quality | Epic (launcher default), 1920×1080 |
+| Traffic | 30 vehicles, 50 walkers — the platform as it is actually used |
+
+> **Changed 2026-09-28.** This previously read `--no-traffic --quality Low`,
+> with traffic off "to remove a confound and free GPU". Changed deliberately to
+> measure the platform in the configuration it is actually used in. No results
+> had been recorded under the old protocol, so nothing is invalidated — but the
+> change accepts real costs, recorded in
+> [`../phases/phase-01-baseline-freeze/`](../phases/phase-01-baseline-freeze/):
+> traffic adds variance that has nothing to do with whether a plan executed,
+> and Town10HD at Epic and 1080p already sits at 93% of this machine's 4 GB of
+> VRAM.
+>
+> If later analysis shows flight timing moving with frame rate, this is the
+> first thing to suspect, and the comparison to make is a re-run with traffic
+> off.
 
 Restart the simulator between multi-drone missions. Single-drone missions may
 run back to back; note that only the **first plan of a session** pays the
