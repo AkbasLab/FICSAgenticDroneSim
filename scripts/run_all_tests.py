@@ -29,6 +29,7 @@ SUITES = [
     ("10",  "Degraded comms model",      "tests/test_network.py", 30),
     ("11",  "Runtime-safety guardian",   "tests/test_guardian.py", 45),
     ("12",  "LLM agent policy",          "tests/test_llm_policy.py", 60),
+    ("13",  "Architecture comparison",   "tests/test_architectures.py", 23),
     ("3-12", "AirSim code path (fake sim)", "tests/test_airsim_path.py", 17),
 ]
 
@@ -46,6 +47,7 @@ DEMOS = [
     ("11", "Guardian escalation",     "scripts/run_guardian_demo.py --live --repeat"),
     ("12", "LLM agents (scripted)",   "scripts/run_llm_agents.py"),
     ("12", "LLM failure modes",       "scripts/run_llm_agents.py --failures --unsafe"),
+    ("13", "Architecture comparison",  "scripts/run_experiment.py --condition nominal --kill Drone2@1"),
 ]
 
 
