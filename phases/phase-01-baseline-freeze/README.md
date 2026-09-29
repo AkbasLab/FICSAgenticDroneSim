@@ -432,6 +432,72 @@ four sensible actions against an empty `expected` list. Unscoreable missions now
 report `—` for both correctness and extra steps, and the Block A summary was
 regenerated from the same raw data rather than re-flown.
 
+### 2026-09-28 — multi-drone: two platform defects, both found by flying
+
+Getting M09 airborne exposed two problems. Neither was visible from planning,
+and one was a genuine safety issue.
+
+#### No more roster edits: drones are spawned at runtime
+
+`settings.json` is read only at process start, so adding a drone meant editing
+it and restarting the simulator — once per mission block. That was accepted as
+a platform constraint. **It is not one.** `simAddVehicle` adds a vehicle to a
+running simulator, and it is documented in this project's own reference set
+(`docs/carlaair/04-actors-and-traffic.md`), which was not checked before the
+roster workflow was built.
+
+`ensure_vehicles()` now creates whatever a mission needs against whatever is
+running. Verified: a simulator booted with one drone flew a two-drone mission.
+`reset()` does not remove runtime vehicles, which matters because the runner
+resets before every run.
+
+Two properties, both acceptable here: runtime drones get **no cameras** (this
+agent never reads an image), and they **do not persist** across a restart (they
+are simply re-added). `settings.json` keeps a narrower role — a persistent
+fleet with cameras, via `tools/write_roster.py`.
+
+#### One AirSim client cannot be shared across threads
+
+The open question from `docs/carlaair/00-architecture.md` is answered, and the
+answer is no. The first two-drone flight failed on both drones at once:
+
+```
+[Drone1] FAILED: RuntimeError: IOLoop is already running
+[Drone2] FAILED: BufferError: Existing exports of data: object cannot be re-sized
+```
+
+`msgpack-rpc` multiplexes a single socket over a tornado IOLoop that is not
+thread-safe. Neither drone left the ground. Each `DroneRunner` thread now opens
+its own connection, and the separation monitor has its own as well. Connections
+are cheap; sharing them is not.
+
+This is why the single-drone work never caught it — one thread, one client, no
+contention.
+
+#### simAddVehicle ignores the pose it is given
+
+The second two-drone flight flew, and reported a **closest approach of 0.08 m**.
+Eight centimetres, between drones cruising at 25 m and 12 m.
+
+Cause: `simAddVehicle` accepts a pose and discards it. Measured directly —
+asked for `x=12`, the vehicle appeared at `x=0`. **Every runtime-spawned drone
+appears at the player start, stacked on whatever is already there.** With no
+collision avoidance anywhere in this stack, four drones would have occupied one
+point.
+
+Fixed by placing each drone explicitly with `simSetVehiclePose` after spawning,
+then **verifying** the result and refusing to fly if any drone is more than a
+metre from its slot. A silent failure here puts aircraft on top of each other,
+so it fails loudly instead.
+
+Re-flown: layout `Drone1(0,0) Drone2(4,0)`, both drones executed their own
+four-step plans concurrently, closest approach **4.0 m at t+0.0s** — the spawn
+spacing, on the ground, before either took off. Exactly as intended.
+
+**The proximity measurement earned its keep on its first real use.** Without
+it, that 0.08 m flight would have been recorded as a success: both plans
+correct, both executed, no collision reported.
+
 ### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after

@@ -108,6 +108,33 @@ class CameraTests(unittest.TestCase):
                 self.assertIn(axis, camera)
 
 
+class FleetReuseTests(unittest.TestCase):
+    """A bigger roster serves a smaller mission without a rewrite.
+
+    This is what removes the restart between mission blocks: declare four
+    drones once, and one-, two- and four-drone missions all fly against the
+    same booted simulator. Only too few vehicles forces a change.
+    """
+
+    def test_a_four_drone_roster_contains_the_smaller_ones(self):
+        four = agent.build_settings(4)["Vehicles"]
+        for count in (1, 2, 4):
+            with self.subTest(count=count):
+                needed = list(agent.build_settings(count)["Vehicles"])
+                self.assertTrue(set(needed).issubset(four))
+
+    def test_the_first_drones_are_identical_at_any_fleet_size(self):
+        # Drone1 must be the same vehicle whether the fleet is 1 or 4, or a
+        # mission would fly a differently-configured aircraft depending on what
+        # else happened to be declared.
+        for count in (2, 4):
+            with self.subTest(count=count):
+                self.assertEqual(
+                    agent.build_settings(1)["Vehicles"]["Drone1"],
+                    agent.build_settings(count)["Vehicles"]["Drone1"],
+                )
+
+
 class SerialisationTests(unittest.TestCase):
 
     def test_settings_are_json_serialisable(self):

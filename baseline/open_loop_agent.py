@@ -403,33 +403,57 @@ def build_settings(count: int) -> dict[str, Any]:
     }
 
 
-def write_settings(count: int) -> tuple[str, bool]:
-    """Write settings.json for `count` drones. Returns (path, changed).
+def write_settings(count: int, exact: bool = False) -> tuple[str, bool]:
+    """Ensure settings.json can host `count` drones. Returns (path, changed).
 
-    The whole file is rewritten, so every drone must be emitted -- including
-    Drone1. AirSim reads this only at process start, so a change means the
-    simulator has to be restarted before it takes effect.
+    `exact=True` writes exactly `count` drones, shrinking the fleet if it is
+    currently larger. The default grows but never shrinks, which is what a
+    flight wants -- and which means the roster tool must ask for `exact`, or a
+    four-drone fleet could never be reduced again.
+
+    **A larger roster is left alone.** If the file already declares at least
+    `count` drones in the expected shape, nothing is written and `changed` is
+    False -- so a simulator booted with four drones flies one-, two- and
+    four-drone missions without a restart between them.
+
+    That matters because changing the roster is expensive: AirSim reads this
+    file only at process start, so every change costs a simulator restart. With
+    a fixed fleet declared once, mission scripts stop touching it at all.
+
+    The unused drones sit on the ground where they spawned. They are extra
+    actors in the world -- a real condition change, not a free lunch -- so a
+    series should be flown at one fleet size throughout, and the fleet size is
+    recorded per run.
+
+    The file is only rewritten when it cannot serve the request: too few
+    vehicles, or a shape that does not match what build_settings produces.
     """
-    settings = build_settings(count)
-
     directory = os.path.join(documents_dir(), "AirSim")
-    os.makedirs(directory, exist_ok=True)
     path = os.path.join(directory, "settings.json")
 
-    new_text = json.dumps(settings, indent=2)
-    old_text = ""
+    existing = None
     if os.path.isfile(path):
         try:
             with open(path, encoding="utf-8-sig") as handle:
-                old_text = handle.read()
-        except OSError:
-            old_text = ""
+                existing = json.load(handle)
+        except (OSError, ValueError):
+            existing = None
 
-    changed = json.loads(old_text) != settings if old_text.strip() else True
-    if changed:
-        with open(path, "w", encoding="utf-8") as handle:
-            handle.write(new_text)
-    return path, changed
+    if isinstance(existing, dict):
+        have = list(existing.get("Vehicles", {}))
+        if exact:
+            # Nothing to do only if it already matches exactly.
+            if existing == build_settings(count):
+                return path, False
+        elif len(have) >= count and existing == build_settings(len(have)):
+            # Already big enough, and written by this code rather than by hand.
+            return path, False
+
+    settings = build_settings(count)
+    os.makedirs(directory, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(json.dumps(settings, indent=2))
+    return path, True
 
 
 # ------------------------------------------------------------------ planning
@@ -845,7 +869,107 @@ def reset_world(client, settle: float = 2.0) -> None:
     client.confirmConnection()
 
 
-def fly_plans(client, records: list[PlanRecord]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def connect(host: str = "127.0.0.1", port: int = AIRSIM_PORT):
+    """Open a NEW AirSim connection.
+
+    One per thread, always. `msgpack-rpc` multiplexes a single socket over a
+    tornado IOLoop that is not thread-safe, and sharing a client across threads
+    does not fail cleanly -- the first two-drone flight produced
+    `RuntimeError: IOLoop is already running` on one drone and
+    `BufferError: Existing exports of data: object cannot be re-sized` on the
+    other, and neither flew.
+
+    Connections are cheap. Threads are not worth sharing them for.
+    """
+    import airsim
+
+    client = airsim.MultirotorClient(ip=host, port=port)
+    client.confirmConnection()
+    return client
+
+
+def ensure_vehicles(client, names: list[str]) -> dict[str, Any]:
+    """Make sure every named drone exists in the RUNNING simulator.
+
+    Drones declared in settings.json are created at process start, so changing
+    that file means restarting. `simAddVehicle` adds one to a simulator that is
+    already running, which removes the restart entirely: ask for four drones
+    against a one-drone simulator and the other three appear.
+
+    Two consequences of spawning this way, both acceptable here:
+
+    * **No cameras.** A runtime drone gets no camera configuration. This agent
+      never reads an image -- it is blind by design -- so it costs nothing. A
+      later phase that wants vision must declare those vehicles in
+      settings.json instead.
+    * **Not persistent.** They vanish when the simulator restarts, and are
+      simply re-added on the next run.
+
+    Spawned along X at SPACING metres, matching the layout settings.json uses,
+    because nothing in this stack avoids collisions.
+    """
+    import airsim
+
+    existing = list(client.listVehicles())
+    added: list[str] = []
+
+    for index, name in enumerate(names):
+        if name in existing:
+            continue
+        pose = airsim.Pose(
+            airsim.Vector3r(index * SPACING, 0.0, 0.0),
+            airsim.to_quaternion(0.0, 0.0, 0.0),
+        )
+        if not client.simAddVehicle(name, "SimpleFlight", pose):
+            raise RuntimeError(f"simulator refused to add {name}")
+        added.append(name)
+
+    if added:
+        time.sleep(1.5)                      # let them register and settle
+        now = list(client.listVehicles())
+        missing = [n for n in names if n not in now]
+        if missing:
+            raise RuntimeError(f"added {added} but {missing} are still absent")
+        print(f"spawned at runtime: {', '.join(added)}")
+
+    # simAddVehicle IGNORES the pose it is given: every runtime drone appears at
+    # the player start, stacked on top of whatever is already there. Measured
+    # directly -- asked for x=12, got x=0. Two drones spawned this way came
+    # within 0.08 m of each other in flight, and nothing in this stack avoids
+    # collisions.
+    #
+    # So place them explicitly afterwards. Every drone is positioned, not only
+    # the new ones, because a drone that exists may have been left wherever a
+    # previous flight ended.
+    placed = []
+    for index, name in enumerate(names):
+        want = airsim.Pose(
+            airsim.Vector3r(index * SPACING, 0.0, 0.0),
+            airsim.to_quaternion(0.0, 0.0, 0.0),
+        )
+        client.simSetVehiclePose(want, ignore_collision=True, vehicle_name=name)
+        placed.append(name)
+    time.sleep(1.5)                          # let them fall to the ground
+
+    # Verify, because a silent failure here puts drones on top of each other.
+    layout = {}
+    for index, name in enumerate(names):
+        position = client.getMultirotorState(vehicle_name=name).kinematics_estimated.position
+        layout[name] = (round(position.x_val, 2), round(position.y_val, 2))
+        if abs(position.x_val - index * SPACING) > 1.0:
+            raise RuntimeError(
+                f"{name} should be at x={index * SPACING} but is at "
+                f"x={position.x_val:.2f}; refusing to fly drones that may be stacked"
+            )
+
+    if len(names) > 1:
+        print("spawn layout: " + "  ".join(f"{n}{xy}" for n, xy in layout.items()))
+
+    return {"present": existing, "added": added, "layout": layout}
+
+
+def fly_plans(client, records: list[PlanRecord], host: str = "127.0.0.1",
+              port: int = AIRSIM_PORT) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Fly one validated plan per drone, concurrently. Returns (outcomes, separation).
 
     Shared by the interactive agent and the mission runner ON PURPOSE. If the
@@ -854,17 +978,29 @@ def fly_plans(client, records: list[PlanRecord]) -> tuple[list[dict[str, Any]], 
     not be the same experiment, and nobody would notice until the numbers
     disagreed.
     """
+    # Create any drone this mission needs that the simulator does not have.
+    # Runs here, after any reset, because a reset can drop runtime vehicles.
+    ensure_vehicles(client, [r.drone for r in records])
+
     outcomes: list[dict[str, Any]] = []
     lock = threading.Lock()
 
     def run(record: PlanRecord) -> None:
-        outcome = DroneRunner(client, record.drone).fly(record.plan)
+        # ITS OWN CONNECTION. See connect(): a shared client fails with
+        # IOLoop and BufferError exceptions under concurrent use, and both
+        # drones stay on the ground.
+        own = connect(host, port)
+        outcome = DroneRunner(own, record.drone).fly(record.plan)
         with lock:                     # list.append is atomic, but be explicit
             outcomes.append(outcome)
 
     # Proximity is only meaningful between drones, so the monitor no-ops for a
     # single-drone mission. Started before the threads so the climb is covered.
-    monitor = SeparationMonitor(client, [r.drone for r in records])
+    # Its own connection too -- it polls while the drones are flying.
+    monitor = SeparationMonitor(
+        connect(host, port) if len(records) > 1 else client,
+        [r.drone for r in records],
+    )
     monitor.start()
 
     threads = [threading.Thread(target=run, args=(r,)) for r in records]
@@ -925,25 +1061,11 @@ def main() -> int:
         sys.exit("need at least one drone")
     drones = vehicle_names(count)
 
-    # settings.json declares the vehicle roster, and AirSim reads it ONLY at
-    # process start. Writing it is therefore useless without a restart, and
-    # flying on with a stale roster produces "vehicle not found" errors that
-    # look like a connection problem. Hence the explicit confirmation.
-    if not args.plan_only:
-        path, changed = write_settings(count)
-        print(f"settings.json -> {path}")
-        if changed:
-            print("  settings changed: RESTART the simulator before flying, "
-                  "AirSim reads this file only at startup")
-            # --yes does NOT skip this one. The roster on disk no longer matches
-            # the running simulator, so flying on would address vehicles that do
-            # not exist. A scripted run must stop here and let its caller
-            # restart the simulator.
-            if args.yes:
-                print("  refusing to continue: --yes cannot substitute for a restart")
-                return 1
-            if input("  restart done? [y/N]  ").strip().lower() not in ("y", "yes"):
-                return 1
+    # No settings.json edit, and no restart. Vehicles the simulator does not
+    # have are spawned into it at runtime by fly_plans -> ensure_vehicles, so
+    # the number asked for here is simply created. settings.json is still the
+    # way to declare a PERSISTENT fleet with cameras (tools/write_roster.py),
+    # but nothing requires it for flying.
 
     instructions = collect_instructions(args, drones)
 
@@ -988,7 +1110,7 @@ def main() -> int:
 
     # fly_plans owns the thread model, the separation monitor and teardown, and
     # is shared with scripts/run_missions.py so both fly the same way.
-    outcomes, separation = fly_plans(client, records)
+    outcomes, separation = fly_plans(client, records, args.host, args.port)
     log_execution(outcomes, separation)
 
     print("\nAll drones finished.")

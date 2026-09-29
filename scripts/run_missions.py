@@ -383,7 +383,11 @@ def main() -> int:
             )
         count = needed[0]
         roster = current_roster(agent)
-        if len(roster) != count:
+        # A LARGER roster is fine: a simulator booted with four drones flies a
+        # two-drone mission using Drone1 and Drone2, leaving the others parked.
+        # Only too few vehicles is a problem, because the missing ones cannot be
+        # created without a restart.
+        if len(roster) < count:
             sys.exit(
                 f"simulator has {len(roster)} drone(s) {roster}, these missions need {count}.\n"
                 f"Write the roster and restart the simulator, then re-run:\n"

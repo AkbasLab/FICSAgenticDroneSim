@@ -60,7 +60,10 @@ def main() -> int:
     if count < 1:
         sys.exit("need at least one drone")
 
-    written, changed = agent.write_settings(count)
+    # exact=True so this tool can shrink a fleet as well as grow it. The
+    # flight path deliberately never shrinks -- it reuses a larger roster
+    # rather than rewriting and demanding a restart.
+    written, changed = agent.write_settings(count, exact=True)
     after = current(written)
 
     print(f"settings.json : {written}")

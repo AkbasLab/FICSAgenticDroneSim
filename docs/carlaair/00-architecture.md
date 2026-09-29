@@ -135,13 +135,38 @@ for f in futures:
     f.join()                  # both climb together, then both are waited on
 ```
 
-> **One client per thread.** `msgpack-rpc-python` multiplexes one TCP socket and
-> is **not documented as thread-safe**. Sharing a single `MultirotorClient`
-> across threads works in light use and is a plausible source of rare, ugly
-> failures under load. If you run a thread per drone, give each thread its own
-> client. This project's baseline currently shares one — recorded as an open
-> question in `phases/phase-01-baseline-freeze/`, to be settled by the first
-> multi-drone flight test rather than by assertion.
+> **One client per thread — measured, not advised.** `msgpack-rpc-python`
+> multiplexes one TCP socket over a tornado IOLoop that is not thread-safe.
+> Sharing a single `MultirotorClient` across two drone threads failed on the
+> first attempt, on both drones simultaneously:
+>
+> ```
+> [Drone1] FAILED: RuntimeError: IOLoop is already running
+> [Drone2] FAILED: BufferError: Existing exports of data: object cannot be re-sized
+> ```
+>
+> Neither aircraft left the ground. Give every thread its own connection; they
+> are cheap. Single-drone code will never show this, because one thread never
+> contends.
+
+> **`simAddVehicle` ignores the pose you give it.** A vehicle added to a running
+> simulator appears at the player start regardless of the `Pose` argument —
+> asked for `x=12`, measured `x=0`. Every runtime-spawned drone therefore
+> stacks on whatever is already there, and two spawned this way came within
+> **0.08 m** of each other in flight. Place them explicitly with
+> `simSetVehiclePose` afterwards, then read the positions back and check them:
+> nothing in this stack avoids collisions, so a silent placement failure puts
+> aircraft on top of each other.
+>
+> ```python
+> client.simAddVehicle("Drone2", "SimpleFlight", pose)        # pose ignored
+> client.simSetVehiclePose(pose, ignore_collision=True,
+>                          vehicle_name="Drone2")             # this one works
+> ```
+>
+> Runtime vehicles get **no cameras** and do not survive a restart. They do
+> survive `reset()`. Declare a persistent fleet in `settings.json` if you need
+> cameras; otherwise spawning at runtime removes the restart entirely.
 
 ### Two different ways to stop time
 
