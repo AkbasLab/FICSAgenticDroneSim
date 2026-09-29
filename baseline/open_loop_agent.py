@@ -226,6 +226,64 @@ def vehicle_names(count: int) -> list[str]:
     return [f"Drone{i}" for i in range(1, count + 1)]
 
 
+# Camera block copied from the package's own AirSimConfig/settings.json. The
+# offsets, orientations and FOV are the shipped values; do not simplify them.
+# A settings file that AirSim dislikes does not produce an error -- the
+# simulator exits during startup, silently, with no log and no crash dump.
+CAMERA_TEMPLATE = {
+    "0": {
+        "CaptureSettings": [{"ImageType": 0, "Width": 1280, "Height": 960}],
+        "X": 0.5, "Y": 0.0, "Z": 0.1,
+        "Pitch": 0.0, "Roll": 0.0, "Yaw": 0.0,
+    },
+    "front_center": {
+        "CaptureSettings": [
+            {"ImageType": 0, "Width": 1280, "Height": 960, "FOV_Degrees": 90}
+        ],
+        "X": 0.2, "Y": 0.0, "Z": -0.1,
+        "Pitch": 0.0, "Roll": 0.0, "Yaw": 0.0,
+    },
+}
+
+
+def build_settings(count: int) -> dict[str, Any]:
+    """Build the settings.json contents for `count` drones.
+
+    Mirrors the package's shipped template, because deviating from it killed
+    the simulator: an earlier version wrote vehicle-level "X"/"Y"/"Z" keys, and
+    with "Z": 0.0 the process exited ten seconds into startup every time. Zero
+    in NED is world origin height, not ground level, so the vehicle was being
+    placed into the terrain. There was no error message, no log and no crash
+    dump -- it simply stopped.
+
+    Consequences for anyone editing this:
+
+    * NO vehicle-level Z. Let AirSim place the drone at the PlayerStart.
+    * X is emitted only for the second drone onwards, purely as lateral spacing
+      so that four drones do not spawn inside each other. There is no collision
+      avoidance anywhere in this stack.
+    * The camera block is the shipped one, verbatim.
+
+    Pure, so it can be tested without touching the Documents folder.
+    """
+    vehicles = {}
+    for index, name in enumerate(vehicle_names(count)):
+        vehicle: dict[str, Any] = {
+            "VehicleType": "SimpleFlight",
+            "AutoCreate": True,
+            "Cameras": CAMERA_TEMPLATE,
+        }
+        if index:
+            vehicle["X"] = index * SPACING
+        vehicles[name] = vehicle
+
+    return {
+        "SettingsVersion": 1.2,
+        "SimMode": "Multirotor",   # suppresses the car-or-drone dialog at launch
+        "Vehicles": vehicles,
+    }
+
+
 def write_settings(count: int) -> tuple[str, bool]:
     """Write settings.json for `count` drones. Returns (path, changed).
 
@@ -233,27 +291,7 @@ def write_settings(count: int) -> tuple[str, bool]:
     Drone1. AirSim reads this only at process start, so a change means the
     simulator has to be restarted before it takes effect.
     """
-    settings = {
-        "SettingsVersion": 1.2,
-        "SimMode": "Multirotor",
-        "Vehicles": {
-            name: {
-                "VehicleType": "SimpleFlight",
-                "AutoCreate": True,
-                "X": index * SPACING,
-                "Y": 0.0,
-                "Z": 0.0,
-                "Cameras": {
-                    "front_center": {
-                        "CaptureSettings": [
-                            {"ImageType": 0, "Width": 1280, "Height": 960}
-                        ]
-                    }
-                },
-            }
-            for index, name in enumerate(vehicle_names(count))
-        },
-    }
+    settings = build_settings(count)
 
     directory = os.path.join(documents_dir(), "AirSim")
     os.makedirs(directory, exist_ok=True)

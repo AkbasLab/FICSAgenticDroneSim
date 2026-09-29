@@ -1,0 +1,24 @@
+{
+  "SettingsVersion": 1.2,
+  "SimMode": "Multirotor",
+  "Vehicles": {
+    "Drone1": {
+      "VehicleType": "SimpleFlight",
+      "AutoCreate": true,
+      "X": 0.0,
+      "Y": 0.0,
+      "Z": 0.0,
+      "Cameras": {
+        "front_center": {
+          "CaptureSettings": [
+            {
+              "ImageType": 0,
+              "Width": 1280,
+              "Height": 960
+            }
+          ]
+        }
+      }
+    }
+  }
+}

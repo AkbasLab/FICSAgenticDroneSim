@@ -174,6 +174,49 @@ for 1.3, where "did the plan execute" must not be contaminated by cleanup.
 Not yet re-verified in flight — the fix needs an M01 re-run, then M02, which is
 the first real exercise of the landing path.
 
+### 2026-09-28 — the agent's settings.json killed the simulator
+
+After the first flight, every subsequent launch died during startup: the
+process started, reached ~750 MB resident, and exited before opening its ports.
+**No error dialog, no log, no crash dump, and no entry in the Windows event
+log.** From the outside it looked like a broken install.
+
+The timing was the clue. The 19:54 launch was healthy; the agent ran at 19:55
+and rewrote `settings.json`; every launch after that failed.
+
+**A/B, run twice each way:**
+
+| `settings.json` | Result |
+|---|---|
+| Shipped `AirSimConfig/settings.json` | both ports up in 5 s |
+| Written by `write_settings()` | process dead in 10 s |
+| Written by the fixed `build_settings()` | both ports up in 5 s |
+
+**Cause.** The generated file carried vehicle-level `"X"`, `"Y"` and `"Z"`
+keys, which the shipped template does not. `"Z": 0.0` is **world origin height
+in NED, not ground level**, so the vehicle was being placed inside the terrain.
+AirSim did not report this; the simulator simply stopped.
+
+The failing file is kept at
+[`evidence/settings-that-killed-the-simulator.json`](evidence/settings-that-killed-the-simulator.json).
+
+**Fix.** `build_settings()` now mirrors the shipped template: no vehicle-level
+`Z` or `Y`, both shipped cameras with their offsets and FOV verbatim, and `X`
+emitted only from the second drone onwards — purely as spawn spacing, since
+nothing in this stack avoids collisions.
+
+Split out as a pure function so it can be tested without writing into the
+Documents folder, and covered by `tests/test_settings.py`: no vehicle-level Z
+or Y, first drone unoffset, later drones spaced, both cameras present with
+their offsets. Those tests cannot prove the simulator will start — only a
+launch does that — but they pin the exact mistake that caused this.
+
+**Worth remembering for later phases:** AirSim's failure mode for a
+configuration it dislikes is *silent exit during startup*. Anything that
+generates `settings.json` — Phase 4's scenario configs especially — should be
+A/B tested against a known-good file rather than trusted because it looks
+reasonable.
+
 ### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after
