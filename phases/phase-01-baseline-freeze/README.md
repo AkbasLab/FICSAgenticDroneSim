@@ -259,6 +259,44 @@ Recordings live outside the repository. Video has no place in version control:
 this one clip is 64 MB, and a full mission set would be gigabytes in history
 that can never be removed.
 
+### 2026-09-28 — M02 flown, scripted flight enabled, teardown refined
+
+M02 (`hover for 3 seconds then land`) flown against the live simulator. Plan
+`hover, land` in 1.7 s warm; both steps executed; final state confirmed over
+the API as `z = 29.25` — exactly the arming height — with `landed_state =
+Landed`. The **planned** landing path works, which matters in a build with no
+terrain collision, where landing depends entirely on the ground height recorded
+at arm time.
+
+**Scripted flight.** Flying 8 missions × 3 repeats by hand means 24 sessions of
+pressing Enter, which is both tedious and a source of inconsistency. `--yes`
+skips the interactive gates for scripted runs.
+
+It deliberately does **not** skip the settings-changed gate: if `settings.json`
+no longer matches the running simulator, the roster on disk is wrong and flying
+on would address vehicles that do not exist. A scripted run stops there and
+tells its caller to restart the simulator.
+
+**Execution logging.** `fly()` now returns an execution record — planned steps,
+executed steps, completion, failure, flight seconds, ground height — appended
+to `runs/agent-log.jsonl` tagged `"kind": "execution"`. Kept separate from the
+planning record because a plan exists even when nothing flies, and a correct
+plan can still fail in flight. 1.3 has to report both.
+
+**A redundant landing, found and removed.** With execution working, M02 landed
+**twice**: once from the plan, once from teardown. `landAsync` returns before
+AirSim updates `landed_state`, so checking vehicle state immediately afterwards
+reports "flying" for an aircraft that is already descending. Both a height
+heuristic and the `landed_state` field failed this way.
+
+Fixed by trusting the plan instead of polling the vehicle: if the last executed
+step was a successful `land`, teardown skips its own. Verified both directions
+in flight — M02 lands once, M01 (which ends airborne) still gets its teardown
+landing.
+
+Timing-dependent state checks are worth distrusting generally here; this is the
+second time a plausible one has been wrong.
+
 ### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after

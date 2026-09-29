@@ -187,6 +187,33 @@ class PlanRecord:
         }
 
 
+def log_execution(outcomes: list[dict[str, Any]]) -> None:
+    """Append one execution record for a flown mission.
+
+    Written to the same JSONL as the planning records, tagged `"kind":
+    "execution"`, so a reader can reconstruct a whole mission from one file:
+    what was asked, what was planned, and what the aircraft actually did.
+
+    These two are deliberately separate records rather than one. A plan is
+    produced even when nothing flies (`--plan-only`), and a plan can be correct
+    while the flight fails -- which is precisely the distinction 1.3 has to
+    report.
+    """
+    record = {
+        "t": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "kind": "execution",
+        "drones": len(outcomes),
+        "completed": all(o["completed"] for o in outcomes),
+        "outcomes": outcomes,
+    }
+    try:
+        os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+        with open(LOG_PATH, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record) + "\n")
+    except OSError as exc:
+        print(f"  [log write failed: {exc}]")
+
+
 def log_record(record: PlanRecord) -> None:
     """Append one planning call to the JSONL log.
 
@@ -526,8 +553,13 @@ class DroneRunner:
         else:  # unreachable: validate() rejects unknown actions
             raise PlanError(f"unhandled action {action!r}")
 
-    def fly(self, steps: list[dict[str, Any]]) -> None:
+    def fly(self, steps: list[dict[str, Any]]) -> dict[str, Any]:
         """Arm, take off, execute the whole plan, then land and release control.
+
+        Returns an execution record: which steps ran, which failed, and how long
+        it took. The plan record says what the model produced; this says what the
+        aircraft did, and 1.3 needs both -- a correct plan that fails in flight
+        is not a successful mission.
 
         This is the thread body. It never raises: an exception here would die
         inside a worker thread where nobody sees it, leaving the vehicle armed
@@ -541,12 +573,16 @@ class DroneRunner:
         rest -- open loop means exactly that, and pretending otherwise would
         quietly make this a different architecture.
         """
+        started = time.time()
+        executed: list[str] = []
+        failure: str | None = None
         try:
             self.arm()
             self.take_off()
             for position, step in enumerate(steps, start=1):
                 self._say(f"{position}/{len(steps)} {step['action']}")
                 self.step(step)
+                executed.append(step["action"])
             # A plan without a final land leaves the drone airborne. Hover to
             # stop it drifting on whatever velocity the last step left behind;
             # teardown then brings it down.
@@ -554,24 +590,60 @@ class DroneRunner:
                 self._say("plan ended without land; holding")
                 self.client.hoverAsync(vehicle_name=self.name).join()
         except Exception as exc:
-            self._say(f"FAILED: {type(exc).__name__}: {exc}")
+            failure = f"{type(exc).__name__}: {exc}"
+            self._say(f"FAILED: {failure}")
         finally:
-            self._land_and_release()
+            # If the plan's last step was a successful `land`, the aircraft is
+            # already coming down and teardown must not land it again. Trusting
+            # the plan beats polling the vehicle: `landAsync` returns before
+            # AirSim updates `landed_state`, so a state check right here reports
+            # "flying" for an aircraft that is metres off the ground and
+            # descending.
+            ended_landed = bool(executed) and executed[-1] == "land" and failure is None
+            self._land_and_release(skip_landing=ended_landed)
+
+        return {
+            "drone": self.name,
+            "planned": [s["action"] for s in steps],
+            "executed": executed,
+            # Completed means every step ran, not that the outcome was correct.
+            "completed": len(executed) == len(steps) and failure is None,
+            "failure": failure,
+            "flight_seconds": round(time.time() - started, 1),
+            "ground_z": round(self.ground_z, 2),
+        }
 
     def _is_airborne(self) -> bool:
-        """True if the vehicle is meaningfully above where it armed."""
+        """True if the vehicle still needs landing before control is released.
+
+        Asks AirSim for its landed state first. A height comparison alone is
+        unreliable here: `landAsync` returns before the aircraft has fully
+        settled, so a plan ending in `land` looked airborne to a z-check and got
+        landed a second time -- harmless, but it added a redundant descent to
+        every mission that lands, and would have appeared in every 1.3 run and
+        every recording.
+        """
         try:
             state = self.client.getMultirotorState(vehicle_name=self.name)
-            z = state.kinematics_estimated.position.z_val
         except Exception:
             # If the state cannot be read, assume airborne: attempting a landing
             # that was not needed is harmless, skipping one that was is not.
             return True
-        # NED: more negative is higher.
-        return z < self.ground_z - AIRBORNE_MARGIN
 
-    def _land_and_release(self) -> None:
+        # LandedState: 0 = Landed, 1 = Flying. Authoritative when available.
+        landed_state = getattr(state, "landed_state", None)
+        if landed_state is not None:
+            return landed_state != 0
+
+        # Fall back to height if the field is missing. NED: more negative is
+        # higher.
+        return state.kinematics_estimated.position.z_val < self.ground_z - AIRBORNE_MARGIN
+
+    def _land_and_release(self, skip_landing: bool = False) -> None:
         """Bring the aircraft down, then hand control back.
+
+        `skip_landing` is passed when the plan itself ended with a successful
+        `land`, so the descent is already under way.
 
         THIS IS TEARDOWN, NOT PART OF THE PLAN. It runs after the plan has
         finished, or after it failed, and it is not scored: the plan is what the
@@ -584,7 +656,7 @@ class DroneRunner:
         was released.
         """
         try:
-            if self._is_airborne():
+            if not skip_landing and self._is_airborne():
                 self._say("teardown: landing before releasing control")
                 self.step({"action": "land"})
         except Exception as exc:
@@ -635,6 +707,9 @@ def main() -> int:
     parser.add_argument("--model", default=MODEL, help=f"Ollama model (default {MODEL})")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=AIRSIM_PORT)
+    parser.add_argument("--yes", action="store_true",
+                        help="skip the interactive gates; for scripted runs "
+                             "against an already-loaded map")
     args = parser.parse_args()
 
     count = args.drones or int(input("How many drones?  ").strip() or "1")
@@ -652,6 +727,13 @@ def main() -> int:
         if changed:
             print("  settings changed: RESTART the simulator before flying, "
                   "AirSim reads this file only at startup")
+            # --yes does NOT skip this one. The roster on disk no longer matches
+            # the running simulator, so flying on would address vehicles that do
+            # not exist. A scripted run must stop here and let its caller
+            # restart the simulator.
+            if args.yes:
+                print("  refusing to continue: --yes cannot substitute for a restart")
+                return 1
             if input("  restart done? [y/N]  ").strip().lower() not in ("y", "yes"):
                 return 1
 
@@ -692,7 +774,9 @@ def main() -> int:
 
     # Manual gate: the RPC port opens well before the map finishes loading, and
     # arming into a half-loaded world produces failures that look like bugs.
-    input("\nPress Enter once the map has loaded to launch all drones.  ")
+    # --yes skips it for scripted runs, where the caller has already waited.
+    if not args.yes:
+        input("\nPress Enter once the map has loaded to launch all drones.  ")
 
     # One thread per drone, all sharing the one client. Threads rather than
     # AirSim's own async futures because each drone runs a SEQUENCE: within a
@@ -701,16 +785,25 @@ def main() -> int:
     # Note every runner gets the same `client` -- see the thread-safety caveat
     # on DroneRunner. Changing to one client per thread is a two-line edit here
     # if multi-drone runs prove unreliable.
-    threads = [
-        threading.Thread(target=DroneRunner(client, r.drone).fly, args=(r.plan,))
-        for r in records
-    ]
+    outcomes: list[dict[str, Any]] = []
+    lock = threading.Lock()
+
+    def run(record: PlanRecord) -> None:
+        outcome = DroneRunner(client, record.drone).fly(record.plan)
+        with lock:                     # list.append is atomic, but be explicit
+            outcomes.append(outcome)
+
+    threads = [threading.Thread(target=run, args=(r,)) for r in records]
     for thread in threads:
         thread.start()
     # Join every thread before returning: exiting with drones still flying
     # leaves them armed and under API control.
     for thread in threads:
         thread.join()
+
+    # Execution record, one line per run, beside the planning records. Written
+    # here rather than in the thread so a multi-drone mission is one entry.
+    log_execution(outcomes)
 
     print("\nAll drones finished.")
     return 0
