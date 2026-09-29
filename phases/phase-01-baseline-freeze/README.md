@@ -523,41 +523,6 @@ spawning, per-thread connections), so those runs cannot be reproduced exactly
 from the current tree. That is an argument for re-flying Block A once the
 harness settles, and the reason is now recorded rather than discovered later.
 
-### 2026-09-28 — a per-drone camera view, and what it revealed about cameras
-
-M09 is the first mission where the drones do different things at the same time,
-and one third-person viewport cannot show both. `tools/drone_view.py` pulls the
-`front_center` image for each drone over the API and lays the tiles side by
-side, captioned with name, X, Y and altitude.
-
-Building it surfaced a constraint worth recording: **runtime-spawned drones
-have no cameras.** `simAddVehicle` creates a flyable vehicle, which is why the
-interactive drone count works at all, but it does not attach the `Cameras`
-block that `settings.json` declares. A drone added at runtime can fly, be
-posed, report state and collide; it cannot be seen from. So a mission that is
-to be watched per drone needs its roster **declared before launch**:
-
-    python tools/write_roster.py 2      # then restart the simulator
-
-That is not a workaround being reintroduced. Flying N drones still needs no
-roster edit; only *watching* them does. The distinction is now in
-`docs/CONTROLS.md` §7 rather than in someone's memory.
-
-The viewer is deliberately outside the experiment. It records nothing and
-scores nothing, and the baseline agent never reads an image — it is blind by
-design, which is the control condition. The one real cost is measured, not
-waved away: a 1280×960 capture per drone per frame over RPC, on a machine
-already at ~93% of 4 GB of VRAM, hence 5 fps by default rather than 30. If a
-flight's timing moves when the viewer is running, that is a confound and the
-viewer comes off, not the frame rate up.
-
-**Considered and rejected:** AirSim's `SubWindows` settings key, which would
-render sub-views inside the simulator window itself and cost no RPC. Our
-`docs/carlaair/` reference set does not document it for this build, and an
-untested settings key is exactly what killed the simulator silently a few days
-ago. The documented `simGetImages` path was taken instead. `SubWindows` remains
-worth testing later, deliberately and not on the eve of a scored run.
-
 ### 2026-09-28 — drones vibrating in mid air: three defects, one of them ours
 
 Reported symptom: after starting a two-drone session, "the drones are stuck in
@@ -610,22 +575,6 @@ world origin — so every placement lifted each drone 29 m and dropped it. It no
 preserves the drone's current z and slides it sideways. And the separation gate
 was sampling mid-fall, reading 10.18 m for drones 4 m apart, so measurement now
 waits for motion to stop.
-
-#### The camera views cost more than they are worth during a scored run
-
-One viewer frame measured **500–980 ms for two drones** at 1280×960 — 1–2 fps,
-not the 5 the default asks for. Each capture forces an extra scene render and a
-readback stall on a GPU already at 87–96%.
-
-Flight timing is otherwise the most stable thing in these results: M02 repeated
-21.2 s three times, and traffic on versus off moved it by 0.2 s. A viewer that
-stalls the simulator for up to a second per frame would swamp that, and flight
-duration is part of what the missions measure.
-
-So the scored flight and the watched flight are separated: **M09 is scored with
-the viewer off**, and any recording with camera views is flown separately and
-labelled a demonstration rather than scored. Recording the simulator viewport
-of the scored run remains free, because it renders nothing extra.
 
 ### Pending — 1.3
 

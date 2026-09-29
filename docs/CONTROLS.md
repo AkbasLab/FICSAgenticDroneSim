@@ -222,54 +222,7 @@ the point of Phase 5 onward.
 
 ---
 
-## 7. Watching what each drone sees
-
-The simulator window shows one third-person camera. To see the onboard view of
-every drone at once, run the viewer in a second terminal while a mission flies:
-
-```
-python tools\drone_view.py
-```
-
-One tile per drone, captioned with name, X, Y and altitude, refreshed 5 times a
-second. `q` or Escape closes it.
-
-**Only drones declared in `settings.json` have cameras.** A drone created at
-runtime by `simAddVehicle` has none, and gets a tile saying so. To watch two
-drones, declare two before starting the simulator:
-
-```
-python tools\write_roster.py 2
-```
-
-### Do not run it during a scored flight
-
-Measured on this machine, 2026-09-28: **one viewer frame costs 500-980 ms for
-two drones.** That is 1-2 fps, not the 5 the default asks for. Each capture
-forces an extra scene render from the drone's viewpoint and a readback stall,
-on a GPU already sitting at 87-96% of its 4 GB.
-
-That matters because flight timing here is otherwise remarkably stable --
-mission flight times repeat within about 0.1 s. A viewer that stalls the
-simulator for up to a second per frame would swamp that, and flight duration is
-part of what the missions measure.
-
-So the scored run and the watched run are **two separate flights**:
-
-| | Scored | Demonstration |
-|---|---|---|
-| Viewer | off | on |
-| Purpose | the numbers | the recording |
-| Recorded in results | yes | labelled a demo, not scored |
-
-The viewer is a viewer. It records nothing, scores nothing, and the baseline
-agent never sees an image -- it is blind by design. To make a demonstration
-flight smoother, drop the camera resolution in `settings.json` (1280x960 is
-generous for a preview) rather than raising `--fps`.
-
----
-
-## 8. Ports, paths and constants
+## 7. Ports, paths and constants
 
 | | |
 |---|---|
@@ -287,7 +240,7 @@ generous for a preview) rather than raising `--fps`.
 
 ---
 
-## 9. Diagnostics
+## 8. Diagnostics
 
 | Symptom | Check |
 |---|---|
