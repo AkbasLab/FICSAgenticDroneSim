@@ -523,6 +523,41 @@ spawning, per-thread connections), so those runs cannot be reproduced exactly
 from the current tree. That is an argument for re-flying Block A once the
 harness settles, and the reason is now recorded rather than discovered later.
 
+### 2026-09-28 — a per-drone camera view, and what it revealed about cameras
+
+M09 is the first mission where the drones do different things at the same time,
+and one third-person viewport cannot show both. `tools/drone_view.py` pulls the
+`front_center` image for each drone over the API and lays the tiles side by
+side, captioned with name, X, Y and altitude.
+
+Building it surfaced a constraint worth recording: **runtime-spawned drones
+have no cameras.** `simAddVehicle` creates a flyable vehicle, which is why the
+interactive drone count works at all, but it does not attach the `Cameras`
+block that `settings.json` declares. A drone added at runtime can fly, be
+posed, report state and collide; it cannot be seen from. So a mission that is
+to be watched per drone needs its roster **declared before launch**:
+
+    python tools/write_roster.py 2      # then restart the simulator
+
+That is not a workaround being reintroduced. Flying N drones still needs no
+roster edit; only *watching* them does. The distinction is now in
+`docs/CONTROLS.md` §7 rather than in someone's memory.
+
+The viewer is deliberately outside the experiment. It records nothing and
+scores nothing, and the baseline agent never reads an image — it is blind by
+design, which is the control condition. The one real cost is measured, not
+waved away: a 1280×960 capture per drone per frame over RPC, on a machine
+already at ~93% of 4 GB of VRAM, hence 5 fps by default rather than 30. If a
+flight's timing moves when the viewer is running, that is a confound and the
+viewer comes off, not the frame rate up.
+
+**Considered and rejected:** AirSim's `SubWindows` settings key, which would
+render sub-views inside the simulator window itself and cost no RPC. Our
+`docs/carlaair/` reference set does not document it for this build, and an
+untested settings key is exactly what killed the simulator silently a few days
+ago. The documented `simGetImages` path was taken instead. `SubWindows` remains
+worth testing later, deliberately and not on the eve of a scored run.
+
 ### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after
@@ -542,12 +577,11 @@ the multi-drone missions, or the single-drone missions become invalid.
 
 ## Open questions
 
-- **One AirSim client shared across threads.** `DroneRunner` threads share a
-  single `MultirotorClient`. `msgpack-rpc-python` multiplexes one socket and is
-  not documented as thread-safe, so this is a plausible source of rare failures
-  under multi-drone load. Settle it at the first M09/M10 flight test — either
-  observe it working reliably, or give each thread its own client. Do not settle
-  it by assertion either way.
+- ~~**One AirSim client shared across threads.**~~ **Settled 2026-09-28 by
+  flying it.** Not a rare failure under load — it failed immediately and
+  totally, `RuntimeError: IOLoop is already running` and `BufferError:
+  Existing exports of data`, with neither drone leaving the ground. Each thread
+  now opens its own connection. See the multi-drone entry above.
 - **Does CARLA synchronous mode gate AirSim physics?** Both plugins share one
   UE4 tick loop, so it plausibly does, but the two APIs have no shared notion of
   time and this has not been tested. It decides whether deterministic replay of

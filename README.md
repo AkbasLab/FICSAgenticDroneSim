@@ -120,14 +120,16 @@ docs/       RESEARCH_PLAN · SETUP · CONTROLS · BASELINE_* · carlaair/ refere
 configs/    missions/ — the mission set as data, edit here to add or change one
 baseline/   the open-loop agent — original to this project, and frozen
 scripts/    experiment entry points: run_missions.py
-tools/      development tooling: audit_repo.py, the doc generators
+tools/      operator and maintenance tooling: write_roster.py, drone_view.py,
+            audit_repo.py, the doc generators
 tests/      unit tests for the pure logic — no simulator, no model
 phases/     one folder per phase: objectives, exit criterion, evidence, decisions
 runs/       raw run output; the directory is tracked, its contents are not
 ```
 
 **`scripts/` versus `tools/`**: scripts run experiments and produce evidence;
-tools maintain the repository and never appear in a result. The split follows
+tools set the machine up, watch it, or maintain the repository, and never
+appear in a result. The split follows
 the module tree in `AUV-03`, which Phase 2 builds out.
 
 **Two output locations, deliberately.** `runs/agent-log.jsonl` is the raw,

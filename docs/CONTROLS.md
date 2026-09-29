@@ -222,7 +222,36 @@ the point of Phase 5 onward.
 
 ---
 
-## 7. Ports, paths and constants
+## 7. Watching what each drone sees
+
+The simulator window shows one third-person camera. To see the onboard view of
+every drone at once, run the viewer in a second terminal while a mission flies:
+
+```
+python tools\drone_view.py
+```
+
+One tile per drone, captioned with name, X, Y and altitude, refreshed 5 times a
+second. `q` or Escape closes it.
+
+**Only drones declared in `settings.json` have cameras.** A drone created at
+runtime by `simAddVehicle` has none, and gets a tile saying so. To watch two
+drones, declare two before starting the simulator:
+
+```
+python tools\write_roster.py 2
+```
+
+The viewer is a viewer. It reads images over the API and displays them; it
+records nothing, scores nothing, and the baseline agent never sees an image --
+it is blind by design. Each frame does cost a full 1280x960 capture per drone
+over RPC, on a machine already near its VRAM limit, which is why the default is
+5 fps rather than 30. If it disturbs a flight, drop the camera resolution in
+`settings.json` rather than raising `--fps`.
+
+---
+
+## 8. Ports, paths and constants
 
 | | |
 |---|---|
@@ -240,7 +269,7 @@ the point of Phase 5 onward.
 
 ---
 
-## 8. Diagnostics
+## 9. Diagnostics
 
 | Symptom | Check |
 |---|---|
