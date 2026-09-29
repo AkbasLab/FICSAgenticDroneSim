@@ -19,9 +19,10 @@ University.
 | 10 | Degraded comms | Replay one mission under four comms conditions, reproducibly | 30 |
 | 11 | Runtime-safety guardian | Every unsafe command is blocked and named | 45 |
 | 12 | LLM as agent policy | Each drone decides via its own model context, still validated | 60 |
+| 13 | Comparison architectures | A-E and six ablations selected by configuration | 23 |
 | — | Simulator path | Every `--airsim` entry point runs end to end | 17 |
 
-**247 tests, 13 demos, none requiring a simulator, GPU or API key:**
+**270 tests, 14 demos, none requiring a simulator, GPU or API key:**
 
 ```bash
 python scripts/run_all_tests.py
@@ -1336,7 +1337,7 @@ the `--airsim` column says otherwise.
 
 | Phase | Command | What it shows | AirSim? |
 |---|---|---|---|
-| all | `python scripts/run_all_tests.py` | 247 tests + 13 demos, one summary | no |
+| all | `python scripts/run_all_tests.py` | 270 tests + 14 demos, one summary | no |
 | 1 | `python scripts/run_single_mission.py --planner rule --adapter mock` | English → validated plan → flight | `--adapter airsim` |
 | 2 | `python tests/test_behavior_preservation.py` | refactor changed structure, not behaviour | no |
 | 3 | `python scripts/phase3_demo.py` | 4 drones run skills concurrently | `--adapter airsim` |
@@ -1368,6 +1369,7 @@ python tests/test_roles_recovery.py         # 22   Phase 9
 python tests/test_network.py                # 30   Phase 10
 python tests/test_guardian.py               # 45   Phase 11
 python tests/test_llm_policy.py             # 60   Phase 12
+python tests/test_architectures.py          # 23   Phase 13
 python tests/test_airsim_path.py            # 17   the --airsim path, faked
 ```
 
@@ -1496,7 +1498,7 @@ agentic_uav/
                  llm_log.py            prompts, outputs, fallback rate
 configs/missions/search_relay_001.yaml  the canonical scenario
 scripts/         one runnable demo per phase
-tests/           247 tests, no simulator required
+tests/           270 tests, no simulator required
 docs/            Phase_Documentation.md (this file)
                  TESTING.md       verify each phase, and break it on purpose
                  SIM_TESTING.md   flying it in CARLA-Air
@@ -1529,3 +1531,164 @@ than a failing test.
    Phase 2.
 
 Before pushing: `python scripts/run_all_tests.py` should print **ALL GREEN**.
+
+---
+
+## Phase 13 — The experimental comparison architectures
+
+**Goal.** Turn a system into a study. Twelve phases produced one architecture;
+a paper needs several that differ in exactly one respect each, so that a
+measured difference can be attributed to something.
+
+**One spec, one builder.** `ArchitectureSpec` is a frozen dataclass and
+`build()` is the only thing that constructs a team. Selecting an architecture
+is a configuration change, which is the phase's exit criterion — and a
+scientific requirement rather than tidiness. Four separate programs would differ
+in a hundred incidental ways and any result could be attributed to any of them.
+
+| | architecture | coordination | policy | isolates |
+|---|---|---|---|---|
+| **A** | Centralized fleet controller | centralized | rule | centralized vs decentralized |
+| **B** | Independent persistent agents | none | rule | the value of coordinating at all |
+| **C** | Deterministic decentralized | contract-net | rule | architecture, without an LLM |
+| **D** | Agentic decentralized | contract-net | LLM | the contribution of LLM reasoning |
+| **E** | Open-loop preflight | none | fixed plan | historical context only |
+
+Six ablations are `replace()`d from their parent so they cannot accidentally
+differ in a second respect: no persistent memory, no leases, no dynamic roles,
+perfect comms, C with comms-health inputs, and D with the model disabled.
+
+**Held constant by construction, and asserted.** The same scenario, skills,
+executor, sensor model, network model and safety guardian. `test_architectures.py`
+checks this rather than trusting it: identical rosters, identical guardian
+limits, identical executor and adapter types, and the same `NetworkProfile` for
+a given condition. These are validity tests, not functional ones — a functional
+bug makes a run crash, a validity bug makes every run succeed and every number
+mean something other than what the paper claims.
+
+**The strongest single check** is that D with the LLM disabled reproduces C. If
+it ever fails, C and D differ in something besides the model and every
+C-versus-D number is confounded.
+
+### Architecture A in detail
+
+It uses `compute_bid` — the identical cost function Architecture C bids with —
+so a difference between A and C is a difference between centralized and
+decentralized control, not between two cost models. State reports in and
+commands out are ordinary messages on the ordinary bus, so the Phase 10 model
+delays and drops them exactly as it does peer traffic. Drones that lose contact
+fall back to a deliberately weak local rule: greedy, unilateral, no attempt to
+avoid duplicating a teammate, because coordinating the fallback would smuggle
+decentralization into the centralized baseline.
+
+Four bugs surfaced while making A behave:
+
+*A drone awaiting orders quit the loop.* With no task and no events the agent
+finished immediately — and since its clock only advances while flying, the first
+award could never arrive. Waiting is now a real `HOLD`, which costs time and
+battery. That cost is a genuine property of centralized control, not an artefact.
+
+*The controller was silent between assignments*, so under **perfect**
+communication drones still concluded they were disconnected and self-assigned
+sectors they were already flying. Added a controller heartbeat and an
+end-of-mission release.
+
+*The controller's clock ran at the fleet's slowest drone.* `run()` ticked it at
+the minimum agent clock, so its heartbeat cadence froze behind whoever was
+mid-sweep while faster drones raced ahead and declared themselves cut off. It
+now runs at the fleet's leading edge, which is what a continuously-running
+process actually experiences.
+
+*Its "drone lost" timeout was shorter than a sweep.* At 90 s it declared healthy
+drones lost mid-sweep and duplicated their work. It now obeys the same rule as
+Phase 9's task lease — **longer than the longest skill** — so A and C tolerate
+silence equally.
+
+### Two findings that matter more than the code
+
+**1. The canonical scenario cannot discriminate between architectures.** With
+four drones, four sectors and no faults, every architecture scores 1.00 coverage
+in 112 s — including B, which never coordinates. B is *optimal by construction*
+when the work is pre-partitioned and nothing goes wrong. Coordination only has
+anything to do once a drone is lost, so fault injection is not an optional extra
+in this study; without it the comparison measures nothing. `run()` therefore
+takes `stop_at`, and faults land on skill boundaries because simulated time
+advances one whole skill at a time.
+
+**2. The recovery mechanisms were slower than the mission.** This one nearly
+produced a false result. At the demo default of a 20 s heartbeat a peer is not
+declared failed until 8 × 20 = **160 s**, and the task lease is **120 s** — but
+a run of this scenario lasts about **112 s**. So no architecture could ever
+reclaim a lost drone's work, and a comparison run at those settings would have
+reported "decentralized coordination does not recover from failures", which is
+false. It is configured to notice after the deadline.
+
+It was caught only because C and D disagreed when they should not have: C scored
+0.75 and D scored 1.00 on the same fault, which is impossible if they differ
+only in the policy. The real cause was that D's agents happened to stay alive
+longer, giving the lease time to lapse.
+
+| heartbeat | failure declared after | C coverage, one drone lost |
+|---|---|---|
+| 20 s (demo default) | 160 s | 0.75 |
+| 10 s | 80 s | 1.00 |
+| 8 s (experiment default) | 64 s | 1.00 |
+
+`run_experiment.py` now defaults to an 8 s heartbeat and `check_timings()`
+prints a loud warning whenever detection or the lease outlasts a typical run.
+A test asserts the same thing, because the failure is silent: every run still
+completes and still looks comparable.
+
+**A third, smaller trap:** `memory_turns=0` did nothing, because `lst[-0:]` is
+the whole list rather than an empty one. The no-memory ablation was silently a
+no-op until a validity test checked that it actually removed anything.
+
+**Exit criterion.** With a drone lost at t=1 s:
+
+```
+arch condition    cov  home  dup    time   notes
+A    nominal     1.00     3    1     337   5 assigned, 1 reassigned
+A    severe      0.75     3    3     719   14 assigned, 10 reassigned
+B    nominal     0.75     3    0     112
+C    nominal     1.00     3    0     195
+D    nominal     1.00     3    0     112   llm fallback 59%
+E    nominal     0.75     3    0     112
+D5   nominal     1.00     3    0     195   llm fallback 100%  (reproduces C)
+```
+
+Coordination recovers the lost sector (C, D beat B, E); decentralized survives
+degradation where centralized does not (C, D beat A under `severe`); and D with
+the model switched off reproduces C exactly, so the C-vs-D axis is clean.
+
+### How to run it
+
+```bash
+python scripts/run_experiment.py --list
+python scripts/run_experiment.py --condition nominal severe --kill Drone2@1
+python scripts/run_experiment.py --ablations --seeds 17 18 19 --save runs/exp1/
+python scripts/run_experiment.py --architectures D --backend ollama --model llama3.1:8b
+python tests/test_architectures.py                     # 23 validity tests
+```
+
+**Files:** `agentic_uav/experiments/architectures.py` (**the spec, the registry,
+the single builder and runner — add an architecture here**) ·
+`coordination/fleet_controller.py` (A: controller, drone-side client, wait
+policy) · `experiments/open_loop.py` (E) · `scripts/run_experiment.py` (the
+sweep, and `check_timings`)
+
+**Rules to preserve:**
+
+1. **Adding an architecture means adding a spec**, not a program. Anything that
+   cannot be expressed as a spec field is a confound.
+2. **An ablation changes exactly one switch.** `replace()` from the parent and
+   let `test_each_ablation_changes_exactly_one_switch` check it.
+3. **Never compare across different timings.** Heartbeat, lease and mission
+   length must be commensurate and identical across architectures.
+4. **Fault injection is part of the experiment**, not a stress test. Without a
+   loss there is nothing for coordination to do.
+
+**What this does not establish.** That D beats C. The results above use the
+scripted control backend, which is not a model; the D-versus-C numbers are a
+check that the plumbing is fair, not a finding. A real model, several seeds and
+a scenario where coordination is genuinely load-bearing are Phase 14's job.
+
