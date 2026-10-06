@@ -49,6 +49,30 @@ from typing import Any
 
 MODEL = "llama3.2:3b"
 
+# Where planning calls are sent. Ollama's own default is http://127.0.0.1:11434,
+# and the library reads OLLAMA_HOST from the environment -- which is a trap when
+# the model is meant to be running somewhere else, because a plan can come from
+# a completely different machine than the data implies. So the endpoint is
+# resolved once, here, and recorded with every planning call.
+#
+# For a remote model, point this at the local end of an SSH tunnel:
+#
+#     ssh -N -L 11435:gpu01:11434 user@vega.erau.edu
+#     --ollama-host http://127.0.0.1:11435
+#
+# Deliberately NOT port 11434 for a tunnel: that is where a local Ollama
+# listens, so if the tunnel dies the agent would silently fall back to whatever
+# small model is installed locally and the results would be mislabelled.
+OLLAMA_ENDPOINT = os.environ.get("OLLAMA_HOST") or "http://127.0.0.1:11434"
+
+
+def normalise_endpoint(endpoint: str) -> str:
+    """Accept `host:port` as well as a full URL, since both get typed."""
+    endpoint = (endpoint or "").strip()
+    if endpoint and "://" not in endpoint:
+        endpoint = "http://" + endpoint
+    return endpoint or "http://127.0.0.1:11434"
+
 # Frozen inference options. These are part of the measurement protocol in
 # docs/BASELINE_MISSIONS.md, not preferences: num_gpu 0 because 4 GB of VRAM is
 # already spoken for by the simulator, temperature 0 so runs are comparable.
@@ -174,12 +198,17 @@ class PlanRecord:
     error: str | None = None
     normalised: list[str] = field(default_factory=list)
     model: str = MODEL
+    # Which endpoint answered. A model name alone does not say where it ran,
+    # and "llama3.3:70b" served from a laptop and from an H100 are not the
+    # same measurement.
+    endpoint: str = OLLAMA_ENDPOINT
 
     def as_json(self) -> dict[str, Any]:
         return {
             "t": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "drone": self.drone,
             "model": self.model,
+            "endpoint": self.endpoint,
             "instruction": self.instruction,
             "raw_output": self.raw_output,
             "plan": self.plan,
@@ -538,14 +567,24 @@ def validate(plan: Any) -> tuple[list[dict[str, Any]], list[str]]:
     return checked, notes
 
 
-def plan_for(instruction: str, drone: str, model: str = MODEL) -> PlanRecord:
-    """Ask the model for a plan and validate it. Never raises; records instead."""
+def plan_for(instruction: str, drone: str, model: str = MODEL,
+             endpoint: str = OLLAMA_ENDPOINT) -> PlanRecord:
+    """Ask the model for a plan and validate it. Never raises; records instead.
+
+    An explicit `ollama.Client(host=...)` rather than the module-level
+    `ollama.chat`, because the module-level call silently honours OLLAMA_HOST
+    from the environment. That is convenient and dangerous in equal measure: a
+    stale environment variable would send planning calls somewhere other than
+    where the record claims, and nothing would look wrong.
+    """
     import ollama  # imported here so --plan-only works without AirSim installed
 
+    endpoint = normalise_endpoint(endpoint)
+    client = ollama.Client(host=endpoint)
     started = time.time()
     raw = ""
     try:
-        response = ollama.chat(
+        response = client.chat(
             model=model,
             messages=build_messages(instruction),
             format=PLAN_SCHEMA,
@@ -554,14 +593,15 @@ def plan_for(instruction: str, drone: str, model: str = MODEL) -> PlanRecord:
         raw = response["message"]["content"]
         elapsed = time.time() - started
         steps, notes = validate(json.loads(raw))
-        return PlanRecord(drone, instruction, raw, steps, elapsed, True, None, notes, model)
+        return PlanRecord(drone, instruction, raw, steps, elapsed, True, None,
+                          notes, model, endpoint)
     except (PlanError, json.JSONDecodeError) as exc:
         return PlanRecord(drone, instruction, raw, None, time.time() - started,
-                          False, str(exc), [], model)
+                          False, str(exc), [], model, endpoint)
     except Exception as exc:  # model unreachable, transport error, and friends
         return PlanRecord(
             drone, instruction, raw, None, time.time() - started, False,
-            f"{type(exc).__name__}: {exc}", [], model,
+            f"{type(exc).__name__}: {exc}", [], model, endpoint,
         )
 
 
@@ -987,6 +1027,7 @@ def provenance() -> dict[str, Any]:
         "agent": os.path.basename(__file__),
         "agent_sha256": file_digest(os.path.abspath(__file__)),
         "python": sys.version.split()[0],
+        "ollama_endpoint": OLLAMA_ENDPOINT,
     }
 
 
@@ -1170,7 +1211,12 @@ def main() -> int:
     parser.add_argument("--plan-only", action="store_true",
                         help="plan and validate without flying")
     parser.add_argument("--model", default=MODEL, help=f"Ollama model (default {MODEL})")
-    parser.add_argument("--host", default="127.0.0.1")
+    # --host/--port are the SIMULATOR. --ollama-host is the MODEL. Two
+    # different machines once the model runs on a cluster, so two flags.
+    parser.add_argument("--ollama-host", default=OLLAMA_ENDPOINT,
+                        help=f"model endpoint (default {OLLAMA_ENDPOINT})")
+    parser.add_argument("--host", default="127.0.0.1",
+                        help="simulator host (AirSim RPC)")
     parser.add_argument("--port", type=int, default=AIRSIM_PORT)
     parser.add_argument("--yes", action="store_true",
                         help="skip the interactive gates; for scripted runs "
@@ -1195,7 +1241,7 @@ def main() -> int:
     records: list[PlanRecord] = []
     for name, instruction in zip(drones, instructions):
         print(f"\n[{name}] planning: {instruction}")
-        record = plan_for(instruction, name, args.model)
+        record = plan_for(instruction, name, args.model, args.ollama_host)
         log_record(record)
         for note in record.normalised:
             print(f"  normalised: {note}")

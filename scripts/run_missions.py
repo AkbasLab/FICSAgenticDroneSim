@@ -161,7 +161,8 @@ def describe(row: dict[str, Any], attempt: int, repeats: int) -> str:
 
 
 def fly_one(agent, client, mission: dict[str, Any], model: str, attempt: int,
-            protocol: dict[str, Any] | None = None) -> dict[str, Any]:
+            protocol: dict[str, Any] | None = None,
+            endpoint: str | None = None) -> dict[str, Any]:
     """Plan and FLY one mission, once. Same record as run_one plus `execution`.
 
     The order is deliberate:
@@ -174,7 +175,7 @@ def fly_one(agent, client, mission: dict[str, Any], model: str, attempt: int,
     3. **Fly through the agent's own `fly_plans`**, not a copy, so a scored run
        and a hand-flown run are the same procedure.
     """
-    row = run_one(agent, mission, model, attempt, protocol)   # plan and score first
+    row = run_one(agent, mission, model, attempt, protocol, endpoint)  # plan first
 
     if not row["all_valid"]:
         row["execution"] = {"flown": False, "reason": "plan rejected"}
@@ -218,7 +219,8 @@ def fly_one(agent, client, mission: dict[str, Any], model: str, attempt: int,
 
 
 def run_one(agent, mission: dict[str, Any], model: str, attempt: int,
-            protocol: dict[str, Any] | None = None) -> dict[str, Any]:
+            protocol: dict[str, Any] | None = None,
+            endpoint: str | None = None) -> dict[str, Any]:
     """Plan every drone's instruction for one mission, once.
 
     Returns one result record, which is appended verbatim to the JSONL output.
@@ -243,7 +245,8 @@ def run_one(agent, mission: dict[str, Any], model: str, attempt: int,
     for index, instruction in enumerate(instructions):
         # Vehicle names follow settings.json: Drone1, Drone2, … in config order.
         name = f"Drone{index + 1}"
-        record = agent.plan_for(instruction, name, model)
+        record = agent.plan_for(instruction, name, model,
+                                endpoint or agent.OLLAMA_ENDPOINT)
 
         # Two logs on purpose. The agent's own runs/agent-log.jsonl is the raw
         # record of every planning call ever made, whatever ran it; the JSONL
@@ -366,6 +369,10 @@ def main() -> int:
     parser.add_argument("--config", default=DEFAULT_CONFIG)
     parser.add_argument("--out", default=DEFAULT_OUT)
     parser.add_argument("--model", help="override the model in the config")
+    parser.add_argument("--ollama-host", default=None,
+                        help="model endpoint; for a remote model point this at "
+                             "the local end of an SSH tunnel, e.g. "
+                             "http://127.0.0.1:11435")
     parser.add_argument("--repeats", type=int, help="override the protocol's repeat count")
     parser.add_argument("--missions", help="comma-separated ids, e.g. M05,M07")
     parser.add_argument("--plan-only", action="store_true",
@@ -389,6 +396,8 @@ def main() -> int:
     # The config carries the protocol; flags override it for exploration. The
     # recorded model is whatever actually ran, not whatever the config says.
     model = args.model or config["protocol"]["model"]
+    # Resolved once and recorded, so every row states where its plan came from.
+    endpoint = agent.normalise_endpoint(args.ollama_host or agent.OLLAMA_ENDPOINT)
     repeats = args.repeats or config["protocol"]["repeats"]
 
     missions = config["mission"]
@@ -477,11 +486,12 @@ def main() -> int:
             # edited between them; a row that cannot state its own conditions is
             # not evidence.
             conditions = dict(config["protocol"], flown=not args.plan_only,
-                              code=manifest)
+                              code=manifest, ollama_endpoint=endpoint)
             if args.plan_only:
-                row = run_one(agent, mission, model, attempt, conditions)
+                row = run_one(agent, mission, model, attempt, conditions, endpoint)
             else:
-                row = fly_one(agent, client, mission, model, attempt, conditions)
+                row = fly_one(agent, client, mission, model, attempt, conditions,
+                              endpoint)
             rows.append(row)
 
             # Append as we go. A crash or a hung flight three hours into a set
