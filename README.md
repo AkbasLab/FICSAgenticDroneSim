@@ -98,7 +98,9 @@ agentic_uav/
                  roles + health, seeded network degradation model
   planners/      MissionPlanner interface + gemini/llama/mistral/rule
   experiments/   mission runner, metrics, decision log, logging
-configs/missions/  canonical scenario definitions (YAML)
+configs/
+  missions/      canonical scenario definitions (YAML)
+  experiments/   one YAML per experiment run (Phase 14)
 scripts/           runnable demos, one per phase
 tests/             295 tests, all runnable without a simulator
 docs/
@@ -645,9 +647,13 @@ component logs avoids threading an event sink through twelve phases of tested
 code, and a test asserts the derived message events match the bus log exactly.
 
 **A mistake worth recording:** this phase overwrote the Phase 1-2 `run_mission`,
-which `test_behavior_preservation.py` depends on. With no git history to restore
-from it was reconstructed from its call sites and verified against the action
-sequences that test has pinned since Phase 2. That test earned its keep.
+which `test_behavior_preservation.py` depends on. It was restored from a
+pre-Phase-13 copy of the tree and re-verified against the action sequences that
+test has pinned since Phase 2. The reconstruction attempted first passed that
+test while being semantically wrong: the original plans *every* drone before any
+of them flies, and the reconstruction planned inside each worker thread — a
+difference a single-drone sequential test cannot see. The test earned its keep,
+and also showed its limit.
 
 ---
 
@@ -676,13 +682,21 @@ sequences that test has pinned since Phase 2. That test earned its keep.
 
 ## Documentation
 
-- `docs/Phase_Documentation.md` — the arc of the project, phase by phase, with what each proved
-- `docs/TESTING.md` — how to verify every phase, and how to break it on purpose
-- `docs/SIM_TESTING.md` — flying Phases 3–7 in CARLA-Air, step by step
-- `docs/ARCHITECTURE.md` — module-by-module design
-- `ENVIRONMENT.md` — reproducibility spec and pinned versions
-- `SETUP_GUIDE.md` / `TROUBLESHOOTING.md` — getting CARLA-Air running
-- `LOCAL_LLM.md` — running Llama / Mistral locally via Ollama
+- **[`docs/Phase_Documentation.md`](docs/Phase_Documentation.md)** — the arc of the
+  project, phase by phase, with what each one proved and what it cost.
+- **[`docs/TESTING.md`](docs/TESTING.md)** — how to verify every phase
+  individually, what correct output looks like, and how to break each invariant
+  on purpose to confirm the checks are real.
+- **[`docs/SIM_TESTING.md`](docs/SIM_TESTING.md)** — flying Phases 3–7 in
+  CARLA-Air for real: environment setup, pinned versions, the port layout, and
+  the known failure modes when the simulator is involved.
+- **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)** — module-by-module design,
+  and the two interfaces (`MissionPlanner`, `VehicleAdapter`) everything else is
+  written against.
+
+Reproducibility specifics — pinned versions, the CARLA-Air port layout, and
+running Llama / Mistral locally through Ollama — live in `docs/SIM_TESTING.md`
+rather than in separate top-level files.
 
 ---
 
