@@ -26,6 +26,21 @@ class MockVehicleAdapter:
 
     # --- helpers ---
 
+    def place(self, vehicle_id: str, position: Position3D):
+        """Put a vehicle on its starting pad.
+
+        Without this every vehicle was lazily created at the origin, so a
+        scenario that gives four drones four distinct pads still started them
+        stacked on one point. Nothing noticed for nine phases because no
+        deterministic demo asked about the distance between two drones on the
+        ground - then Phase 12 ran four guardians at once and every separation
+        check reported 0.0 m from a teammate.
+        """
+        self._pos[vehicle_id] = Position3D(position.x, position.y, position.z)
+        self._heading.setdefault(vehicle_id, 0.0)
+        self._clock.setdefault(vehicle_id, 0.0)
+        return self._pos[vehicle_id]
+
     def _p(self, vid) -> Position3D:
         if vid not in self._pos:
             self._pos[vid] = Position3D(0.0, 0.0, self._ground)

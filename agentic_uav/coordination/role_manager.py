@@ -132,3 +132,22 @@ class RoleManager:
         return {"role": self.role.value,
                 "changes": [{"t": round(t, 1), "from": a, "to": b, "why": why}
                             for (t, a, b, why) in self.history]}
+
+
+class FixedRoleManager(RoleManager):
+    """A role manager that never changes role (Phase 13 ablation D3).
+
+    Needed because `PersistentAgent` builds a `RoleManager` whenever it is given
+    a health monitor, so passing `role_manager=None` does not disable roles - it
+    just creates a default one. Removing the health monitor instead would
+    disable *failure detection* as well, which is a second change, and an
+    ablation that moves two things at once measures neither.
+
+    This keeps health monitoring, heartbeats, capability sets and every other
+    behaviour intact, and changes exactly one thing: the role stays whatever it
+    started as.
+    """
+
+    def decide(self, belief, open_task_count=0, holding_task=False) -> RoleDecision:
+        return RoleDecision(role=self.role, reason="roles fixed (ablation)",
+                            changed=False)

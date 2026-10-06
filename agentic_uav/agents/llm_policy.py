@@ -327,7 +327,11 @@ class LLMAgentPolicy:
         self.memory.append({"step": turn.step, "tool": turn.tool,
                             "reason_code": turn.reason_code,
                             "objective": objective.value})
-        self.memory = self.memory[-self.memory_turns:]
+        # `lst[-0:]` is the whole list, not an empty one, so a plain slice
+        # silently made `memory_turns=0` a no-op and the no-memory ablation did
+        # nothing at all. Caught by the Phase 13 validity tests.
+        self.memory = (self.memory[-self.memory_turns:]
+                       if self.memory_turns > 0 else [])
 
     def _with_memory(self, prompt):
         if not self.memory:
