@@ -30,6 +30,7 @@ SUITES = [
     ("11",  "Runtime-safety guardian",   "tests/test_guardian.py", 45),
     ("12",  "LLM agent policy",          "tests/test_llm_policy.py", 60),
     ("13",  "Architecture comparison",   "tests/test_architectures.py", 23),
+    ("14",  "Experiment runner + logs",  "tests/test_experiment_runner.py", 25),
     ("3-12", "AirSim code path (fake sim)", "tests/test_airsim_path.py", 17),
 ]
 
@@ -48,6 +49,7 @@ DEMOS = [
     ("12", "LLM agents (scripted)",   "scripts/run_llm_agents.py"),
     ("12", "LLM failure modes",       "scripts/run_llm_agents.py --failures --unsafe"),
     ("13", "Architecture comparison",  "scripts/run_experiment.py --condition nominal --kill Drone2@1"),
+    ("14", "Batch experiment run",     "scripts/run_batch.py configs/experiments/exp_0042.yaml --out /tmp/p14_demo"),
 ]
 
 
