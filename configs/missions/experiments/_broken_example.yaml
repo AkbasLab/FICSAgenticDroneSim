@@ -1,8 +1,0 @@
-# Deliberately broken: names a scenario that does not exist. Used by the tests
-# to prove 14.4 - a failed run still produces a complete result directory with
-# a manifest, an event stream up to the failure, and the traceback.
-experiment_id: exp_broken
-architecture: agentic_decentralized
-scenario: no_such_scenario
-network_profile: nominal
-random_seed: 1
