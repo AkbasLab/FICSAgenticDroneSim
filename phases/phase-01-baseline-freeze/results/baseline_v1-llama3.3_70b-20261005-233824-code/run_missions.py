@@ -279,9 +279,6 @@ def run_one(agent, mission: dict[str, Any], model: str, attempt: int,
             "drone": name,
             "instruction": instruction,
             "valid": record.valid,
-            # Where this particular plan came from. Also in protocol, but kept
-            # per drone so a single entry is self-describing when quoted alone.
-            "endpoint": record.endpoint,
             # A row whose endpoint was unreachable is not a measurement of the
             # model. Recorded so it can be excluded rather than silently
             # counted as the model producing an invalid plan.
