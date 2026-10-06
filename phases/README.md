@@ -27,6 +27,10 @@ that decays fastest if it is not written down at the time.
 
 Start a new phase by copying [`_template/`](_template/).
 
+**How many runs have been flown, and which of them count:**
+[`RUN_LEDGER.md`](RUN_LEDGER.md). Kept separately because most of the runs on
+disk are not study data, for reasons that are easy to forget.
+
 ---
 
 ## Status
