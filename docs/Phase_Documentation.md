@@ -20,9 +20,10 @@ University.
 | 11 | Runtime-safety guardian | Every unsafe command is blocked and named | 45 |
 | 12 | LLM as agent policy | Each drone decides via its own model context, still validated | 60 |
 | 13 | Comparison architectures | A-E and six ablations selected by configuration | 23 |
+| 14 | Experiment runner + logs | A batch runs a config list unattended; failed runs preserved | 25 |
 | — | Simulator path | Every `--airsim` entry point runs end to end | 17 |
 
-**270 tests, 14 demos, none requiring a simulator, GPU or API key:**
+**295 tests, 15 demos, none requiring a simulator, GPU or API key:**
 
 ```bash
 python scripts/run_all_tests.py
@@ -1337,7 +1338,7 @@ the `--airsim` column says otherwise.
 
 | Phase | Command | What it shows | AirSim? |
 |---|---|---|---|
-| all | `python scripts/run_all_tests.py` | 270 tests + 14 demos, one summary | no |
+| all | `python scripts/run_all_tests.py` | 295 tests + 15 demos, one summary | no |
 | 1 | `python scripts/run_single_mission.py --planner rule --adapter mock` | English → validated plan → flight | `--adapter airsim` |
 | 2 | `python tests/test_behavior_preservation.py` | refactor changed structure, not behaviour | no |
 | 3 | `python scripts/phase3_demo.py` | 4 drones run skills concurrently | `--adapter airsim` |
@@ -1370,6 +1371,7 @@ python tests/test_network.py                # 30   Phase 10
 python tests/test_guardian.py               # 45   Phase 11
 python tests/test_llm_policy.py             # 60   Phase 12
 python tests/test_architectures.py          # 23   Phase 13
+python tests/test_experiment_runner.py      # 25   Phase 14
 python tests/test_airsim_path.py            # 17   the --airsim path, faked
 ```
 
@@ -1498,7 +1500,7 @@ agentic_uav/
                  llm_log.py            prompts, outputs, fallback rate
 configs/missions/search_relay_001.yaml  the canonical scenario
 scripts/         one runnable demo per phase
-tests/           270 tests, no simulator required
+tests/           295 tests, no simulator required
 docs/            Phase_Documentation.md (this file)
                  TESTING.md       verify each phase, and break it on purpose
                  SIM_TESTING.md   flying it in CARLA-Air
@@ -1691,4 +1693,121 @@ sweep, and `check_timings`)
 scripted control backend, which is not a model; the D-versus-C numbers are a
 check that the plumbing is fair, not a finding. A real model, several seeds and
 a scenario where coordination is genuinely load-bearing are Phase 14's job.
+
+
+---
+
+## Phase 14 — The experiment runner and complete logging
+
+**Goal.** Make experiments automatic and auditable. A result nobody can trace
+back to a commit, a configuration and a seed is not a research result.
+
+**One configuration describes one run** (14.1). The reference file is
+`configs/experiments/exp_0042.yaml`, with the fields the specification names
+plus `heartbeat_s` and `max_steps` — not in the example, but a run cannot be
+reproduced without them, and at the old 20 s heartbeat failure detection
+outlasted the mission (Phase 13). An unknown key is an error rather than
+silently ignored: a configuration that quietly does not do what it says is worse
+than one that refuses to load.
+
+**Every run records a manifest** (14.2): git SHA with a dirty flag, the
+configuration verbatim, architecture, scenario, seed, model card, start and
+finish time, software versions, whether it completed, and the full traceback if
+not. The manifest is written *before* the mission starts and rewritten after, so
+a run that dies on its first step still leaves a record of what it was trying to
+do.
+
+**Structured events, as JSON Lines** (14.3). All nineteen event types, one
+stream per run, ordered by simulated time.
+
+| | |
+|---|---|
+| `live` | emitted by the runner: mission lifecycle, fault injection |
+| `derived:<log>` | reconstructed from a component's own log |
+
+Deriving is a deliberate choice and every line says which it is. The alternative
+was threading an event sink through the agent loop, the bus, the allocator, the
+guardian and the policy — twelve phases of tested code modified for logging,
+with a real chance of changing behaviour. The component logs are already the
+authoritative record and already covered by tests; this translates them into one
+ordered stream. A test asserts the derived message events match the bus log
+exactly, so the translation cannot invent or lose a message.
+
+Event types that never occurred are *reported*, not hidden: a run without an LLM
+has no `LLM_CALLED`, and `missing_types()` says so rather than leaving the
+category silently absent.
+
+**Failed runs are preserved** (14.4). This is the module's main design
+constraint. The directory is created first, the manifest is written before the
+mission, and the event stream is flushed in a `finally` block regardless of how
+the run ended. The exception handler is deliberately broad — a crash part-way
+through is often the most informative run in a batch, and losing the events that
+led to it destroys the evidence. Derivation is itself guarded, since a
+half-built run can leave logs in odd states and failing to write the stream
+because the translation tripped would defeat the point.
+
+```
+results/exp_0042/
+    manifest.json     what produced the run, and whether it finished
+    config.yaml       copied verbatim, comments and all
+    events.jsonl      the structured stream
+    result.json       the metrics
+    llm/Drone1.json   every prompt and raw response
+    error.txt         the traceback, if it failed
+```
+
+**A mistake worth recording.** Writing this phase overwrote
+`experiments/runner.py`, which already held the Phase 1-2 open-loop
+`run_mission` used by `test_behavior_preservation.py` — the test that has pinned
+the original flight behaviour since Phase 2. With no git history to restore
+from, it was reconstructed from its two call sites and the action sequences the
+test asserts, then verified against them. The new code now lives in
+`experiments/experiment_runner.py`. The behaviour-preservation test earned its
+keep: without it the loss would have been silent.
+
+**Exit criterion.** One command, a list of configurations, no prompts, one
+complete directory per run:
+
+```
+$ python scripts/run_batch.py configs/experiments/sweep_architectures.yaml
+[1/5] sweep_A_severe (A, severe, seed 42)
+        coverage 1.00  home 3  dup 4  t 650s
+[2/5] sweep_B_severe (B, severe, seed 42)
+        coverage 0.75  home 3  dup 0  t 112s
+...
+5/5 completed in 0.3s
+```
+
+A failed configuration does not stop the batch; it is reported at the end with
+its directory, and the process exits non-zero so a batch can be used in a script
+without parsing its output.
+
+### How to run it
+
+```bash
+python scripts/run_batch.py configs/experiments/exp_0042.yaml
+python scripts/run_batch.py configs/experiments/                  # a directory
+python scripts/run_batch.py configs/experiments/sweep_architectures.yaml \
+    --out results/sweep1 --repeat 5                               # 5 seeds each
+python tests/test_experiment_runner.py                            # 25 tests
+```
+
+`--repeat n` varies only the seed and appends it to the experiment id, so a
+result can always be traced back to the seed that produced it. The batch writes
+`index.json` and `index.csv` covering every run, failed ones included.
+
+**Files:** `agentic_uav/experiments/experiment_config.py` (**the config schema,
+failure profiles and manifest**) · `experiments/events.py` (the 19 types and the
+derivation) · `experiments/experiment_runner.py` (one run, crash-safe) ·
+`scripts/run_batch.py` (the batch) · `configs/experiments/` (the reference
+config, a sweep, and a deliberately broken one the tests use)
+
+**Rules to preserve:**
+
+1. **A failed run must still produce a complete directory.** Anything added to
+   the runner belongs inside the `finally` block or before the mission starts.
+2. **Every event declares its source.** Derived is fine; implying it was
+   captured live is not.
+3. **Unknown configuration keys are errors.**
+4. **`--repeat` varies the seed and nothing else.**
 
