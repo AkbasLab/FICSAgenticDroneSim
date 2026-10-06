@@ -5,7 +5,7 @@ study remains. Maintained because "how many runs have we done" turned out to be
 a harder question than it should be, and because two thirds of the runs on disk
 are **not** study data for reasons that are easy to forget.
 
-> **Updated 2026-10-06.** Update this file whenever a series is flown, in the
+> **Updated 2026-10-06 (evening).** Update this file whenever a series is flown, in the
 > same commit as the data.
 
 ---
@@ -42,14 +42,14 @@ matching the upstream benchmark so results are comparable.
 
 | Mission | Drones | Repeats | Runs | Drone-plans | Status on `llama3.3:70b` |
 |---|---|---|---|---|---|
-| M01 | 1 | 3 | 3 | 3 | **done** — 3/3 correct, 3/3 landed |
-| M02 | 1 | 3 | 3 | 3 | not flown |
-| M03 | 1 | 3 | 3 | 3 | not flown |
-| M04 | 1 | 3 | 3 | 3 | not flown |
-| M05 | 1 | 3 | 3 | 3 | not flown |
-| M06 | 1 | 3 | 3 | 3 | not flown |
-| M07 | 1 | 3 | 3 | 3 | not flown |
-| M08 | 1 | 3 | 3 | 3 | not flown — unscoreable by design |
+| M01 | 1 | 3 | 3 | 3 | **done** — 3/3 correct |
+| M02 | 1 | 3 | 3 | 3 | **done** — 3/3 correct |
+| M03 | 1 | 3 | 3 | 3 | **done** — 3/3 correct |
+| M04 | 1 | 3 | 3 | 3 | **done** — 3/3 correct |
+| M05 | 1 | 3 | 3 | 3 | **done** — 3/3 correct (re-flown, see below) |
+| M06 | 1 | 3 | 3 | 3 | **done** — 3/3 correct |
+| M07 | 1 | 3 | 3 | 3 | **done** — 3/3 correct |
+| M08 | 1 | 3 | 3 | 3 | **done** — unscoreable by design; 3/3 consistent |
 | M09 | 2 | 3 | 3 | 6 | **blocked** — multi-drone spawn defect |
 | M10 | 4 | 3 | 3 | 12 | **blocked** — multi-drone spawn defect |
 | **Total** | | | **30** | **42** | |
@@ -57,13 +57,14 @@ matching the upstream benchmark so results are comparable.
 ### Completion
 
 ```
-valid study runs:     3 / 30      (10%)
-single-drone (M01-M08):   3 / 24  (12.5%)
-multi-drone (M09-M10):    0 /  6  — blocked
+valid study runs:        24 / 30      (80%)
+single-drone (M01-M08):  24 / 24      (100%)  COMPLETE
+multi-drone (M09-M10):    0 /  6      blocked
 ```
 
-**Immediately flyable: 21 runs** (M02–M08). About 20 minutes of GPU time at
-roughly 55 s per run.
+**The single-drone baseline is complete on `llama3.3:70b`: 21/21 scored runs
+correct, 24/24 flown to completion, 24/24 landed, zero obstacle collisions.**
+M08 is unscoreable by design and produced the same plan all three times.
 
 **Blocked: 6 runs.** M09 and M10 cannot be flown until the multi-drone spawn
 defect is fixed — drones spawn inside one another because this build ignores
@@ -87,6 +88,8 @@ Everything on disk, with a verdict. Seven sessions, 42 recorded runs, of which
 | `20260929-001503-ground-fix2-M01` | 3b | 3 | diagnostic — the fix working |
 | `20261005-233824` | 70b | 3 | exploration — `--plan-only`, non-protocol options |
 | **`20261006-174355-v2-M01`** | **70b** | **3** | **VALID STUDY DATA** |
+| **`20261006-175302-v2-M02-M08`** | **70b** | **21** | **VALID STUDY DATA** |
+| **`20261006-181303-v2-M05-recheck`** | **70b** | **3** | **VALID** — supersedes M05 in the session above |
 
 ### Why Block A is split
 
@@ -108,6 +111,28 @@ question, not a commitment.
 Kept deliberately. They are the evidence trail of the landing investigation —
 the defect visible at `ground_z` 12.1, two failed fixes, and the working one at
 29.25. Phase rule 5: failed attempts stay.
+
+### Why M05 was re-flown
+
+Its three runs in `v2-M02-M08` recorded `landed_on_ground: false`. The flights
+were fine; the **check** was wrong.
+
+A landed drone rests about **1.2 m above its arming `ground_z`**, because `land`
+descends to `ground_z - 1.0` before handing over to `landAsync`. The test
+allowed 1.5 m, leaving 0.3 m of margin. M05 flies furthest — two 3-second legs,
+25 m out — and the terrain there is 0.8 m higher, so it read **1.99 m** and
+failed a test it should have passed.
+
+The simulator had been saying so all along: M05 was the only mission reporting
+`Town10HD_Terrain_Ground` with `is_ground: true`. The physics engine said the
+aircraft was touching terrain while the check said it had not landed.
+
+`landed_on_ground` now accepts terrain contact as proof. The re-flight returned
+identical plans, identical positions and identical flight times, with the flag
+corrected — which is what a measurement fix should look like.
+
+**Both sessions are kept.** The original records what was measured; this one
+records it correctly. Phase rule 4: nothing is revised after the fact.
 
 ---
 
@@ -144,8 +169,8 @@ Recorded here because a run's conditions are part of the result.
 | `num_ctx` | 4096 |
 | `num_gpu` | 999 (all layers) |
 | `temperature` | 0 |
-| Planning latency | 34.9 s first call, **0.7 s** warm |
-| Flight time, M01 | 42.2 s, no variance across three runs |
+| Planning latency | 34.9 s first call, then **0.7–1.8 s** by mission |
+| Flight times | M02 38 s · M05 43 s · M04 44 s · M03 48 s · M08 51 s — no variance within a mission |
 
 For comparison, `llama3.2:3b` on this laptop's CPU plans in 1.2–1.3 s. The 70B
 on an H100 is roughly **twice as fast** despite being twenty-three times larger,

@@ -997,11 +997,6 @@ class DroneRunner:
             ended_landed = bool(executed) and executed[-1] == "land" and failure is None
             self._land_and_release(skip_landing=ended_landed)
 
-        # Read once, after teardown, and used twice: to decide whether the
-        # aircraft is on the ground, and in the record. Calling it twice would
-        # risk the two disagreeing.
-        collision = self.collisions()
-
         # Where the aircraft actually finished. Recorded because for most of
         # this project every flight ended roughly 17 m above the ground and
         # nothing in the data showed it -- the run said "completed", the plan
@@ -1012,25 +1007,9 @@ class DroneRunner:
             final_position = {"x": round(final.x_val, 2),
                               "y": round(final.y_val, 2),
                               "z": round(final.z_val, 2)}
-            # TWO WAYS TO BE ON THE GROUND, because one of them is not enough.
-            #
-            # The height test compares against ground_z, which was read where
-            # the drone ARMED. That is only the right reference if the terrain
-            # is flat between there and wherever it came down, and Town10HD is
-            # not. Measured 2026-10-06: a landed drone rests about 1.2 m above
-            # its arming ground_z, so a 1.5 m window leaves only 0.3 m of
-            # margin -- and M05, which flies 25 m out, landed on terrain 0.8 m
-            # higher and read 1.99 m. Three perfectly good flights were flagged
-            # as not having landed.
-            #
-            # So the simulator's own terrain contact is accepted as proof. If
-            # the physics engine says the aircraft is touching ground, it has
-            # landed, whatever a height taken 25 m away suggests. is_ground()
-            # already separates terrain from obstacles, which is what makes
-            # this safe: hitting a building would not satisfy it.
-            touching_ground = bool(collision.get("has_collided")
-                                   and collision.get("is_ground"))
-            landed_on_ground = abs(final.z_val - self.ground_z) < 1.5 or touching_ground
+            # ground_z is where the ground was when this flight armed, so the
+            # comparison is to this flight's own ground, not a global constant.
+            landed_on_ground = abs(final.z_val - self.ground_z) < 1.5
         except Exception:
             final_position, landed_on_ground = None, None
 
@@ -1044,14 +1023,13 @@ class DroneRunner:
             "flight_seconds": round(time.time() - started, 1),
             "ground_z": round(self.ground_z, 2),
             "final_position": final_position,
-            # True if the aircraft ended near its own ground height OR the
-            # simulator reports it touching terrain. See the note above.
+            # True only if the aircraft ended within 1.5 m of its own ground.
             "landed_on_ground": landed_on_ground,
             # False means the drone was still moving when the ground was
             # read, so every altitude in this run is suspect.
             "ground_settled": self.ground_settled,
             # Read after teardown so a collision during the landing is caught.
-            "collision": collision,
+            "collision": self.collisions(),
         }
 
     def _is_airborne(self) -> bool:
