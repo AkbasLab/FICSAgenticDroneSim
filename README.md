@@ -1,4 +1,4 @@
-# Adi-MLOps — Decentralized Agentic UAV Coordination
+# Decentralized Agentic UAV Coordination
 
 Research repository for a study on whether decentralized teams of persistent UAV
 agents hold up better than centralized ones when the radio link degrades and
