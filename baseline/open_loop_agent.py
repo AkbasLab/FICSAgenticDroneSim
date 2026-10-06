@@ -66,6 +66,36 @@ MODEL = "llama3.2:3b"
 OLLAMA_ENDPOINT = os.environ.get("OLLAMA_HOST") or "http://127.0.0.1:11434"
 
 
+def is_transport_error(exc: BaseException) -> bool:
+    """True if the endpoint was unreachable, rather than the model misbehaving.
+
+    THE DISTINCTION IS NOT COSMETIC. plan_for() records any failure as an
+    invalid plan, so without this a dropped network link lands in the
+    `all_valid` column as the model having produced something unflyable. Over a
+    VPN to a cluster that will happen, and it would quietly understate the
+    model -- scoring our own connectivity as its failure.
+
+    Classified by type rather than by message: ollama talks over httpx, so a
+    dead endpoint surfaces as an httpx or httpcore exception, a socket error,
+    or a plain ConnectionError depending on how it died. Matching on module and
+    on the usual words in the class name covers those without importing httpx
+    here, which matters because --plan-only has to work on a machine with a
+    minimal install.
+    """
+    if isinstance(exc, (ConnectionError, TimeoutError)):
+        return True
+    module = type(exc).__module__.split(".")[0]
+    if module in ("httpx", "httpcore", "socket", "ssl", "urllib3", "requests"):
+        return True
+    name = type(exc).__name__
+    if any(word in name for word in
+           ("Connect", "Timeout", "Transport", "Unreachable", "Protocol")):
+        return True
+    # OSError last: ConnectionError is a subclass, but so are unrelated file
+    # errors, so this is a fallback rather than a first test.
+    return isinstance(exc, OSError)
+
+
 def normalise_endpoint(endpoint: str) -> str:
     """Accept `host:port` as well as a full URL, since both get typed."""
     endpoint = (endpoint or "").strip()
@@ -202,6 +232,9 @@ class PlanRecord:
     # and "llama3.3:70b" served from a laptop and from an H100 are not the
     # same measurement.
     endpoint: str = OLLAMA_ENDPOINT
+    # True when the endpoint could not be reached at all. Such a row is NOT a
+    # measurement of the model and must not be scored as one.
+    transport_error: bool = False
 
     def as_json(self) -> dict[str, Any]:
         return {
@@ -214,6 +247,7 @@ class PlanRecord:
             "plan": self.plan,
             "plan_seconds": round(self.plan_seconds, 2),
             "valid": self.valid,
+            "transport_error": self.transport_error,
             "error": self.error,
             "normalised": self.normalised,
         }
@@ -598,10 +632,17 @@ def plan_for(instruction: str, drone: str, model: str = MODEL,
     except (PlanError, json.JSONDecodeError) as exc:
         return PlanRecord(drone, instruction, raw, None, time.time() - started,
                           False, str(exc), [], model, endpoint)
-    except Exception as exc:  # model unreachable, transport error, and friends
+    except Exception as exc:
+        # Separated deliberately: "the endpoint was unreachable" and "the model
+        # produced nonsense" are different findings, and only the second is
+        # about the model. See is_transport_error().
+        transport = is_transport_error(exc)
+        if transport:
+            print(f"[{drone}] ENDPOINT UNREACHABLE at {endpoint}: "
+                  f"{type(exc).__name__}: {exc}", flush=True)
         return PlanRecord(
             drone, instruction, raw, None, time.time() - started, False,
-            f"{type(exc).__name__}: {exc}", [], model, endpoint,
+            f"{type(exc).__name__}: {exc}", [], model, endpoint, transport,
         )
 
 

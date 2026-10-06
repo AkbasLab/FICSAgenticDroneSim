@@ -139,7 +139,14 @@ def current_roster(agent) -> list[str]:
 
 def describe(row: dict[str, Any], attempt: int, repeats: int) -> str:
     """One line per run for the console, readable while a set is flying."""
-    mark = "ok  " if row["all_correct"] else ("--  " if not row["scoreable"] else "MISS")
+    if row.get("transport_error"):
+        # Deliberately shouty. A silent network failure recorded as a model
+        # failure is how a dataset gets quietly ruined.
+        print("  !! ENDPOINT UNREACHABLE -- this run measures the network, "
+              "not the model. Excluded from scoring.", flush=True)
+    mark = ("NET " if row.get("transport_error")
+            else "ok  " if row["all_correct"]
+            else ("--  " if not row["scoreable"] else "MISS"))
     actions = " ".join(row["per_drone"][0]["actions"]) or "(rejected)"
     line = (f"{row['mission']} {attempt}/{repeats}  {mark}  "
             f"plan {row['plan_seconds']:5.1f}s  {actions}")
@@ -270,6 +277,10 @@ def run_one(agent, mission: dict[str, Any], model: str, attempt: int,
             "drone": name,
             "instruction": instruction,
             "valid": record.valid,
+            # A row whose endpoint was unreachable is not a measurement of the
+            # model. Recorded so it can be excluded rather than silently
+            # counted as the model producing an invalid plan.
+            "transport_error": record.transport_error,
             "error": record.error,
             "actions": actions,
             "expected": expectations[index],
@@ -303,6 +314,9 @@ def run_one(agent, mission: dict[str, Any], model: str, attempt: int,
         "protocol": protocol,
         # A multi-drone mission passes only if EVERY drone's plan is right. One
         # correct plan out of four is a failed mission, not a partial success.
+        # True if ANY drone's planning call could not reach the endpoint.
+        # Such a run measures the network, not the model.
+        "transport_error": any(d["transport_error"] for d in per_drone),
         "all_valid": all(d["valid"] for d in per_drone),
         "all_correct": scoreable and all(d["correct"] for d in per_drone),
         "plan_seconds": round(sum(d["plan_seconds"] for d in per_drone), 2),
@@ -333,21 +347,34 @@ def summarise(rows: list[dict[str, Any]], config: dict[str, Any], model: str) ->
 
     latencies: list[float] = []
     correct_total = scoreable_total = 0
+    unreachable_total = 0
 
     for mission_id, runs in by_mission.items():
         attempts = len(runs)
-        valid = sum(1 for r in runs if r["all_valid"])
+        unreachable = sum(1 for r in runs if r.get("transport_error"))
+        valid = sum(1 for r in runs if r["all_valid"] and not r.get("transport_error"))
         scoreable = runs[0]["scoreable"]
-        correct = sum(1 for r in runs if r["all_correct"])
+        correct = sum(1 for r in runs if r["all_correct"] and not r.get("transport_error"))
         extra = sum(d["extra_steps"] for r in runs for d in r["per_drone"])
         times = [r["plan_seconds"] for r in runs]
         latencies += times
+        unreachable_total += unreachable
         if scoreable:
-            scoreable_total += attempts
+            # Runs whose endpoint was unreachable are removed from the
+            # denominator as well as the numerator. Leaving them in would
+            # score our own network against the model.
+            scoreable_total += attempts - unreachable
             correct_total += correct
+        # ASCII deliberately: this string is printed to the console as well as
+        # written to a UTF-8 file, and a Windows cp1252 console cannot encode
+        # characters like U+26A0. main() reconfigures stdout, but that call is
+        # wrapped in try/except -- so a fancy glyph here could crash the runner
+        # AFTER a full series had already flown.
+        flag = f" !! {unreachable} unreachable" if unreachable else ""
         lines.append(
-            f"| {mission_id} | {runs[0]['category']} | {valid}/{attempts} | "
-            f"{f'{correct}/{attempts}' if scoreable else '—'} | "
+            f"| {mission_id} | {runs[0]['category']} | "
+            f"{valid}/{attempts - unreachable}{flag} | "
+            f"{f'{correct}/{attempts - unreachable}' if scoreable else '—'} | "
             f"{extra if scoreable else '—'} | "
             f"{statistics.mean(times):.1f} |"
         )
@@ -360,6 +387,16 @@ def summarise(rows: list[dict[str, Any]], config: dict[str, Any], model: str) ->
         "",
         "Missions marked — are unscoreable by design; see the mission set for why.",
     ]
+    if unreachable_total:
+        lines += [
+            "",
+            f"> **WARNING: {unreachable_total} run(s) could not reach the "
+            "model endpoint** "
+            "and are excluded from every figure above. Those rows measure the "
+            "network, not the model — most likely a dropped SSH tunnel to a "
+            "remote endpoint. Check `transport_error` in the JSONL, and re-fly "
+            "the affected missions before quoting these numbers.",
+        ]
     return "\n".join(lines) + "\n"
 
 

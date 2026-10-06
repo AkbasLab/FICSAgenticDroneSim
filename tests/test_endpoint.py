@@ -102,5 +102,100 @@ class DefaultPortTests(unittest.TestCase):
                         or "://" in agent.OLLAMA_ENDPOINT)
 
 
+class TransportErrorTests(unittest.TestCase):
+    """"Unreachable" and "the model produced nonsense" are different findings.
+
+    plan_for() records every failure as an invalid plan, so without this
+    distinction a dropped VPN lands in the `all_valid` column as the model
+    having failed -- scoring our own connectivity against the model.
+    """
+
+    def test_connection_failures_are_transport_errors(self):
+        import socket
+        for exc in (ConnectionRefusedError(61, "refused"),
+                    ConnectionResetError("reset"),
+                    TimeoutError("too slow"),
+                    socket.gaierror("name resolution failed"),
+                    socket.timeout("timed out"),
+                    OSError(101, "network unreachable")):
+            with self.subTest(exc=type(exc).__name__):
+                self.assertTrue(agent.is_transport_error(exc))
+
+    def test_model_and_parsing_failures_are_not(self):
+        """These are the model's fault and must stay in the scored column."""
+        for exc in (ValueError("not valid json"),
+                    KeyError("message"),
+                    RuntimeError("model returned an empty plan"),
+                    agent.PlanError("step 1: fly_to needs x")):
+            with self.subTest(exc=type(exc).__name__):
+                self.assertFalse(agent.is_transport_error(exc))
+
+    def test_classified_by_module_not_message(self):
+        """ollama talks over httpx, so a dead endpoint arrives as an httpx type."""
+        fake = type("ConnectError", (Exception,), {"__module__": "httpx"})
+        self.assertTrue(agent.is_transport_error(fake("all connection attempts failed")))
+
+    def test_flag_defaults_false_and_is_logged(self):
+        row = agent.PlanRecord("Drone1", "fly forward", "{}", None, 1.0, False).as_json()
+        self.assertIn("transport_error", row)
+        self.assertFalse(row["transport_error"])
+
+
+class SummaryExclusionTests(unittest.TestCase):
+    """An unreachable run must leave the denominator, not just the numerator."""
+
+    @staticmethod
+    def _runner():
+        import importlib.util, os
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        spec = importlib.util.spec_from_file_location(
+            "run_missions_under_test", os.path.join(root, "scripts", "run_missions.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    @staticmethod
+    def _row(correct, transport=False):
+        return {"mission": "M01", "category": "simple", "attempt": 1,
+                "scoreable": True, "all_valid": not transport,
+                "all_correct": correct and not transport,
+                "transport_error": transport, "plan_seconds": 1.0,
+                "per_drone": [{"extra_steps": 0}]}
+
+    def test_unreachable_run_is_removed_from_both_sides(self):
+        runner = self._runner()
+        rows = [self._row(True), self._row(True), self._row(False, transport=True)]
+        out = runner.summarise(rows, {"set": {"name": "baseline_v1"}}, "llama3.3:70b")
+        # Two good runs out of two scoreable, NOT two out of three.
+        self.assertIn("2/2", out)
+        self.assertNotIn("2/3", out)
+        self.assertIn("Scored runs correct: 2/2", out)
+
+    def test_unreachable_runs_are_announced_not_hidden(self):
+        runner = self._runner()
+        out = runner.summarise([self._row(True), self._row(False, transport=True)],
+                               {"set": {"name": "baseline_v1"}}, "llama3.3:70b")
+        self.assertIn("unreachable", out)
+        self.assertIn("could not reach the model endpoint", out)
+
+    def test_clean_series_has_no_warning(self):
+        runner = self._runner()
+        out = runner.summarise([self._row(True), self._row(True)],
+                               {"set": {"name": "baseline_v1"}}, "llama3.3:70b")
+        self.assertNotIn("unreachable", out)
+
+    def test_summary_is_cp1252_safe(self):
+        """It is printed to a console as well as written to a UTF-8 file.
+
+        A Windows cp1252 console cannot encode glyphs like U+26A0, and the
+        stdout reconfigure in main() is wrapped in try/except -- so a fancy
+        character here could crash the runner AFTER a whole series had flown.
+        """
+        runner = self._runner()
+        out = runner.summarise([self._row(True), self._row(False, transport=True)],
+                               {"set": {"name": "baseline_v1"}}, "llama3.3:70b")
+        out.encode("cp1252")   # raises UnicodeEncodeError if unsafe
+
+
 if __name__ == "__main__":
     unittest.main()
