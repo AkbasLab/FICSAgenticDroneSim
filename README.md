@@ -19,6 +19,45 @@ Engine 4.26 process, on Windows 11.
 
 ---
 
+## Branch policy — `SC`
+
+This work is maintained on the **`SC`** branch of
+`AkbasLab/FICSAgenticDroneSim`. **SC stands for Swarm Coordination**, and the
+branch is a single-author line dedicated to building that capability
+**from scratch**, phase by phase.
+
+> [!] **`main` is not merged into `SC`, now or in future.**
+
+That is deliberate, not an oversight:
+
+* The baseline here is an **independent clean-room reimplementation**. No code
+  from any other author's repository is used, which is recorded in
+  [`phases/phase-01-baseline-freeze/`](phases/phase-01-baseline-freeze/) along
+  with the licensing reasoning behind it.
+* The value of this branch is that every defect, measurement and reversal is
+  attributable to work done here. Merging a parallel codebase in would destroy
+  that, and the phase record would stop meaning anything.
+* Histories are genuinely unrelated — there is no common ancestor with `main`,
+  so a merge is not a tidy-up, it is a fusion of two separate projects.
+
+So, concretely, on this branch:
+
+```
+never:   git merge fics/main
+never:   git rebase fics/main
+never:   git pull            (bare, with main tracked)
+use:     git pull fics SC
+```
+
+There is no branch protection enforcing this — it requires `admin` on the
+repository, which this author does not hold. It therefore rests on discipline,
+which is why it is written down here rather than left to memory.
+
+Work from `main` that turns out to be worth having is **reimplemented** here and
+credited in the phase record, not merged.
+
+---
+
 ## Start here
 
 | I want to… | Go to |
