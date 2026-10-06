@@ -196,16 +196,16 @@ change rather than four separate codebases.
 
 ## Status, provenance and licensing
 
-> **This project is under active development and carries no licence yet.**
-> Nothing here is a finished result. The baseline has not flown the mission set,
-> no measurements have been recorded, and interfaces will change without notice
-> until Phase 2 settles the module structure.
+> **This project is under active development.** Nothing here is a finished
+> result. Interfaces will change without notice until Phase 2 settles the module
+> structure, and the execution half of the Block A dataset has been invalidated
+> and is being re-flown — see
+> [`docs/BASELINE_MISSIONS.md`](docs/BASELINE_MISSIONS.md).
 >
-> **No licence is granted.** Absent one, default copyright applies: this is
-> readable by those given access, not reusable. A licence is chosen deliberately
-> in `AUV-21 — Ethics, Licensing and Publication Compliance`, before Phase 20
-> publishes anything. Until then the repository stays private and unlicensed —
-> by decision, not by oversight.
+> **Licence: MIT**, held by the Flexible & Intelligent Complex Systems (FICS)
+> Research Group — see [`LICENSE`](LICENSE). This matches the licence on the
+> parent repository, so the work is usable and redistributable on the same terms
+> as the rest of the lab's output.
 
 **All code here is original to this project.** No third-party agent code is
 vendored, imported or required at runtime. The only dependencies are the
@@ -220,6 +220,7 @@ this repository's history. The reasoning is recorded in
 [`docs/BASELINE_ENVIRONMENT.md`](docs/BASELINE_ENVIRONMENT.md) §9, and the
 choice in [`phases/phase-01-baseline-freeze/`](phases/phase-01-baseline-freeze/).
 
-That leaves the repository free to carry whatever licence the project chooses
-when the time comes — which is the point of removing the dependency, and why
-the choice can wait rather than being forced by someone else's terms.
+That is what makes the MIT licence above possible. Had the external code
+remained, this repository could not have been licensed at all — the choice would
+have been someone else's to make. Reimplementing from scratch is what turned
+licensing from a blocker into a decision.

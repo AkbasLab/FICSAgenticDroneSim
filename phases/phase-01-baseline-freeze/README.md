@@ -629,5 +629,7 @@ the multi-drone missions, or the single-drone missions become invalid.
   machine's paths (`D:\Research\...`, `D:\AllSetups\...`). A student on another
   machine meets them immediately, and the exit criterion is explicitly about
   someone else. Decide whether they become placeholders before the exit test.
-- **Which licence** this repository carries, now that it is free to choose one.
-  Settled in `AUV-21` before Phase 20.
+- ~~**Which licence** this repository carries.~~ **Settled 2026-10-06: MIT**,
+  held by the FICS Research Group, matching the parent repository. Possible only
+  because the baseline was reimplemented — had the external code remained, the
+  choice would not have been ours to make.
