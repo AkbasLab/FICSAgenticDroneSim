@@ -1,8 +1,26 @@
+# Python dependencies for the open-loop baseline.
+#
+#     pip install -r requirements.txt
+#
+# CARLA IS NOT LISTED HERE, DELIBERATELY. The carla 0.9.16 wheel for
+# cp310/win_amd64 is not published on PyPI -- it ships inside the CarlaAir
+# package, so it must be installed from your own extracted copy:
+#
+#     pip install <carlaair-root>\PythonAPI\carla\dist\carla-0.9.16-cp310-cp310-win_amd64.whl
+#
+# Wheel SHA-256: f255c0fa2c89cdbd7b194546a45c03be45009033e4fece8c7021d13d9727fc33
+# Full instructions: docs/SETUP.md
+#
+# This file used to pin carla by absolute path into one machine's disk, and
+# `packaging` to the conda maintainer's internal build directory -- neither of
+# which exists anywhere else, so `pip install -r` failed on every machine but
+# one. That is the opposite of what a requirements file is for, and it broke
+# the Phase 1 exit criterion, which is reproduction by someone else.
+
 airsim==1.8.1
 annotated-types==0.8.0
 anyio==4.15.1
 build==1.6.1
-carla @ file:///D:/Research/CarlaAirSetup/CarlaAir-v0.1.7-Windows11-x86_64/PythonAPI/carla/dist/carla-0.9.16-cp310-cp310-win_amd64.whl#sha256=f255c0fa2c89cdbd7b194546a45c03be45009033e4fece8c7021d13d9727fc33
 certifi==2026.7.22
 cffi==2.1.1
 charset-normalizer==3.5.1
@@ -22,7 +40,7 @@ numpy==2.2.6
 ollama==0.6.2
 opencv-contrib-python==5.0.0.93
 opencv-python==5.0.0.93
-packaging @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_packaging_1785888127/work
+packaging==26.3
 pillow==12.3.0
 pyasn1==0.6.4
 pyasn1_modules==0.4.2

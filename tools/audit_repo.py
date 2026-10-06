@@ -79,6 +79,13 @@ def tracked() -> list[str]:
 files = tracked()
 markdown = [f for f in files if f.endswith(".md")]
 python = [f for f in files if f.endswith(".py")]
+# Dependency and config files. Kept separate because a machine-specific path
+# here is not a documentation wart -- it stops `pip install -r` working on
+# every machine but one, which is the single most direct way to fail the
+# Phase 1 exit criterion.
+depfiles = [f for f in files
+            if f in ("requirements.txt", "environment.yml")
+            or f.endswith((".toml", ".cfg", ".ini"))]
 
 # ---------------------------------------------------------------- 1. links
 for path in markdown:
@@ -206,6 +213,33 @@ if counts:
     for path, n in sorted(counts.items(), key=lambda kv: -kv[1])[:6]:
         notes.append(f"    {n:3d}  {path}")
 
+# ------------------------------------ 6b. local paths in dependency files
+#
+# A PROBLEM, not a note -- unlike a path in prose, this one breaks installation
+# silently for everyone else. Both forms were found in this repository on
+# 2026-10-06, and neither was caught by the check above, which only reads
+# markdown and python and only matches backslash paths:
+#
+#   carla @ file:///D:/Research/CarlaAirSetup/.../carla-0.9.16-...whl
+#   packaging @ file:///home/conda/feedstock_root/build_artifacts/...
+#
+# The first pinned a wheel to one laptop's disk. The second was pip freeze
+# leaking the conda maintainer's internal build directory -- a path that never
+# existed on any machine here. A wheel that only ships inside a vendor archive
+# belongs in the setup instructions with a placeholder root, not in a
+# requirements file pretending to be installable.
+LOCAL_DEP = re.compile(r"(file:///|@\s+/|[A-Za-z]:[\/])")
+for path in depfiles:
+    for number, line in enumerate(io.open(path, encoding="utf-8"), 1):
+        stripped = line.strip()
+        if stripped.startswith("#") or not stripped:
+            continue
+        if LOCAL_DEP.search(stripped):
+            problems.append(
+                f"local path in dependency file: {path}:{number}: "
+                f"{stripped[:70]}"
+            )
+
 # -------------------------------------------------------------- 7. secrets
 #
 # Deliberately crude: an assignment of something named like a credential to a
@@ -229,7 +263,8 @@ for path in files:
         problems.append(f"junk tracked: {path}")
 
 # ------------------------------------------------------------------ report
-print(f"tracked files:   {len(files)}  ({len(markdown)} markdown, {len(python)} python)")
+print(f"tracked files:   {len(files)}  ({len(markdown)} markdown, "
+      f"{len(python)} python, {len(depfiles)} dependency/config)")
 for note in notes:
     print("  " + note)
 print()
