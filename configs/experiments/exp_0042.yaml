@@ -1,0 +1,17 @@
+# One run, described completely. Reproduce it with:
+#   python scripts/run_batch.py configs/experiments/exp_0042.yaml
+experiment_id: exp_0042
+architecture: agentic_decentralized     # A|B|C|D|E or the long name
+scenario: search_relay_001
+team_size: 4
+network_profile: severe                 # nominal|moderate|severe|partitioned
+failure_profile: drone_failure_midmission
+random_seed: 42
+planner: scripted                       # scripted | llama3.1:8b | gemini:...
+
+# Not in the 14.1 example, but recorded because a run cannot be reproduced
+# without them. The heartbeat governs how fast a lost drone is noticed; at the
+# old 20 s default, detection took 160 s and outlasted the mission.
+heartbeat_s: 8.0
+max_steps: 600
+notes: "Phase 14 reference configuration."
