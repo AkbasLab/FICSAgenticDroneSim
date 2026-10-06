@@ -641,6 +641,72 @@ which it silently did before.
 Both are now recorded per run rather than assumed, along with the endpoint that
 answered — a model name alone does not say where it ran.
 
+### 2026-10-06 — M09 was never blocked, and the drones were never oscillating
+
+Two things recorded as problems turned out not to be, and both were recorded
+without being retested. Worth writing down as much for the method as for the
+facts.
+
+#### The multi-drone defect is narrower than recorded
+
+M09 and M10 were marked blocked by the spawn defect. **The defect affects
+declared rosters, not multi-drone flight.**
+
+A drone named in `settings.json` is created at simulator start, falls, and
+settles on top of the other — and a drone resting inside another cannot be
+repositioned, which was established as a matrix of five conditions on
+2026-09-28. A drone added at runtime with `simAddVehicle` is placed **while
+still falling**, never becomes pinned, and the single `simSetVehiclePose`
+succeeds.
+
+On 2026-09-28 the roster had been set to two drones for the camera-viewer
+experiment. When that was reverted the roster returned to one, and the defect
+went with it — but the "blocked" status was carried forward anyway.
+
+**No placement code was changed.** `git diff ecd39af HEAD` shows zero changes
+to `ensure_vehicles`, `simAddVehicle`, `simSetVehiclePose` or `SPACING`.
+Measured: placement succeeded **5/5 trials** at 4.02 m, and M09 then flew
+**6/6 drone-plans correct across two sessions**, separation never below spawn
+spacing across 208 samples per run.
+
+This also unblocks **Phase 3**, whose exit criterion names four drones. The
+declared-roster defect is real and unfixed, but it only bites if the roster is
+changed, and nothing now needs to.
+
+> The lesson is the project's own rule, broken by me: fly it, do not assert it.
+> A status carried forward from a configuration that had already been undone
+> would have stopped someone attempting a whole phase.
+
+#### The oscillation was the viewport, not the aircraft
+
+The drones appeared to oscillate continuously while climbing and descending.
+Measured three ways:
+
+| Measurement | Result |
+|---|---|
+| Single drone, ~1,300 Hz, holding | **0 reversals** in 16,500 samples, 2.5 cm range over 8 s |
+| Single drone, ~1,300 Hz, climbing | **0 reversals** in 5,137 samples |
+| Two drones during M09, 10 Hz, 230 s | **0 reversals** across **72 hold segments**; mean drift **1.5–1.8 cm** |
+
+The reversals in the trace are mission events: three of ~10 m are
+`reset_world` dropping the drone between runs, and the 0.83–0.86 m ones
+immediately after are the landing bounce. Both drones show them at identical
+timestamps, which is what mission events look like and instability does not.
+
+**What is real** is a transient at every altitude change: a **1.4 m wrong-way
+excursion** as the controller reverses the vertical velocity it already has,
+then a **1.5 m overshoot** with one bounce on arrival, settling in 2–3 seconds.
+Repeatable, so a characteristic rather than a fault, and well inside the 6 m
+altitude stagger M10 uses.
+
+The apparent continuous bobbing is frame rate. The laptop GPU sits at
+**3765/4096 MiB and 100% utilisation** rendering Town10HD at Epic with 30
+vehicles and 50 walkers. Smooth motion at a low, uneven frame rate reads as
+oscillation, most strongly on vertical movement where the eye has no horizontal
+reference. That GPU load is in the protocol deliberately, and the physics is
+unaffected — flight times repeat within 0.3 s and separation held at exactly
+4.02 m.
+
 ### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after

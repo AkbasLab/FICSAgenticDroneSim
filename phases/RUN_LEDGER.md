@@ -50,27 +50,49 @@ matching the upstream benchmark so results are comparable.
 | M06 | 1 | 3 | 3 | 3 | **done** — 3/3 correct |
 | M07 | 1 | 3 | 3 | 3 | **done** — 3/3 correct |
 | M08 | 1 | 3 | 3 | 3 | **done** — unscoreable by design; 3/3 consistent |
-| M09 | 2 | 3 | 3 | 6 | **blocked** — multi-drone spawn defect |
-| M10 | 4 | 3 | 3 | 12 | **blocked** — multi-drone spawn defect |
+| M09 | 2 | 3 | 3 | 6 | **done** — 6/6 drone-plans correct, 4.02 m separation, flown twice |
+| M10 | 4 | 3 | 3 | 12 | not flown — next |
 | **Total** | | | **30** | **42** | |
 
 ### Completion
 
 ```
-valid study runs:        24 / 30      (80%)
+valid study runs:        27 / 30      (90%)
 single-drone (M01-M08):  24 / 24      (100%)  COMPLETE
-multi-drone (M09-M10):    0 /  6      blocked
+M09 (two drones):         3 /  3      (100%)  COMPLETE, flown twice
+M10 (four drones):        0 /  3      not flown
 ```
 
 **The single-drone baseline is complete on `llama3.3:70b`: 21/21 scored runs
 correct, 24/24 flown to completion, 24/24 landed, zero obstacle collisions.**
 M08 is unscoreable by design and produced the same plan all three times.
 
-**Blocked: 6 runs.** M09 and M10 cannot be flown until the multi-drone spawn
-defect is fixed — drones spawn inside one another because this build ignores
-declared spawn offsets. A two-pass placement fix was written, verified at 4.00 m
-separation, and then deliberately reverted because the volume of pose requests
-destabilised the simulator. See the phase log, 2026-09-28 and 2026-09-29.
+**Remaining: 3 runs** (M10, four drones).
+
+> ### Correction, 2026-10-06
+> M09 and M10 were recorded here as **blocked by the multi-drone spawn
+> defect**. That was wrong, and the status was carried forward from 2026-09-28
+> without retesting.
+>
+> **The defect affects declared rosters, not multi-drone flight.** A drone
+> named in `settings.json` is created at simulator start, falls, and settles
+> on top of the other — and a drone resting inside another cannot be
+> repositioned. A drone added at runtime with `simAddVehicle` is placed while
+> still falling, never becomes pinned, and the single `simSetVehiclePose`
+> succeeds.
+>
+> On 2026-09-28 the roster had been set to 2 for a camera experiment. When that
+> was reverted the roster returned to 1, and the defect went with it. **No
+> placement code was changed** — `git diff ecd39af HEAD` shows zero changes to
+> `ensure_vehicles`, `simAddVehicle`, `simSetVehiclePose` or `SPACING`.
+>
+> Measured 2026-10-06: placement with a runtime-spawned second drone succeeded
+> **5/5 trials** at 4.02 m, and M09 then flew **6/6 drone-plans correct across
+> two sessions** with separation never dropping below spawn spacing.
+>
+> **Implication for Phase 3**, whose exit criterion names four drones: it is
+> not blocked either, provided the roster stays at one drone and the rest are
+> spawned at runtime. M10 will confirm that for four.
 
 ---
 
@@ -90,6 +112,8 @@ Everything on disk, with a verdict. Seven sessions, 42 recorded runs, of which
 | **`20261006-174355-v2-M01`** | **70b** | **3** | **VALID STUDY DATA** |
 | **`20261006-175302-v2-M02-M08`** | **70b** | **21** | **VALID STUDY DATA** |
 | **`20261006-181303-v2-M05-recheck`** | **70b** | **3** | **VALID** — supersedes M05 in the session above |
+| **`20261006-182201-v2-M09`** | **70b** | **3** | **VALID STUDY DATA** — two drones |
+| **`20261006-183536-v2-M09-osc`** | **70b** | **3** | **VALID** — re-flown while sampling altitude at 10 Hz |
 
 ### Why Block A is split
 
@@ -134,6 +158,31 @@ corrected — which is what a measurement fix should look like.
 **Both sessions are kept.** The original records what was measured; this one
 records it correctly. Phase rule 4: nothing is revised after the fact.
 
+### The oscillation that was not there
+
+M09 was flown a second time while both drones' altitude was sampled at 10 Hz,
+because the drones appeared to oscillate continuously in the viewport.
+
+They do not. Across three concurrent two-drone missions, **72 hold segments
+contained zero direction reversals**, with mean peak-to-peak altitude drift of
+**1.5–1.8 cm**. A separate single-drone test at ~1,300 Hz found zero reversals
+in 16,500 samples and a 2.5 cm range over 8 seconds of holding.
+
+The reversals that do appear in the trace are mission events, not instability:
+three of about 10 m each are `reset_world` dropping the drone between runs, and
+the 0.83–0.86 m ones immediately after are the landing bounce. Both drones show
+them at identical timestamps.
+
+What is real, and visible, is a transient at every altitude change: a **1.4 m
+wrong-way excursion** as the controller reverses existing vertical velocity, and
+a **1.5 m overshoot** with one bounce on arrival, settling in 2–3 seconds.
+Consistent run to run, so a characteristic rather than a fault.
+
+The apparent continuous bobbing is the **viewport**. The laptop GPU sits at
+3765/4096 MiB and 100% utilisation rendering Town10HD at Epic with traffic;
+smooth motion at a low, uneven frame rate reads as oscillation, most strongly on
+vertical movement. That GPU load is in the protocol deliberately.
+
 ---
 
 ## 4. Phases 2 and 3 have no run inventory
@@ -146,10 +195,11 @@ are demonstrations.
 | **2** — Repository architecture | Baseline examples run through the modular structure unchanged | A refactor plus a demonstration that behaviour is unchanged. No scored runs |
 | **3** — Flight-skill layer | Four drones take off, navigate, hold, return, land, each skill returning a structured result | Flights, but a capability demonstration rather than a scored matrix |
 
-> **Phase 3 depends on the multi-drone spawn defect being fixed**, since its
-> exit criterion names four drones. That makes the defect blocking for Phase 3
-> as well as for M09 and M10 — it is the single most consequential open item in
-> the project.
+> **Phase 3's exit criterion names four drones**, and on the evidence of M09 it
+> is not blocked: multi-drone flight works when the extra drones are spawned at
+> runtime rather than declared in `settings.json`. M10 tests that for four.
+> The declared-roster defect remains real and unfixed, but it only bites if the
+> roster is changed — which nothing now needs to do.
 
 Phase 18 is the next phase with a large run inventory: a factorial design
 against the mock adapter, roughly 1,920 runs, requiring no simulator and no GPU.
