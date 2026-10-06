@@ -594,6 +594,53 @@ while it falls. Neither survives takeoff: yaw reads 0.00° by the time the first
 plan step runs, and M01 landed at y = 0.05, straight along world X. So
 `_velocity`'s body-frame assumption holds in flight after all.
 
+### 2026-10-06 — the study's model becomes llama3.3:70b on an H100
+
+Until now the protocol named `llama3.2:3b`, chosen by necessity: this laptop
+has 4 GB of VRAM and the simulator already owns ~93% of it, so inference ran on
+CPU. Access to ERAU's Vega cluster changes that, and the study now runs on
+**`llama3.3:70b`** on an **H100 with 80 GB**, reached from the laptop over an
+SSH tunnel.
+
+**The simulator does not move.** CarlaAir v0.1.7 is a Windows build needing a
+display context, so it stays here. Only the model relocates, which the open-loop
+baseline makes painless: planning happens before takeoff and the model is never
+consulted again, so nothing latency-sensitive crosses the network.
+
+Proven end to end on 2026-10-05: laptop to `gpu02`, 70B at **100% GPU**,
+planning calls answered in **1.2–1.6 s warm** — the same as the 3B on this
+laptop's CPU. A model twenty-three times larger, at no latency cost.
+
+#### What this does to the existing results
+
+| | |
+|---|---|
+| Block A (24 runs, `3b`) | superseded as the baseline; **kept** as the small-model column |
+| `blockC` | never flown; it would have been a 3B series |
+| The mission set | unchanged. Same ten missions, same scoring |
+
+The 3B data is not discarded. "Is a 3-billion-parameter model viable for UAV
+mission planning?" is a real question and nobody has published a 3B column — it
+simply stops being the *baseline* and becomes a comparison point.
+
+#### Two protocol values that now matter and did not before
+
+**`num_gpu` is per request and machine-specific.** The config now says 999, all
+layers on the GPU, which is right for the H100. On this laptop it must be
+overridden to 0 with `--option num_gpu=0`, because the simulator owns the VRAM.
+Sending 0 to the cluster would make the server reload a 42 GB model onto CPU
+cores — the whole point, silently undone.
+
+**`num_ctx` was never pinned, and should have been.** Left unset, Ollama uses
+the model's own maximum. For `llama3.3` that is 131072, whose KV cache on a 70B
+is about 43 GB on top of 42 GB of weights: 86 GB, too large for an 80 GB card,
+so it loaded **67%/33% CPU/GPU**. Pinned to 4096 it reports 43 GB and **100%
+GPU**. It also stops the value depending on each machine's Ollama version,
+which it silently did before.
+
+Both are now recorded per run rather than assumed, along with the endpoint that
+answered — a model name alone does not say where it ran.
+
 ### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after

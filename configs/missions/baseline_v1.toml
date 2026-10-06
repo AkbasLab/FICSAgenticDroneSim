@@ -67,7 +67,13 @@ description = "Ten missions spanning movement, repetition, ordering, ambiguity a
 #  risk this accepts.
 #
 [protocol]
-model       = "llama3.2:3b"   # primary. --model on the runner overrides
+# THE STUDY'S MODEL. Runs on an H100 on ERAU's Vega, reached from this laptop
+# through an SSH tunnel; the simulator cannot move, because CarlaAir is a
+# Windows build needing a display context. See the phase log for the decision.
+#
+#   local smoke test:  --model llama3.2:3b --option num_gpu=0
+#
+model       = "llama3.3:70b"  # --model on the runner overrides
 repeats     = 3               # runs per mission, matching the upstream benchmark
 map         = "Town10HD"
 launch      = ".\\CarlaAir.ps1 Town10HD"
@@ -77,14 +83,17 @@ traffic     = true            # as the platform is actually used
 vehicles    = 30              # launcher defaults for auto_traffic.py
 walkers     = 50
 
-# Frozen inference options. num_gpu 0 is forced by 4 GB VRAM already spoken for
-# by the simulator; temperature 0 is what makes repeated runs comparable.
+# Frozen inference options, read and sent by scripts/run_missions.py and
+# recorded as flown. Override one value for one machine with --option KEY=VALUE.
 [protocol.options]
-# READ AND SENT by scripts/run_missions.py, and recorded as flown. Override a
-# single value for one machine with --option KEY=VALUE.
-num_gpu     = 0      # layers offloaded to GPU. 0 here: the simulator owns the
-                     # laptop's 4 GB. A GPU server needs this high -- sending 0
-                     # makes it reload the model onto CPU cores.
+num_gpu     = 999    # layers offloaded to the GPU; 999 means all of them.
+                     # Correct for the H100 this study runs on. On the LAPTOP
+                     # this must be overridden to 0, because the simulator
+                     # already owns its 4 GB of VRAM:
+                     #     --option num_gpu=0
+                     # It is per request, so sending 0 to a GPU server makes
+                     # that server reload the model onto CPU cores -- measured
+                     # 2026-10-06, it would throw a 70B off an H100.
 num_ctx     = 4096   # pinned deliberately. Unset, Ollama uses the model's own
                      # maximum (131072 for llama3.3), whose KV cache for a 70B
                      # is ~43 GB on top of 42 GB of weights -- too big for an
