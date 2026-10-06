@@ -176,7 +176,7 @@ specific scored series. Neither replaces the other: the first is a black box
 recorder, the second is the experimental record.
 
 ```powershell
-python -m unittest discover tests     # 30 tests, no simulator needed
+python -m unittest discover tests     # 61 tests, no simulator needed
 python tools\audit_repo.py            # run before every commit
 ```
 

@@ -707,6 +707,73 @@ reference. That GPU load is in the protocol deliberately, and the physics is
 unaffected — flight times repeat within 0.3 s and separation held at exactly
 4.02 m.
 
+### 2026-10-06 — every altitude ever flown was 29 m too high
+
+Found by flying M10, the last three runs of Phase 1. Four drones, and the
+mission failed in a way two drones never did: oscillation in the viewport,
+collisions, and drones left hovering after the agent printed `control released`.
+One run had to be killed by hand.
+
+The cause is not multi-drone at all. **`moveToZAsync` targets are relative to
+the map origin, and Town10HD's ground sits at NED z = +29.25.** So every
+altitude command in this agent has been flying to *commanded + 29.25 m* since
+the first flight. `land` was the only altitude call that was already correct,
+because it alone used `self.ground_z` — which is why the error survived the
+2026-09-29 landing fix untouched.
+
+Measured directly, one drone, the plan `set_altitude -30 / fly_straight 5 / land`:
+
+| Commanded | Intended | Before | After |
+|---|---|---|---|
+| `CRUISE_ALTITUDE = -8` | 8 m above ground | **37.51 m** | 8 m |
+| `set_altitude z = -30` | 30 m | **59.65 m**, peak 60.85 | peak **32.06 m** |
+| Flight time, same plan | — | 103.1 s (M10 Drone1) | **35.7 s** |
+
+Ground was read as world z 29.25 in both frames: `simGetVehiclePose` and
+`kinematics_estimated` agree exactly, so this is not the frame-divergence
+problem — it is a missing ground reference.
+
+What it did to M10 run 1:
+
+- Contact between Drone1 and Drone3 at world z ≈ **−31**, which is Drone1
+  sitting at its *actual* target of 59.65 m rather than the 30 m the
+  instruction asked for. Penetration 0.115 m. Both drones report the same
+  world point; their `impact_point` differs by exactly 8.00 m, Drone3's spawn
+  offset, so `impact_point` is spawn-relative while kinematics is not.
+- The contact is timestamped **t+14 s of flight** — during the climb, before
+  `set_altitude` could have completed.
+- Drone1's `land` then had to descend **60 m at 2 m/s**. It never arrived:
+  `moveToZAsync` gave up against the collision contact, `landAsync` returned,
+  control was released, and the drone stayed at 60 m with
+  `completed: true`. `landed_on_ground: false` was the only field that caught
+  it — a 103.1 s flight against 44–55 s for the other three.
+- `SeparationMonitor` reported `min sep 4.0 m` at **t+15.9 s**, two seconds
+  *after* the contact. That 4.0 m is the post-collision separation, not spawn
+  spacing, and the monitor reported no proximity event for a collision the
+  physics engine recorded.
+
+**Fix:** three call sites anchored to the measured ground, the way `land`
+already was — `take_off`'s climb to cruise, `set_altitude`, and `fly_to`'s z.
+`arm()` sets `ground_z` before `take_off()` runs, so the ordering already
+holds. A side effect: `MAX_ALTITUDE = -120`, commented "roughly the legal
+ceiling", previously permitted 149 m AGL and now means 120 m.
+
+**Consequence for the data.** The **execution** column of all 30 recorded runs
+is invalid: flight times, ground contact, and the vertical staggering that is
+M09's and M10's only separation were all measured 29.25 m above the commanded
+regime. The **planning** results are untouched — 21/21 exact-sequence correct,
+the M08 ambiguity finding, and every latency were produced before the simulator
+was involved. This is the Block A split again, for the same kind of reason, and
+re-flying costs about a minute a run.
+
+**Two things remain unexplained**, and deliberately so rather than by
+inference. Drone3 was at 60 m when even the broken frame puts its commanded
+−18 at 47.65 m; and the separation monitor missed a real collision. Both need
+an altitude trace across all four drones rather than one row of summary data,
+and the fix moves the entire altitude regime (cruise 37.5 → 8 m, targets
+59/53/47/41 → 30/24/18/12), so deriving them from pre-fix data would answer a
+question that no longer applies.
+
 ### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after

@@ -887,11 +887,7 @@ class DroneRunner:
     def take_off(self) -> None:
         """Lift off and settle at cruise height before the plan begins."""
         self.client.takeoffAsync(vehicle_name=self.name).join()
-        # Every altitude is relative to the GROUND, not to z=0. Town10HD's
-        # ground sits at NED z = +29.25, so a bare moveToZAsync(-8) climbs to
-        # 37.5 m rather than 8 m. Measured 2026-10-06; see the phase log.
-        self.client.moveToZAsync(
-            self.ground_z + CRUISE_ALTITUDE, MOVE_SPEED, vehicle_name=self.name).join()
+        self.client.moveToZAsync(CRUISE_ALTITUDE, MOVE_SPEED, vehicle_name=self.name).join()
         # Settle before executing: a velocity command issued mid-climb produces
         # a curve rather than the straight leg the plan describes.
         time.sleep(TAKEOFF_SETTLE)
@@ -934,14 +930,10 @@ class DroneRunner:
             self.client.hoverAsync(vehicle_name=self.name).join()
             time.sleep(step["duration"])
         elif action == "set_altitude":
-            # ground_z-relative: the plan says "30 m up", which means 30 m above
-            # the ground the drone armed on, not 30 m above the map origin.
-            self.client.moveToZAsync(
-                self.ground_z + step["z"], MOVE_SPEED, vehicle_name=self.name).join()
+            self.client.moveToZAsync(step["z"], MOVE_SPEED, vehicle_name=self.name).join()
         elif action == "fly_to":
             self.client.moveToPositionAsync(
-                float(step["x"]), float(step["y"]),
-                self.ground_z + float(step.get("z", CRUISE_ALTITUDE)),
+                float(step["x"]), float(step["y"]), float(step.get("z", CRUISE_ALTITUDE)),
                 MOVE_SPEED, vehicle_name=self.name,
             ).join()
         elif action == "land":

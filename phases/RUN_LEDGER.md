@@ -5,7 +5,7 @@ study remains. Maintained because "how many runs have we done" turned out to be
 a harder question than it should be, and because two thirds of the runs on disk
 are **not** study data for reasons that are easy to forget.
 
-> **Updated 2026-10-06 (evening).** Update this file whenever a series is flown, in the
+> **Updated 2026-10-06 (late evening).** Update this file whenever a series is flown, in the
 > same commit as the data.
 
 ---
@@ -40,34 +40,54 @@ for 2026-10-06.
 **Required: 30 runs** (42 drone-plans). Ten missions, three repeats each,
 matching the upstream benchmark so results are comparable.
 
-| Mission | Drones | Repeats | Runs | Drone-plans | Status on `llama3.3:70b` |
+| Mission | Drones | Repeats | Runs | Drone-plans | Planning on `llama3.3:70b` |
 |---|---|---|---|---|---|
-| M01 | 1 | 3 | 3 | 3 | **done** — 3/3 correct |
-| M02 | 1 | 3 | 3 | 3 | **done** — 3/3 correct |
-| M03 | 1 | 3 | 3 | 3 | **done** — 3/3 correct |
-| M04 | 1 | 3 | 3 | 3 | **done** — 3/3 correct |
-| M05 | 1 | 3 | 3 | 3 | **done** — 3/3 correct (re-flown, see below) |
-| M06 | 1 | 3 | 3 | 3 | **done** — 3/3 correct |
-| M07 | 1 | 3 | 3 | 3 | **done** — 3/3 correct |
-| M08 | 1 | 3 | 3 | 3 | **done** — unscoreable by design; 3/3 consistent |
-| M09 | 2 | 3 | 3 | 6 | **done** — 6/6 drone-plans correct, 4.02 m separation, flown twice |
-| M10 | 4 | 3 | 3 | 12 | not flown — next |
+| M01 | 1 | 3 | 3 | 3 | **plans correct** — 3/3; re-fly |
+| M02 | 1 | 3 | 3 | 3 | **plans correct** — 3/3; re-fly |
+| M03 | 1 | 3 | 3 | 3 | **plans correct** — 3/3; re-fly |
+| M04 | 1 | 3 | 3 | 3 | **plans correct** — 3/3; re-fly |
+| M05 | 1 | 3 | 3 | 3 | **plans correct** — 3/3; re-fly |
+| M06 | 1 | 3 | 3 | 3 | **plans correct** — 3/3; re-fly |
+| M07 | 1 | 3 | 3 | 3 | **plans correct** — 3/3; re-fly |
+| M08 | 1 | 3 | 3 | 3 | unscoreable by design; 3/3 consistent; re-fly |
+| M09 | 2 | 3 | 3 | 6 | **plans correct** — 6/6; separation invalid; re-fly |
+| M10 | 4 | 3 | 3 | 12 | 4/4 plans correct on run 1; re-fly |
 | **Total** | | | **30** | **42** | |
 
 ### Completion
 
 ```
-valid study runs:        27 / 30      (90%)
-single-drone (M01-M08):  24 / 24      (100%)  COMPLETE
-M09 (two drones):         3 /  3      (100%)  COMPLETE, flown twice
-M10 (four drones):        0 /  3      not flown
+valid PLANNING runs:     27 / 30      (90%)
+valid EXECUTION runs:     0 / 30      (0%)   -- altitude defect, 2026-10-06
+
+single-drone (M01-M08):  24 planned valid, 0 flown valid
+M09 (two drones):         3 planned valid, 0 flown valid
+M10 (four drones):        1 attempted (run 1 recorded, runs 2-3 abandoned)
 ```
 
-**The single-drone baseline is complete on `llama3.3:70b`: 21/21 scored runs
-correct, 24/24 flown to completion, 24/24 landed, zero obstacle collisions.**
-M08 is unscoreable by design and produced the same plan all three times.
+**The single-drone PLANNING baseline is complete on `llama3.3:70b`: 21/21
+scored runs correct.** M08 is unscoreable by design and produced the same plan
+all three times. The flights those runs made are no longer citable — see the
+correction below.
 
-**Remaining: 3 runs** (M10, four drones).
+**Remaining: 30 runs re-flown**, at roughly a minute each.
+
+> ### Correction, 2026-10-06 (late) — every altitude was 29 m too high
+> `moveToZAsync` targets are relative to the map origin, and Town10HD's ground
+> sits at NED z = +29.25. **Every altitude command flew to commanded + 29.25 m**
+> from the first flight onward. `set_altitude -30` was measured at **59.65 m**
+> above the ground; `CRUISE_ALTITUDE = -8` at **37.51 m**. `land` was the only
+> altitude call already anchored to `ground_z`, which is why the 2026-09-29
+> landing fix did not expose this.
+>
+> **Planning results stand** — they never touched the simulator. **Execution
+> results do not**: flight times, ground contact, and the vertical staggering
+> that is M09's and M10's only separation were all measured in the wrong
+> altitude regime. Same split as Block A, for the same kind of reason.
+>
+> Fixed by anchoring `take_off`, `set_altitude` and `fly_to` to `ground_z`.
+> Verified in flight: the same plan peaks at **32.06 m** instead of 60.85 m and
+> takes **35.7 s** instead of 103.1 s. See the phase log for 2026-10-06.
 
 > ### Correction, 2026-10-06
 > M09 and M10 were recorded here as **blocked by the multi-drone spawn
@@ -98,8 +118,9 @@ M08 is unscoreable by design and produced the same plan all three times.
 
 ## 3. Session register
 
-Everything on disk, with a verdict. Seven sessions, 42 recorded runs, of which
-**three are valid study data**.
+Everything on disk, with a verdict. Twelve sessions, 43 recorded runs, of which
+**none currently carry valid execution data**. Planning data from the five 70B
+sessions stands.
 
 | Session | Model | Runs | Verdict |
 |---|---|---|---|
@@ -109,11 +130,12 @@ Everything on disk, with a verdict. Seven sessions, 42 recorded runs, of which
 | `20260929-001130-ground-fix-M01` | 3b | 3 | diagnostic — the same fix, still wrong |
 | `20260929-001503-ground-fix2-M01` | 3b | 3 | diagnostic — the fix working |
 | `20261005-233824` | 70b | 3 | exploration — `--plan-only`, non-protocol options |
-| **`20261006-174355-v2-M01`** | **70b** | **3** | **VALID STUDY DATA** |
-| **`20261006-175302-v2-M02-M08`** | **70b** | **21** | **VALID STUDY DATA** |
-| **`20261006-181303-v2-M05-recheck`** | **70b** | **3** | **VALID** — supersedes M05 in the session above |
-| **`20261006-182201-v2-M09`** | **70b** | **3** | **VALID STUDY DATA** — two drones |
-| **`20261006-183536-v2-M09-osc`** | **70b** | **3** | **VALID** — re-flown while sampling altitude at 10 Hz |
+| `20261006-174355-v2-M01` | 70b | 3 | **planning valid, execution invalid** — altitude |
+| `20261006-175302-v2-M02-M08` | 70b | 21 | **planning valid, execution invalid** — altitude |
+| `20261006-181303-v2-M05-recheck` | 70b | 3 | planning valid, execution invalid — altitude |
+| `20261006-182201-v2-M09` | 70b | 3 | planning valid, execution invalid — altitude |
+| `20261006-183536-v2-M09-osc` | 70b | 3 | planning valid, execution invalid — altitude |
+| `20261006-184158-v2-M10` | 70b | 1 | **diagnostic** — the run that exposed the altitude defect |
 
 ### Why Block A is split
 
