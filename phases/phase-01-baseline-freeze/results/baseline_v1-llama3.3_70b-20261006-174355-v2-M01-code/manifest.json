@@ -1,0 +1,14 @@
+{
+  "commit": "9b09652",
+  "dirty": true,
+  "agent": "open_loop_agent.py",
+  "agent_sha256": "8d26d85d2257657f",
+  "python": "3.10.21",
+  "ollama_endpoint": "http://127.0.0.1:11434",
+  "files": {
+    "open_loop_agent.py": "8d26d85d2257657f",
+    "run_missions.py": "c80078d939da8b36",
+    "baseline_v1.toml": "ec82efa030bf7330"
+  },
+  "snapshot": "baseline_v1-llama3.3_70b-20261006-174355-v2-M01-code"
+}
