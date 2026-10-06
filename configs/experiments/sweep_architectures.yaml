@@ -1,0 +1,7 @@
+# A batch: every architecture under one condition, with one drone lost early.
+# Run with:  python scripts/run_batch.py configs/experiments/sweep_architectures.yaml
+- {experiment_id: sweep_A_severe, architecture: centralized,                scenario: search_relay_001, network_profile: severe, failure_profile: drone_failure_early, random_seed: 42}
+- {experiment_id: sweep_B_severe, architecture: independent,                scenario: search_relay_001, network_profile: severe, failure_profile: drone_failure_early, random_seed: 42}
+- {experiment_id: sweep_C_severe, architecture: deterministic_decentralized, scenario: search_relay_001, network_profile: severe, failure_profile: drone_failure_early, random_seed: 42}
+- {experiment_id: sweep_D_severe, architecture: agentic_decentralized,      scenario: search_relay_001, network_profile: severe, failure_profile: drone_failure_early, random_seed: 42}
+- {experiment_id: sweep_E_severe, architecture: open_loop,                  scenario: search_relay_001, network_profile: severe, failure_profile: drone_failure_early, random_seed: 42}
