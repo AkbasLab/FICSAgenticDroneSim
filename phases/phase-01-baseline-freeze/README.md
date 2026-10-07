@@ -1124,6 +1124,87 @@ world x through the legs and see whether Drone1 and Drone3 ever occupy the same
 point; and fly Drone3 forward instead of backward in the same four-drone layout,
 to see whether the 14 m drift follows the *direction* or the *drone*.
 
+### 2026-10-06 — the 14 m is not drift. It is a 12.7 m jump in 0.44 s
+
+Bisected with four drones, hand-built plans and no model. Logging all four world
+positions at 10 Hz through the legs turned the "drift" into something else
+entirely.
+
+#### Drone3 does not climb. It jumps.
+
+```
+t+17.07  D1 (-0.05, 0.05, 30.43)   D3 ( 1.00, 0.0, 20.00)   apart 10.48
+t+17.51  D1 ( 0.14, 0.05, 31.49)   D3 (-1.07, 0.0, 19.98)   apart 11.57
+t+18.06  D1 ( 1.30, 0.05, 32.00)   D3 (-3.66, 0.0, 19.96)   apart 13.02
+t+18.50  D1 ( 2.50, 0.05, 32.51)   D3 (-5.45, 0.0, 32.62)   apart  7.95
+t+19.05  D1 ( 3.93, 0.05, 32.69)   D3 (-7.51, -0.0, 32.79)  apart 11.44
+```
+
+Drone3 holds **19.9–20.0 m for three seconds**, then between t+18.06 and t+18.50
+its altitude goes **19.96 → 32.62**. That is **12.7 m in 0.44 s, about 29 m/s**,
+in an aircraft whose commanded speed is 5 m/s. Its x continues smoothly through
+the jump (−3.66 → −5.45), and it arrives at **Drone1's altitude**: 32.51 m at
+that instant.
+
+So the "+14.6 m drift" recorded three times is not drift and not a controller
+characteristic. It is one discontinuity. Every explanation offered for it today —
+vz = 0 not holding altitude, inherited climb momentum, backward flight pitching
+the airframe — was an explanation for a gradual climb that does not happen.
+
+#### It depends on the direction, not the drone
+
+Same four-drone layout, Drone3 flying **forward** instead of backward:
+
+| | Drone3 drift | Drone contacts |
+|---|---|---|
+| `fly_backward` | **14.72 m** | 8 |
+| `fly_straight` | **1.85 m** | **0** |
+
+Drone1, Drone2 and Drone4 are unchanged at 1.83–1.9 m. So both the jump and the
+collision vanish when the only change is the direction of one leg — and in
+isolation, on one drone, a backward leg drifts 1.24 m and nothing happens. The
+defect needs **backward flight AND other drones present**, which is why eight
+months of single-drone work never met it.
+
+#### The collisions are reported while the drones are 10 m apart
+
+The first contact is timestamped **t+16.97 with 0.275 m of penetration**. At
+t+17.07 the two drones' world poses are **10.48 m apart**, and they are
+separating. The jump happens about 1.5 s *later*. So the contact is reported
+before the drones are anywhere near each other, and before the event that puts
+them at the same altitude.
+
+My own trace, computing distances from `simGetVehiclePose` independently, agrees
+with the monitor exactly — **7.55 m at t+15.76** against the monitor's 7.55 — so
+the monitor is not at fault. Two independent position readers agree, and the
+collision reporter disagrees with both.
+
+#### What is now established, and what is not
+
+Established: the jump is real, reproducible, deterministic, direction-dependent,
+requires other vehicles, and is a discontinuity rather than a climb. The position
+APIs agree with each other. The collision API agrees with neither.
+
+Not established: which of the two is wrong, and what mechanism moves a vehicle
+12.7 m in 0.44 s. A physics impulse resolving an interpenetration would do it,
+but the poses say there was nothing to resolve. The ordering — contact reported
+first, jump second — is suggestive and not conclusive.
+
+#### A third hang, same shape
+
+The two-drone case did not finish. Drone3 flew its backward leg, landed and
+released cleanly; **Drone1 hung in `land` at 29.71 m with control still enabled**
+and was still there minutes later. That is the third time today a `land` step has
+failed to come down and not returned: the original M10, the reverted
+`moveByVelocityZBodyFrameAsync` attempt, and now this. It is independent of the
+jump and deserves its own investigation — a `land` that neither lands nor raises
+defeats the teardown safeguard completely, because `skip_landing` is passed
+exactly when the plan's own `land` reported success.
+
+Noted in passing: Drone4, uninvolved in that test, sat at **29.35 m AGL** at its
+reset pose without falling, `api=False`. That is the ground-reference hazard the
+session guard was added for, observed again.
+
 ### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after

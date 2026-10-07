@@ -80,12 +80,21 @@ M10 (four drones):        3 /  3      flown; see the caveat below
 > Separation is suspect too: the monitor put that pair **7.54 m apart** at the
 > moment of contact. Both need polling before any proximity claim is citable.
 >
-> Also open: M10's Drone3 climbs **14.6 m** during its backward leg, three runs
-> running, which is larger than the 6 m stagger that is its only separation.
-> This was first attributed to `fly_backward` and that is **withdrawn**: on one
-> drone a backward leg drifts +1.24 m against a forward leg's +1.40 m, so the
-> 14.6 m belongs to the four-drone context and the cause is unknown. See the
-> phase log.
+> Also open, and now characterised: M10's Drone3 gains **14.6 m** during its
+> backward leg, and it is **not drift**. Traced at 10 Hz, it holds 20.0 m for
+> three seconds then goes 19.96 -> 32.62 in **0.44 s** -- 12.7 m at about
+> 29 m/s, commanded speed 5 m/s -- arriving at Drone1's altitude. One
+> discontinuity, not a climb.
+>
+> It needs backward flight **and** other vehicles: Drone3 flown forward in the
+> same layout drifts 1.85 m with zero contacts, and one drone flying backward
+> alone drifts 1.24 m. Collisions are reported at t+16.97 while two
+> independent position readers agree the drones are 10.48 m apart and
+> separating. Cause unknown; no claim as to which API is wrong.
+>
+> Separately: a `land` step has now failed to descend and failed to return three
+> times, leaving a drone armed in mid air. It defeats the teardown safeguard,
+> because `skip_landing` is passed exactly when `land` reports success.
 
 **The single-drone baseline is complete on `llama3.3:70b`, plan and flight:
 21/21 scored runs correct, 24/24 landed, zero obstacle collisions, and

@@ -1069,11 +1069,16 @@ class DroneRunner:
         height, which costs about a metre -- measured 2026-10-06 on one drone,
         same 5 s leg from 18 m: backward +1.24 m, forward +1.40 m.
 
-        But M10's Drone3 climbed +14.6 m on this same leg, three runs running
-        (32.74, 32.80, 33.53 against a commanded 18), straight into Drone1's
-        30.1-32.4 m band, where the two collided. One drone does not reproduce
-        that, so it belongs to the four-drone context and the cause is unknown.
-        Do not "fix" this call expecting it to go away.
+        But M10's Drone3 gains +14.6 m on this same leg, three runs running, and
+        THAT IS NOT DRIFT -- do not try to fix it here. Traced at 10 Hz: the
+        aircraft holds 19.9-20.0 m for three seconds and then goes 19.96 ->
+        32.62 between t+18.06 and t+18.50. 12.7 m in 0.44 s, about 29 m/s, at a
+        commanded 5 m/s, arriving at Drone1's altitude while its x continues
+        smoothly. One discontinuity, not a climb.
+
+        It needs backward flight AND other vehicles present: flying Drone3
+        forward in the same four-drone layout gives 1.85 m and zero contacts,
+        and one drone flying backward alone gives 1.24 m. Cause unknown.
 
         Two things known, for whoever picks this up:
 
