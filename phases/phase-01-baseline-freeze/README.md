@@ -879,10 +879,15 @@ commanded altitude to within 0.13 m. Then their velocity legs moved them:
 | **Drone3** | **backward** | 18.0 | 18.12 | **32.74 (+14.6)** |
 | Drone4 | left | 12.0 | 12.13 | 14.03 (+1.9) |
 
-Consistent across all three runs: 32.74, 32.80, 33.53. **`fly_backward` climbs
-about 14.6 m where every other direction climbs about 2 m**, which puts Drone3
-inside Drone1's 30.1–32.4 m band while it flies backward along −x through where
-Drone1 is holding. A 6 m vertical stagger cannot survive a 14.6 m excursion.
+Consistent across all three runs: 32.74, 32.80, 33.53. Drone3 ends up inside
+Drone1's 30.1–32.4 m band while flying backward along −x through where Drone1 is
+holding, and a 6 m vertical stagger cannot survive a 14.6 m excursion.
+
+> **Corrected later the same day.** This was read as `fly_backward` intrinsically
+> climbing, and it is not: flown on one drone, a backward leg drifts **+1.24 m**
+> against a forward leg's +1.40 m. The 14.6 m is real and reproducible but belongs
+> to the four-drone context, not to the primitive. See the correction entry below;
+> the paragraphs that follow here are superseded by it.
 
 This also settles the question left open earlier today. Drone3 was measured at
 roughly 60 m in the pre-fix M10 when even the broken altitude frame put its
@@ -999,6 +1004,60 @@ Worth noting what the landing failure says: Drone1's plan ended with a successfu
 is passed precisely then. The height-authoritative `_is_airborne` fix cannot help
 there, because it is never consulted. A `land` step that returns without landing
 defeats it, and that is the same shape as the original M10 failure.
+
+### 2026-10-06 — correction: `fly_backward` does not intrinsically climb
+
+Earlier today this log attributed M10's Drone1/Drone3 collision to `fly_backward`
+climbing 14.6 m, and called the collision "a consequence of this, not of
+multi-drone flight". **That explanation is withdrawn.** It was inferred from
+four drones flying at once and never tested on one.
+
+Measured directly, one drone, no model, the same 5 s leg from 18 m AGL — M10's
+Drone3 — with each method flown back to back:
+
+| Method | Drift | Travelled |
+|---|---|---|
+| A `moveByVelocityBodyFrameAsync` vz = 0 — what the agent flies | **+1.24 m** | 15.57 m |
+| B `moveByVelocityZBodyFrameAsync` holding z | +0.40 m | 14.36 m |
+| C `moveByVelocityAsync` world frame, vz = 0 | +1.83 m | 20.93 m |
+| **D `moveByVelocityZAsync` world frame, holding z** | **+0.16 m** | **23.58 m** |
+| E `moveToPositionAsync` 25 m back | +0.89 m | 26.62 m |
+| F forward, for comparison | +1.40 m | 19.44 m |
+
+**A backward leg drifts +1.24 m and a forward leg +1.40 m.** Backward is, if
+anything, slightly better. The 14.6 m climb is real — it was recorded three times
+in a row, 32.74, 32.80 and 33.53 against a commanded 18 — but it is **not a
+property of the primitive**, so it belongs to the four-drone context and its
+cause is unknown.
+
+What changed between the two measurements is worth listing rather than guessing
+between: four drones instead of one; four flight threads issuing commands
+concurrently; a collision occurring during the same leg; and, in the agent but
+not in this test, **no settle between `set_altitude` and the leg that follows
+it** — `take_off` sleeps for `TAKEOFF_SETTLE` but `set_altitude` does not, so a
+leg can begin while the aircraft is still moving vertically, and `vz = 0` does
+not arrest momentum it inherits. That last one is testable and cheap, and is the
+first thing to try.
+
+This also reopens the collision. The claim that it followed from the climb is
+gone, so the 7.54 m separation at the moment of a 0.25 m interpenetration is once
+more entirely unexplained, with the frame explanation still ruled out by direct
+measurement.
+
+#### A better primitive, separately
+
+Method **D** is better on both axes than what the agent flies: **+0.16 m of
+drift against +1.24 m**, and **23.58 m travelled against 15.57 m** for a leg
+asking for 25. Body-frame velocity under-travels badly — A reaches 62% of the
+commanded distance — which has gone unnoticed because nothing ever scored
+displacement either.
+
+Not adopted today. It is a change to how every leg in the study is flown, it
+moves from body frame to world frame (equivalent only because nothing in this
+agent yaws, which the call site documents), and the last change made to this
+function on the strength of a good argument hung the simulator. It belongs at the
+start of a block, after the no-settle hypothesis is tested, not at the end of a
+session.
 
 ### Pending — 1.3
 

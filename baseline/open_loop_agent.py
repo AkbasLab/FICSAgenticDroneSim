@@ -1064,24 +1064,33 @@ class DroneRunner:
         north. Since nothing in this agent ever yaws, the two coincide here --
         but a future change that adds turning will make them diverge.
 
-        Vertical drift during a leg is a known, UNFIXED defect. vz = 0 commands
-        zero vertical velocity, not a held height: the controller is asked not to
-        climb and accepts whatever its attitude leaves behind. Measured
-        2026-10-06 across three M10 runs, against commanded altitudes reached to
-        within 0.13 m:
+        Vertical drift during a leg is a known, UNFIXED defect, and its cause is
+        NOT this call. vz = 0 commands zero vertical velocity rather than a held
+        height, which costs about a metre -- measured 2026-10-06 on one drone,
+        same 5 s leg from 18 m: backward +1.24 m, forward +1.40 m.
 
-            forward  +2.3 m      right  +1.8 m      left  +1.9 m
-            BACKWARD  +14.6 m
+        But M10's Drone3 climbed +14.6 m on this same leg, three runs running
+        (32.74, 32.80, 33.53 against a commanded 18), straight into Drone1's
+        30.1-32.4 m band, where the two collided. One drone does not reproduce
+        that, so it belongs to the four-drone context and the cause is unknown.
+        Do not "fix" this call expecting it to go away.
 
-        14.6 m is more than M10's 6 m vertical stagger, so Drone3 climbs out of
-        its lane into Drone1's and the two collide. The collision is a
-        consequence of this, not of multi-drone flight.
+        Two things known, for whoever picks this up:
 
-        `moveByVelocityZBodyFrameAsync`, which takes a z to hold, was tried and
-        DID NOT FIX IT: Drone3 still climbed about 13 m, and the run then hung in
-        `land` with Drone1 released at 31.18 m and falling. Reverted. Whatever
-        holds altitude through a backward leg on this build, it is not that call
-        used this way. See the phase log for 2026-10-06.
+        - `moveByVelocityZBodyFrameAsync`, holding the current z, was tried and
+          made it worse: Drone3 still climbed to 31.42 m and the run hung in
+          `land`, Drone1 released at 31.18 m and falling. Reverted.
+        - `moveByVelocityZAsync` in the WORLD frame measured better on both axes
+          than this call: +0.16 m of drift against +1.24 m, and 23.58 m travelled
+          against 15.57 m for a leg asking 25. Body-frame velocity under-travels
+          to 62% of the commanded distance, which nothing scores. World frame is
+          equivalent here only because nothing in this agent yaws.
+
+        First hypothesis to test: `set_altitude` has no settle after it, unlike
+        `take_off`, so a leg can start while the aircraft is still moving
+        vertically -- and vz = 0 does not arrest inherited momentum.
+
+        See the phase log for 2026-10-06.
         """
         self.client.moveByVelocityBodyFrameAsync(
             vx, vy, 0.0, duration, vehicle_name=self.name

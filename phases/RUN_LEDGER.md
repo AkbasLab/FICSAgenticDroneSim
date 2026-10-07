@@ -80,8 +80,12 @@ M10 (four drones):        3 /  3      flown; see the caveat below
 > Separation is suspect too: the monitor put that pair **7.54 m apart** at the
 > moment of contact. Both need polling before any proximity claim is citable.
 >
-> Also open: `fly_backward` climbs 14.6 m against about 2 m for every other
-> direction, which is larger than M10's 6 m stagger. See the phase log.
+> Also open: M10's Drone3 climbs **14.6 m** during its backward leg, three runs
+> running, which is larger than the 6 m stagger that is its only separation.
+> This was first attributed to `fly_backward` and that is **withdrawn**: on one
+> drone a backward leg drifts +1.24 m against a forward leg's +1.40 m, so the
+> 14.6 m belongs to the four-drone context and the cause is unknown. See the
+> phase log.
 
 **The single-drone baseline is complete on `llama3.3:70b`, plan and flight:
 21/21 scored runs correct, 24/24 landed, zero obstacle collisions, and
