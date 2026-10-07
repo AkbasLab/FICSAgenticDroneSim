@@ -57,12 +57,31 @@ matching the upstream benchmark so results are comparable.
 ### Completion
 
 ```
-fully valid runs:        24 / 30      (80%)   -- plan AND execution
+runs flown and landed:   30 / 30      (100%)
+plans correct:           21 / 21 scored, + 6 M09 and 12 M10 drone-plans
+altitudes verified:      30 / 30      within 0.13 m of the commanded height
 
-single-drone (M01-M08):  24 / 24      (100%)  COMPLETE, re-flown 2026-10-06
-M09 (two drones):         0 /  3      planning stands; re-fly
-M10 (four drones):        0 /  3      planning stands for run 1; re-fly
+single-drone (M01-M08):  24 / 24      COMPLETE, re-flown 2026-10-06
+M09 (two drones):         3 /  3      COMPLETE
+M10 (four drones):        3 /  3      flown; see the caveat below
 ```
+
+> ### Caveat on collision and proximity, 2026-10-06
+> Flight and planning results for all 30 runs stand. **Collision counts do
+> not.** `collisions()` is read once after teardown and AirSim returns only the
+> most recent collision, so the landing contact overwrites anything earlier — a
+> flight that lands can never report a mid-flight collision.
+>
+> A 10 Hz trace caught Drone1 and Drone3 in contact in **two of the three M10
+> runs**, penetration up to 0.152 m, while all three records say
+> `collision: false`. The pre-fix M10 recorded this same contact only because
+> that flight never landed.
+>
+> Separation is suspect too: the monitor put that pair **7.54 m apart** at the
+> moment of contact. Both need polling before any proximity claim is citable.
+>
+> Also open: `fly_backward` climbs 14.6 m against about 2 m for every other
+> direction, which is larger than M10's 6 m stagger. See the phase log.
 
 **The single-drone baseline is complete on `llama3.3:70b`, plan and flight:
 21/21 scored runs correct, 24/24 landed, zero obstacle collisions, and
@@ -147,6 +166,8 @@ sessions stands.
 | `20261006-200307-v3-diag` | 70b | 1 | diagnostic — traced M01 proving the altitude fix |
 | `20261006-201430-v3-guard` | 70b | 2 | diagnostic — ground-reference guard verified in flight |
 | **`20261006-201608-v3-M01-M08`** | **70b** | **24** | **VALID STUDY DATA** — plan and execution |
+| **`20261006-203012-v3-M09`** | **70b** | **3** | **VALID** — two drones, 6/6 drone-plans |
+| **`20261006-203259-v3-M10`** | **70b** | **3** | **VALID for plan, flight, altitude** — collision/proximity not trustworthy |
 | `20261006-184158-v2-M10` | 70b | 1 | **diagnostic** — the run that exposed the altitude defect |
 
 ### Why Block A is split

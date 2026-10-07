@@ -860,6 +860,78 @@ and no cause is claimed for them. Their block is kept as a diagnostic, and the
 re-flight runs with a position trace attached so a recurrence is captured rather
 than reconstructed.
 
+### 2026-10-06 — M09 and M10 re-flown; two measurement defects found by the new fields
+
+Phase 1 is flown: 30 runs, 42 drone-plans, altitudes correct to 0.13 m,
+everything landed. The two fields added before these runs — the altitude each
+step reached, and separation per pair — each caught something within three
+flights of existing.
+
+#### `fly_backward` climbs 14.6 m
+
+M10's four drones are staggered 30/24/18/12 m, and all four reached their
+commanded altitude to within 0.13 m. Then their velocity legs moved them:
+
+| Drone | Direction | Asked | Reached | After the leg |
+|---|---|---|---|---|
+| Drone1 | forward | 30.0 | 30.11 | 32.43 (+2.3) |
+| Drone2 | right | 24.0 | 24.13 | 25.96 (+1.8) |
+| **Drone3** | **backward** | 18.0 | 18.12 | **32.74 (+14.6)** |
+| Drone4 | left | 12.0 | 12.13 | 14.03 (+1.9) |
+
+Consistent across all three runs: 32.74, 32.80, 33.53. **`fly_backward` climbs
+about 14.6 m where every other direction climbs about 2 m**, which puts Drone3
+inside Drone1's 30.1–32.4 m band while it flies backward along −x through where
+Drone1 is holding. A 6 m vertical stagger cannot survive a 14.6 m excursion.
+
+This also settles the question left open earlier today. Drone3 was measured at
+roughly 60 m in the pre-fix M10 when even the broken altitude frame put its
+commanded −18 at 47.65 m, and no cause was claimed. 47.65 + 14.6 ≈ 62 m. The
+excursion was always there; it was invisible because nothing recorded the
+altitude a step reached.
+
+Cause: `_velocity` passes `vz = 0.0` to `moveByVelocityBodyFrameAsync`, which
+commands zero vertical *velocity* and holds no altitude, so the error is whatever
+the controller's attitude leaves behind — and backward flight pitches the
+airframe the opposite way, giving a much larger one. The fix is
+`moveByVelocityZBodyFrameAsync`, which takes a z to hold. Not applied yet: it
+changes how every leg in the study is flown, so it belongs at the start of a
+block rather than the end of one.
+
+#### A collision can only be seen if the flight fails to land
+
+All three M10 runs record `collision: false`. The physics engine disagrees: a
+position trace polling `simGetCollisionInfo` at 10 Hz caught Drone1 and Drone3 in
+contact in two of the three runs, with penetration up to **0.152 m**, about 14 s
+into each flight.
+
+`collisions()` is read **once, after teardown**, and AirSim returns only the most
+recent collision. Every flight that lands ends touching the ground, and that
+contact overwrites whatever happened earlier. So a successful flight can never
+report a mid-flight collision, and the only reason the pre-fix M10 recorded this
+same Drone1/Drone3 contact is that the flight never landed — nothing came after
+it.
+
+**Every "zero obstacle collisions" claim in this project is therefore unverified,
+including the 24 single-drone runs flown earlier today.** Collisions need
+polling, exactly as proximity does, and for the same reason: the end state does
+not contain them. `SeparationMonitor` is the obvious place.
+
+#### Still unexplained, and sharper than before
+
+At the instant of that contact, both drones' world poses are **7.54 m apart** —
+`per_pair_min_m` for Drone1–Drone3, timestamped 14.3 s, which matches the
+collision. The frame explanation is ruled out: `simGetVehiclePose` and
+`kinematics_estimated` were measured agreeing to 0.00 m on all four drones
+simultaneously, in both x and z. The altitude data shows the two drones *were*
+level with each other (32.4 and 32.74 m), so the 7.54 m is horizontal.
+
+Two measurements that cannot both be right, and no claim about which. What is
+new is that `impact_point` is reported in a spawn-relative frame while `position`
+is not — the pre-fix M10 had the two drones reporting the same contact 8.00 m
+apart, exactly Drone3's spawn offset — so any reconciliation has to start by not
+mixing the two.
+
 ### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after
