@@ -355,12 +355,19 @@ class SeparationMonitor:
     measurement that says whether that was enough.
     """
 
-    def __init__(self, client, names: list[str], interval: float = 0.25) -> None:
+    def __init__(self, client, names: list[str], interval: float = 0.1) -> None:
         self.client = client
         self.names = names
         self.interval = interval
         self.min_distance: float | None = None
         self.min_at: float | None = None
+        # Per pair as well as overall. M10 reported a single 4.0 m minimum for a
+        # flight in which two drones interpenetrated by 0.115 m, because one
+        # overall figure cannot say WHICH pair was close, and the pair that
+        # collided was not the pair that set the minimum. Six pairs at four
+        # drones, and only one of them mattered.
+        self.pair_min: dict[str, float] = {}
+        self.pair_min_at: dict[str, float] = {}
         self.samples = 0
         self.errors = 0
         self._stop = threading.Event()
@@ -385,9 +392,14 @@ class SeparationMonitor:
                     for j in range(i + 1, len(names)):
                         a, b = positions[names[i]], positions[names[j]]
                         distance = math.dist(a, b)
+                        at = round(time.time() - self._started, 1)
+                        pair = f"{names[i]}-{names[j]}"
+                        if distance < self.pair_min.get(pair, float("inf")):
+                            self.pair_min[pair] = distance
+                            self.pair_min_at[pair] = at
                         if self.min_distance is None or distance < self.min_distance:
                             self.min_distance = distance
-                            self.min_at = round(time.time() - self._started, 1)
+                            self.min_at = at
             except Exception:
                 # A sampling failure must never disturb a flight; count it so a
                 # monitor that silently failed cannot look like a clean run.
@@ -412,6 +424,8 @@ class SeparationMonitor:
             "min_separation_m": None if self.min_distance is None else round(self.min_distance, 2),
             "min_separation_at_s": self.min_at,
             "interval_s": self.interval,
+            "per_pair_min_m": {k: round(v, 2) for k, v in sorted(self.pair_min.items())},
+            "per_pair_min_at_s": dict(sorted(self.pair_min_at.items())),
         }
 
 
@@ -1044,14 +1058,25 @@ class DroneRunner:
         """
         started = time.time()
         executed: list[str] = []
+        altitudes: list[dict[str, Any]] = []
         failure: str | None = None
         try:
             self.arm()
             self.take_off()
+            altitudes.append({"after": "take_off", "agl": self._agl()})
             for position, step in enumerate(steps, start=1):
                 self._say(f"{position}/{len(steps)} {step['action']}")
                 self.step(step)
                 executed.append(step["action"])
+                # Read immediately: moveToZAsync has joined, so this is the
+                # height the step actually achieved, against the height asked
+                # for. A set_altitude step records both and they must agree.
+                altitudes.append({
+                    "after": step["action"],
+                    "agl": self._agl(),
+                    "asked_agl": (round(-float(step["z"]), 2)
+                                  if step["action"] == "set_altitude" else None),
+                })
             # A plan without a final land leaves the drone airborne. Hover to
             # stop it drifting on whatever velocity the last step left behind;
             # teardown then brings it down.
@@ -1117,6 +1142,7 @@ class DroneRunner:
             "failure": failure,
             "flight_seconds": round(time.time() - started, 1),
             "ground_z": round(self.ground_z, 2),
+            "step_altitudes_agl": altitudes,
             "final_position": final_position,
             # True if the aircraft ended near its own ground height OR the
             # simulator reports it touching terrain. See the note above.
@@ -1127,6 +1153,21 @@ class DroneRunner:
             # Read after teardown so a collision during the landing is caught.
             "collision": collision,
         }
+
+    def _agl(self) -> float | None:
+        """Height above the arming ground, in metres. None if unreadable.
+
+        Recorded after every step because the record could previously show where
+        a flight ENDED but never how high it went, which is exactly how an
+        altitude error of 29.25 m survived 30 runs and four sessions: every plan
+        was correct, every flight completed, and no field disagreed.
+        """
+        try:
+            z = self.client.getMultirotorState(
+                vehicle_name=self.name).kinematics_estimated.position.z_val
+            return round(self.ground_z - z, 2)
+        except Exception:
+            return None
 
     def _is_airborne(self) -> bool:
         """True if the vehicle still needs landing before control is released.
