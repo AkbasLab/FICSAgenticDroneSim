@@ -1079,25 +1079,14 @@ class DroneRunner:
             # that was not needed is harmless, skipping one that was is not.
             return True
 
-        # HEIGHT IS AUTHORITATIVE, not LandedState. AirSim reports
-        # LandedState = Landed for a motionless vehicle regardless of height:
-        # measured 2026-10-06 with the aircraft hovering at 29.43 m above the
-        # terrain and reporting Landed, and again on an M01 run that released
-        # control at 9.32 m and dropped the aircraft. That is the same failure
-        # `_land_and_release` was written to prevent, reintroduced by trusting
-        # the field.
-        #
-        # The redundant-descent problem that motivated LandedState is already
-        # handled by `skip_landing`, which the caller passes when the plan's own
-        # last step was a successful `land` -- so height can be trusted here
-        # without bringing it back. NED: more negative is higher.
-        if state.kinematics_estimated.position.z_val < self.ground_z - AIRBORNE_MARGIN:
-            return True
-
-        # Low enough to be down. Defer to LandedState if it disagrees, since a
-        # needless landing is harmless and a skipped one is not.
+        # LandedState: 0 = Landed, 1 = Flying. Authoritative when available.
         landed_state = getattr(state, "landed_state", None)
-        return landed_state is not None and landed_state != 0
+        if landed_state is not None:
+            return landed_state != 0
+
+        # Fall back to height if the field is missing. NED: more negative is
+        # higher.
+        return state.kinematics_estimated.position.z_val < self.ground_z - AIRBORNE_MARGIN
 
     def _land_and_release(self, skip_landing: bool = False) -> None:
         """Bring the aircraft down, then hand control back.

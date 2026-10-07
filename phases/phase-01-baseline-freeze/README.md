@@ -774,6 +774,74 @@ and the fix moves the entire altitude regime (cruise 37.5 → 8 m, targets
 59/53/47/41 → 30/24/18/12), so deriving them from pre-fix data would answer a
 question that no longer applies.
 
+### 2026-10-06 — control was being released in mid air again
+
+The first re-flight after the altitude fix put a drone on the ground by dropping
+it. Watched live: Drone1 fell from 22 m to the terrain in three seconds with
+`api=False`. M01 run 2 of that block ended at **9.32 m AGL**,
+`landed_on_ground: false`, after 15.9 s; run 1 of the same block landed cleanly
+in 63.5 s. Same plan, same `ground_z`.
+
+`_land_and_release`'s own docstring describes this exact failure from the first
+real flight — *"M01 took off, flew its leg, held position, and then fell when
+control was released"* — so it is a regression of a defect this harness was
+written to prevent.
+
+**Cause: `_is_airborne()` trusted AirSim's `LandedState`.** Measured with the
+aircraft hovering at **29.43 m above the terrain**: `landed_state = 0`, which is
+`Landed`. `_is_airborne` returns `landed_state != 0`, so teardown skipped the
+landing and released control at altitude. The field is correct at rest on the
+ground and correct during a climb, and wrong for a motionless hover — which is
+precisely how a plan without a final `land` ends, because the harness issues
+`hoverAsync` before teardown.
+
+Fixed by making height authoritative and keeping `LandedState` only as a
+tiebreak below the margin. The redundant-descent problem that motivated the
+field is already handled by `skip_landing`, which the caller passes when the
+plan's own last step was a successful `land`, so nothing is reintroduced.
+
+#### Two further findings from the same investigation
+
+**`arm()` can latch a ground reference 29 m in the air, and flag it settled.**
+After `client.reset()` the aircraft is placed at the player start, about 29 m
+above the terrain. Usually it falls, and the settle loop waits correctly — the
+traced M01 shows the fall from 29.16 m to 0.00 m between t+3.9 s and t+9.4 s,
+after which `ground_z` reads 29.25. But it does not always fall: observed
+motionless at that height with zero velocity, where the settle loop sees
+stillness on its first comparison and the agent printed **`armed, ground z =
+-0.18`** with no `[DID NOT SETTLE]` flag. Stillness is not proof of ground
+contact, and `ground_settled: true` in the records attests to nothing. A
+controlled `landAsync` *is* deterministic — measured bringing the aircraft from
+29.43 m to exactly 0.00 m AGL — so establishing the reference by landing rather
+than by inferring it is the fix. Not yet applied: it is a change to arming, and
+one change at a time.
+
+**The surface at the player start is not recognised as ground.** The aircraft
+rests on `SM_seaM`, which lowercases to `sm_seam` and matches none of
+`GROUND_OBJECTS = ("terrain", "ground", "landscape", "road", "sidewalk")`. So
+the `landed_on_ground` contact fallback cannot fire at the spawn point — it
+worked for M05 only because that mission ends over `Town10HD_Terrain_Ground`.
+The flag therefore rests entirely on a height test against `ground_z`, with no
+independent check, and a collision with that mesh would score as an *obstacle*
+collision rather than ground contact. Left unchanged pending a decision on
+whether to name a map-specific mesh in a general predicate.
+
+#### What the altitude fix did, measured
+
+Retracting a claim made earlier the same day: the altitude fix was reported here
+as having broken horizontal flight, on the strength of two records showing
+`final x = -0.05`. That was wrong. The velocity leg is unaffected by altitude —
+**+14.32 m at 8 m AGL against +14.31 m at 37.5 m** — and a traced M01 through
+the real runner flies correctly end to end: cruise settles at 8.30 m, the leg
+carries x from 0.06 to 20.31 at 4.86 m/s, `final x = 20.23`, landed, **21.7 s**
+against the pre-fix 42.2 s for the same 20.46 m of travel. Half the time for the
+same mission, because the climb is 8 m rather than 37.5 m.
+
+The two zero-displacement runs are real but **not reproducible** on this code
+and no cause is claimed for them. Their block is kept as a diagnostic, and the
+re-flight runs with a position trace attached so a recurrence is captured rather
+than reconstructed.
+
 ### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after
