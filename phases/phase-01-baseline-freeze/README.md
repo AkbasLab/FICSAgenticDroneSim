@@ -812,9 +812,27 @@ stillness on its first comparison and the agent printed **`armed, ground z =
 -0.18`** with no `[DID NOT SETTLE]` flag. Stillness is not proof of ground
 contact, and `ground_settled: true` in the records attests to nothing. A
 controlled `landAsync` *is* deterministic — measured bringing the aircraft from
-29.43 m to exactly 0.00 m AGL — so establishing the reference by landing rather
-than by inferring it is the fix. Not yet applied: it is a change to arming, and
-one change at a time.
+29.43 m to exactly 0.00 m AGL — and that was the intended fix until this file's
+own 2026-09-29 note ruled it out: **this build has no terrain collision**, so
+`landAsync` cannot wait for a touchdown and would descend through the ground
+wherever no mesh happens to stop it. The clean landing measured above was at the
+player start, where `SM_seaM` provides a surface; that does not generalise, and
+arming first also hands SimpleFlight a falling aircraft to catch, which is the
+2026-09-29 failure exactly.
+
+So the flight behaviour is left alone and the **silence** is fixed instead. The
+ground under a given drone is a session constant, because `reset_world` returns
+every vehicle to the same pose. The first `arm()` for a drone records it; every
+later one is checked against it, and a disagreement beyond 2 m raises
+`GroundReferenceError` so the run is refused and recorded as a failure rather
+than flown against a wrong ground. The plan is already recorded by then, so
+nothing measurable is lost. Nine tests pin it, including the two historical
+failures: a true 29.25 followed by `-0.18`, and the 2026-09-29 readings of
+12.07/12.17/12.12 and Block A's 10.87–11.02.
+
+Verified in flight, two M01 repeats establishing then checking the reference:
+`ground_z 29.25` both times, `final x` 20.23 and 20.22, both landed at 1.21 m,
+both 21.7 s. Identical repeats, which is what the altitude fix was for.
 
 **The surface at the player start is not recognised as ground.** The aircraft
 rests on `SM_seaM`, which lowercases to `sm_seam` and matches none of
