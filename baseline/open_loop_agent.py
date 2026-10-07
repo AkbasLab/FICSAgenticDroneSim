@@ -25,10 +25,18 @@ planning latency and raw model output cannot be reconstructed after the fact.
 
 Coordinate system
 -----------------
-AirSim is North-East-Down. **Negative Z is up.** 15 metres above ground is
-z = -15. A positive Z flies into the ground, which is the most common error
-against this platform, so `set_altitude` normalises a positive value and says so
-rather than obeying it.
+AirSim is North-East-Down. **Negative Z is up.** In a plan, 15 metres above the
+ground is z = -15, and a positive Z would mean down -- the most common error
+against this platform -- so `set_altitude` normalises a positive value and says
+so rather than obeying it.
+
+NED fixes which direction is up; it does not say where zero is. `moveToZAsync`
+takes an ABSOLUTE z in the map's frame, and Town10HD's terrain at the player
+start sits at z = +29.25, so the origin is 29.25 m in the air. A plan z is
+therefore translated to `ground_z + z` before it is flown, and the resulting
+target is legitimately positive for anything below 29 m: M10's 12 m leg flies to
++17.25. Sending a plan z straight to `moveToZAsync` flew every altitude in this
+project 29.25 m too high until 2026-10-06.
 """
 
 from __future__ import annotations
