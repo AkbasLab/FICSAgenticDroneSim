@@ -40,16 +40,16 @@ for 2026-10-06.
 **Required: 30 runs** (42 drone-plans). Ten missions, three repeats each,
 matching the upstream benchmark so results are comparable.
 
-| Mission | Drones | Repeats | Runs | Drone-plans | Planning on `llama3.3:70b` |
+| Mission | Drones | Repeats | Runs | Drone-plans | Status on `llama3.3:70b` |
 |---|---|---|---|---|---|
-| M01 | 1 | 3 | 3 | 3 | **plans correct** — 3/3; re-fly |
-| M02 | 1 | 3 | 3 | 3 | **plans correct** — 3/3; re-fly |
-| M03 | 1 | 3 | 3 | 3 | **plans correct** — 3/3; re-fly |
-| M04 | 1 | 3 | 3 | 3 | **plans correct** — 3/3; re-fly |
-| M05 | 1 | 3 | 3 | 3 | **plans correct** — 3/3; re-fly |
-| M06 | 1 | 3 | 3 | 3 | **plans correct** — 3/3; re-fly |
-| M07 | 1 | 3 | 3 | 3 | **plans correct** — 3/3; re-fly |
-| M08 | 1 | 3 | 3 | 3 | unscoreable by design; 3/3 consistent; re-fly |
+| M01 | 1 | 3 | 3 | 3 | **done** — 3/3, flown valid |
+| M02 | 1 | 3 | 3 | 3 | **done** — 3/3, flown valid |
+| M03 | 1 | 3 | 3 | 3 | **done** — 3/3, flown valid |
+| M04 | 1 | 3 | 3 | 3 | **done** — 3/3, flown valid |
+| M05 | 1 | 3 | 3 | 3 | **done** — 3/3, flown valid |
+| M06 | 1 | 3 | 3 | 3 | **done** — 3/3, flown valid |
+| M07 | 1 | 3 | 3 | 3 | **done** — 3/3, flown valid |
+| M08 | 1 | 3 | 3 | 3 | **done** — unscoreable by design; 3/3 consistent |
 | M09 | 2 | 3 | 3 | 6 | **plans correct** — 6/6; separation invalid; re-fly |
 | M10 | 4 | 3 | 3 | 12 | 4/4 plans correct on run 1; re-fly |
 | **Total** | | | **30** | **42** | |
@@ -57,20 +57,28 @@ matching the upstream benchmark so results are comparable.
 ### Completion
 
 ```
-valid PLANNING runs:     27 / 30      (90%)
-valid EXECUTION runs:     0 / 30      (0%)   -- altitude defect, 2026-10-06
+fully valid runs:        24 / 30      (80%)   -- plan AND execution
 
-single-drone (M01-M08):  24 planned valid, 0 flown valid
-M09 (two drones):         3 planned valid, 0 flown valid
-M10 (four drones):        1 attempted (run 1 recorded, runs 2-3 abandoned)
+single-drone (M01-M08):  24 / 24      (100%)  COMPLETE, re-flown 2026-10-06
+M09 (two drones):         0 /  3      planning stands; re-fly
+M10 (four drones):        0 /  3      planning stands for run 1; re-fly
 ```
 
-**The single-drone PLANNING baseline is complete on `llama3.3:70b`: 21/21
-scored runs correct.** M08 is unscoreable by design and produced the same plan
-all three times. The flights those runs made are no longer citable — see the
-correction below.
+**The single-drone baseline is complete on `llama3.3:70b`, plan and flight:
+21/21 scored runs correct, 24/24 landed, zero obstacle collisions, and
+`ground_z = 29.25` on all 24.** M08 is unscoreable by design and produced the
+same plan all three times.
 
-**Remaining: 30 runs re-flown**, at roughly a minute each.
+Re-flown on 2026-10-06 after the altitude defect, and the repeats are now
+genuinely repeats — final x agreeing to 1–4 cm across three runs of every
+mission, and flight times identical within each. Flight times roughly halved
+against the pre-fix block (M01 42.2 → 21.7 s, M02 38.1 → 17.6 s, M03 47.9 →
+27.4 s) because 29.25 m of spurious climb is no longer being flown. Horizontal
+displacement is unchanged, which is the check that the altitude fix touched only
+altitude: M01 20.46 → 20.22, M03 19.16 → 19.16, M05 25.26 → 25.23, M07
+20.46 → 20.22.
+
+**Remaining: 6 runs** — M09 (two drones) and M10 (four).
 
 > ### Correction, 2026-10-06 (late) — every altitude was 29 m too high
 > `moveToZAsync` targets are relative to the map origin, and Town10HD's ground
@@ -135,6 +143,10 @@ sessions stands.
 | `20261006-181303-v2-M05-recheck` | 70b | 3 | planning valid, execution invalid — altitude |
 | `20261006-182201-v2-M09` | 70b | 3 | planning valid, execution invalid — altitude |
 | `20261006-183536-v2-M09-osc` | 70b | 3 | planning valid, execution invalid — altitude |
+| `20261006-190942-v3-M01-M08` | 70b | 2 | **diagnostic** — aborted; zero displacement, not reproducible |
+| `20261006-200307-v3-diag` | 70b | 1 | diagnostic — traced M01 proving the altitude fix |
+| `20261006-201430-v3-guard` | 70b | 2 | diagnostic — ground-reference guard verified in flight |
+| **`20261006-201608-v3-M01-M08`** | **70b** | **24** | **VALID STUDY DATA** — plan and execution |
 | `20261006-184158-v2-M10` | 70b | 1 | **diagnostic** — the run that exposed the altitude defect |
 
 ### Why Block A is split
