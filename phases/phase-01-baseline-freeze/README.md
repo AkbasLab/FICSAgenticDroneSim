@@ -1059,6 +1059,71 @@ function on the strength of a good argument hung the simulator. It belongs at th
 start of a block, after the no-settle hypothesis is tested, not at the end of a
 session.
 
+### 2026-10-06 — M10 reproduces without the model, and the settle hypothesis is wrong
+
+#### The settle hypothesis is insufficient
+
+Recorded earlier today as the first thing to try: `set_altitude` has no settle
+after it where `take_off` does, so a leg can begin while the aircraft is still
+climbing, and `vz = 0` does not arrest inherited momentum. Tested on one drone,
+same backward leg from 18 m:
+
+| | vz at leg start | Drift |
+|---|---|---|
+| no settle | **−4.17 m/s** | +1.85 m |
+| 3 s settle | −0.00 m/s | +1.06 m |
+
+Real, and **0.8 m of the 14 m**. Inherited momentum is worth a metre at most, so
+it is not the explanation. Kept as a small correctness improvement worth making
+on its own merits, not as the fix.
+
+#### M10 reproduces with four drones and no model
+
+The same four-drone geometry flown through `fly_plans` with hand-built
+`PlanRecord`s — no Ollama, no GPU, no tunnel:
+
+```
+Drone1 fly_straight   reached 30.11  after leg 32.71  drift  2.60  landed
+Drone2 fly_right      reached 24.13  after leg 25.96  drift  1.83  landed
+Drone3 fly_backward   reached 18.12  after leg 32.18  drift 14.06  landed
+Drone4 fly_left       reached 12.13  after leg 14.03  drift  1.90  landed
+Drone1<->Drone3 contact at t+17.01, penetration 0.075
+per-pair min Drone1-Drone3: 7.54 m
+```
+
+Against the model-driven runs: Drone3 14.06 against 14.6, and the Drone1–Drone3
+minimum **7.54 m against 7.54 and 7.55**, to the centimetre. **The defect is
+deterministic and the language model has nothing to do with it.**
+
+That matters more than it sounds. Every bisection from here — two drones instead
+of four, Drone3 flying forward instead of backward, Drone1 removed — costs a
+minute of simulator time and no cluster allocation at all. The investigation was
+gated on a GPU job and is not any more.
+
+#### The contradiction, stated precisely
+
+Three numbers from one deterministic run that cannot all be true:
+
+1. **Geometry says they separate.** Drone1 flies forward (+x) from x = 0;
+   Drone3 flies backward (−x) from x = 8. They move *apart*. Four seconds into
+   legs that start around t+13, Drone1 is near x = +16 and Drone3 near x = −8:
+   roughly 24 m apart.
+2. **The monitor says 7.54 m**, from `simGetVehiclePose` in the world frame,
+   sampled at 10 Hz, timestamped 14.3 s.
+3. **The physics engine says they are touching**, 0.075–0.25 m of
+   interpenetration, at t+17.0.
+
+No claim about which is wrong. What is ruled out by measurement:
+`simGetVehiclePose` and `kinematics_estimated` agree to 0.00 m on all four drones
+in x and z, so it is not that frame confusion; and `impact_point` is
+spawn-relative while `position` is not, which is a trap rather than an
+explanation.
+
+Two cheap tests that would discriminate, neither run yet: log all four drones'
+world x through the legs and see whether Drone1 and Drone3 ever occupy the same
+point; and fly Drone3 forward instead of backward in the same four-drone layout,
+to see whether the 14 m drift follows the *direction* or the *drone*.
+
 ### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after

@@ -1086,9 +1086,15 @@ class DroneRunner:
           to 62% of the commanded distance, which nothing scores. World frame is
           equivalent here only because nothing in this agent yaws.
 
-        First hypothesis to test: `set_altitude` has no settle after it, unlike
-        `take_off`, so a leg can start while the aircraft is still moving
-        vertically -- and vz = 0 does not arrest inherited momentum.
+        That hypothesis -- no settle after `set_altitude`, so the leg inherits
+        climb momentum -- was TESTED and is insufficient: no settle drifts
+        +1.85 m with -4.17 m/s at the leg start, a 3 s settle drifts +1.06 m.
+        Worth 0.8 m of the 14 m, so worth doing on its own merits and not the
+        cause.
+
+        The whole four-drone case reproduces through `fly_plans` with hand-built
+        PlanRecords and no model -- Drone3 drifting 14.06 m against 14.6 -- so
+        bisecting this needs a simulator and nothing else.
 
         See the phase log for 2026-10-06.
         """
