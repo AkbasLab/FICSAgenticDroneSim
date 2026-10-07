@@ -97,3 +97,61 @@ class GroundReferenceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ContactClassificationTests(unittest.TestCase):
+    """Every name here was observed in a real flight on 2026-10-06."""
+
+    DRONES = ["Drone1", "Drone2", "Drone3", "Drone4"]
+
+    def kind(self, name):
+        return agent.classify_contact(name, self.DRONES)
+
+    def test_terrain_is_ground(self):
+        self.assertEqual(self.kind("Town10HD_Terrain_GroundNode_1088"), "ground")
+        self.assertEqual(self.kind("Town10HD_Terrain_Ground_64"), "ground")
+
+    def test_the_player_start_surface_is_ground(self):
+        """SM_seaM is what the aircraft rests on, measured at 0.00 m AGL."""
+        self.assertEqual(self.kind("SM_seaM"), "ground")
+
+    def test_another_drone_is_its_own_category(self):
+        """What M09 and M10 exist to measure, and not an obstacle."""
+        self.assertEqual(self.kind("Drone1"), "drone")
+        self.assertEqual(self.kind("Drone3"), "drone")
+
+    def test_the_spectator_camera_is_not_an_obstacle(self):
+        self.assertEqual(self.kind("SpectatorPawn_2147444257"), "camera")
+
+    def test_a_real_obstacle_is_an_obstacle(self):
+        for name in ("BP_Building_42", "BP_Vehicle_Tesla_3", "SM_Tree_07",
+                     "BP_StreetLight_12"):
+            self.assertEqual(self.kind(name), "obstacle", name)
+
+    def test_an_unknown_or_empty_name_counts_against_the_flight(self):
+        """Unknown is treated as an obstacle: the safe direction to be wrong."""
+        self.assertEqual(self.kind(""), "obstacle")
+        self.assertEqual(self.kind("Something_Unrecognised"), "obstacle")
+
+    def test_a_drone_name_wins_over_a_ground_marker(self):
+        """A vehicle called Drone3_Ground is a drone, not the floor."""
+        self.assertEqual(self.kind("Drone3_GroundTest"), "drone")
+
+    def test_classification_without_a_drone_roster_still_works(self):
+        self.assertEqual(agent.classify_contact("SM_seaM"), "ground")
+        self.assertEqual(agent.classify_contact("SpectatorPawn_1"), "camera")
+        self.assertEqual(agent.classify_contact("Drone1"), "obstacle")
+
+    def test_the_m10_contact_set_splits_as_measured(self):
+        """The 16 polled events of one M10 run: 1 ground, 11 floor/camera, 4 drone."""
+        observed = [
+            "Town10HD_Terrain_GroundNode_1088", "SM_seaM", "SM_seaM", "SM_seaM",
+            "Drone3", "Drone1", "Drone3", "Drone1", "Drone3", "Drone1",
+            "SpectatorPawn_2147444257", "SpectatorPawn_2147444257",
+            "SpectatorPawn_2147444257", "SM_seaM", "SM_seaM", "SM_seaM",
+        ]
+        kinds = [self.kind(n) for n in observed]
+        self.assertEqual(kinds.count("obstacle"), 0)
+        self.assertEqual(kinds.count("drone"), 6)
+        self.assertEqual(kinds.count("camera"), 3)
+        self.assertEqual(kinds.count("ground"), 7)

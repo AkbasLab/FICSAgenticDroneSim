@@ -932,6 +932,74 @@ is not — the pre-fix M10 had the two drones reporting the same contact 8.00 m
 apart, exactly Drone3's spawn offset — so any reconciliation has to start by not
 mixing the two.
 
+### 2026-10-06 — collisions are polled now; the altitude-hold fix failed
+
+Two changes attempted. One works and is kept; one does not and was reverted.
+
+#### Kept: `SeparationMonitor` polls collisions, and contacts are classified
+
+Collisions are now read every 0.1 s during the flight, each distinct event once,
+instead of once after teardown. Verified on M10 against a collision known to be
+there: the poll caught **Drone1 and Drone3 in contact at t+17.03 s with 0.25 m of
+penetration**, in the same run whose per-flight record says `collision: false`.
+That is the defect reproduced and then made visible.
+
+The monitor now also runs for **single-drone** missions. Proximity needs two
+drones; collisions need one, and a single-drone mission was previously unpolled —
+so the 24 single-drone runs flown earlier today cannot support a collision claim
+either. It also always gets its own connection now, rather than sharing the
+flight's client when there is one drone, which would have put a 10 Hz poll on the
+same msgpack-rpc socket as the flight commands. That is this file's oldest open
+question and not something to discover through a rare failure.
+
+The first version of this counted **14 "obstacle collisions" in one clean M10
+run**, which is worse than the silence it replaced. "Not ground" turned out to
+mean four different things:
+
+| Kind | Example observed | Counts against a flight? |
+|---|---|---|
+| ground | `Town10HD_Terrain_GroundNode_1088`, `SM_seaM` | no |
+| drone | `Drone1`, `Drone3` | the thing M09/M10 measure |
+| camera | `SpectatorPawn_2147444257` | no — an artifact of watching |
+| obstacle | a building, vehicle, tree | **yes** |
+
+`SM_seaM` is named as ground deliberately. It is what the aircraft rests on at
+Town10HD's player start — measured sitting on it at 0.00 m AGL with the physics
+engine reporting contact — so treating it as an obstacle would make every landing
+a crash. Naming a map mesh in a general predicate is unlovely; the alternative is
+worse. The spectator pawn is the free camera, which the drones genuinely collide
+with: 0.14 m of penetration against it mid-mission, meaning nothing about flight.
+
+Re-scored with those categories, that M10 run has **zero obstacle collisions, six
+drone-contact events and seven ground contacts** — which is both true and useful,
+where 14 was neither. Nine tests pin the classification against the exact names
+observed.
+
+#### Reverted: holding altitude with `moveByVelocityZBodyFrameAsync`
+
+The obvious fix for the 14.6 m backward-leg climb is to fly the leg at a held z
+rather than at vz = 0, so `_velocity` was changed to read the current z and pass
+it to `moveByVelocityZBodyFrameAsync`.
+
+**It did not work, and it broke landing.** Flown on M10:
+
+- Drone3 still climbed about 13 m, reaching **31.42 m** against a commanded 18 —
+  so the z was not held in any useful sense.
+- The run then hung. Drone3 was left at 31.42 m with control still enabled,
+  stuck in `land`; Drone1 was released at **31.18 m** and fell, at 16.4 m/s when
+  sampled. The 38 s mission had not finished after five minutes and was killed.
+
+Reverted to `moveByVelocityBodyFrameAsync` with vz = 0, which at least completes
+and lands. The drift remains an open defect, documented at the call site so the
+next attempt does not repeat this one. Whatever holds altitude through a backward
+leg on this build, it is not that call used this way.
+
+Worth noting what the landing failure says: Drone1's plan ended with a successful
+`land` step, so teardown trusted it and skipped its own landing — `skip_landing`
+is passed precisely then. The height-authoritative `_is_airborne` fix cannot help
+there, because it is never consulted. A `land` step that returns without landing
+defeats it, and that is the same shape as the original M10 failure.
+
 ### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after

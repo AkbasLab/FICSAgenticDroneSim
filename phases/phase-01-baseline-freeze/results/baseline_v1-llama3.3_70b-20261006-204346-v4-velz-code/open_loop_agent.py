@@ -1064,27 +1064,25 @@ class DroneRunner:
         north. Since nothing in this agent ever yaws, the two coincide here --
         but a future change that adds turning will make them diverge.
 
-        Vertical drift during a leg is a known, UNFIXED defect. vz = 0 commands
-        zero vertical velocity, not a held height: the controller is asked not to
-        climb and accepts whatever its attitude leaves behind. Measured
-        2026-10-06 across three M10 runs, against commanded altitudes reached to
-        within 0.13 m:
+        The altitude is held explicitly. `moveByVelocityBodyFrameAsync` takes a
+        vertical VELOCITY, and commanding vz = 0 does not hold a height: it asks
+        the controller not to climb and accepts whatever its attitude leaves
+        behind. Measured 2026-10-06 across three M10 runs, against commanded
+        altitudes reached to within 0.13 m:
 
             forward  +2.3 m      right  +1.8 m      left  +1.9 m
             BACKWARD  +14.6 m
 
-        14.6 m is more than M10's 6 m vertical stagger, so Drone3 climbs out of
-        its lane into Drone1's and the two collide. The collision is a
-        consequence of this, not of multi-drone flight.
-
-        `moveByVelocityZBodyFrameAsync`, which takes a z to hold, was tried and
-        DID NOT FIX IT: Drone3 still climbed about 13 m, and the run then hung in
-        `land` with Drone1 released at 31.18 m and falling. Reverted. Whatever
-        holds altitude through a backward leg on this build, it is not that call
-        used this way. See the phase log for 2026-10-06.
+        Backward flight pitches the airframe the opposite way, and the error is
+        an order of magnitude larger. 14.6 m is more than M10's 6 m vertical
+        stagger, so Drone3 climbed out of its lane into Drone1's and the two
+        collided -- the collision is a consequence of this, not of multi-drone
+        flight. So the leg is flown at the height it started at.
         """
-        self.client.moveByVelocityBodyFrameAsync(
-            vx, vy, 0.0, duration, vehicle_name=self.name
+        z = self.client.getMultirotorState(
+            vehicle_name=self.name).kinematics_estimated.position.z_val
+        self.client.moveByVelocityZBodyFrameAsync(
+            vx, vy, z, duration, vehicle_name=self.name
         ).join()
         # Velocity commands do not brake -- they expire and the aircraft coasts.
         # Without this hover, every leg overshoots by however far momentum

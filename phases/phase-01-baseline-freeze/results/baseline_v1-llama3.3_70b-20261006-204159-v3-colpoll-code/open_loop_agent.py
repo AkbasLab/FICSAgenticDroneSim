@@ -51,7 +51,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any
 
 # ----------------------------------------------------------------- constants
 
@@ -330,53 +330,13 @@ class PlanRecord:
 
 # Object names AirSim reports for ground contact. Touching these on landing is
 # the mission working, not a fault, so they are classified separately.
-GROUND_OBJECTS = ("terrain", "ground", "landscape", "road", "sidewalk",
-                  # Town10HD's player start rests on this mesh. The aircraft was
-                  # measured sitting on it at 0.00 m AGL with contact reported,
-                  # so it is the floor however it is named.
-                  "sm_seam")
+GROUND_OBJECTS = ("terrain", "ground", "landscape", "road", "sidewalk")
 
 
 def is_ground(object_name: str) -> bool:
     """True if a collision object is the ground rather than an obstacle."""
     lowered = (object_name or "").lower()
     return any(marker in lowered for marker in GROUND_OBJECTS)
-
-
-# The free camera. It is an actor in the level and the drones collide with it,
-# which says nothing about the flight -- measured 2026-10-06, Drone3 reporting
-# 0.14 m of penetration against it mid-mission. A simulator artifact, counted
-# separately so it cannot inflate an obstacle count.
-CAMERA_OBJECTS = ("spectatorpawn", "cameraactor", "defaultpawn")
-
-
-def classify_contact(object_name: str, drones: Iterable[str] = ()) -> str:
-    """One of "ground", "drone", "camera" or "obstacle".
-
-    Four categories rather than two, because "not ground" turned out to mean
-    four different things and only one of them is a flight defect:
-
-    - **ground** — the surface. `SM_seaM` is included by name: it is what the
-      aircraft rests on at Town10HD's player start, measured sitting on it at
-      0.00 m AGL with the physics engine reporting contact. Naming a map mesh in
-      a general predicate is unlovely, but calling the floor an obstacle is a
-      worse answer, and the alternative is a claim that every landing is a crash.
-    - **drone** — another aircraft. The thing M09 and M10 exist to measure, and
-      not an "obstacle" in the sense section 1.3 means.
-    - **camera** — the spectator pawn. An artifact of someone watching.
-    - **obstacle** — anything else: a building, a vehicle, a tree. The only
-      category that counts against a flight.
-    """
-    lowered = (object_name or "").lower()
-    if not lowered:
-        return "obstacle"
-    if any(d.lower() in lowered for d in drones):
-        return "drone"
-    if any(marker in lowered for marker in CAMERA_OBJECTS):
-        return "camera"
-    if is_ground(object_name):
-        return "ground"
-    return "obstacle"
 
 
 class SeparationMonitor:
@@ -448,7 +408,6 @@ class SeparationMonitor:
             self.collisions.append({
                 "drone": name,
                 "object": obj,
-                "kind": classify_contact(obj, self.names),
                 "is_ground": is_ground(obj),
                 "penetration_depth": round(
                     float(getattr(info, "penetration_depth", 0.0)), 3),
@@ -505,8 +464,7 @@ class SeparationMonitor:
             "per_pair_min_m": {k: round(v, 2) for k, v in sorted(self.pair_min.items())},
             "per_pair_min_at_s": dict(sorted(self.pair_min_at.items())),
             "collisions_polled": self.collisions,
-            "drone_collisions": [c for c in self.collisions if c["kind"] == "drone"],
-            "obstacle_collisions": [c for c in self.collisions if c["kind"] == "obstacle"],
+            "obstacle_collisions": [c for c in self.collisions if not c["is_ground"]],
         }
 
 
@@ -1058,30 +1016,11 @@ class DroneRunner:
         time.sleep(TAKEOFF_SETTLE)
 
     def _velocity(self, vx: float, vy: float, duration: float) -> None:
-        """Fly a body-frame velocity leg at a HELD altitude, then stop.
+        """Fly a body-frame velocity leg, then stop.
 
         Body frame means vx is forward RELATIVE TO THE DRONE'S HEADING, not
         north. Since nothing in this agent ever yaws, the two coincide here --
         but a future change that adds turning will make them diverge.
-
-        Vertical drift during a leg is a known, UNFIXED defect. vz = 0 commands
-        zero vertical velocity, not a held height: the controller is asked not to
-        climb and accepts whatever its attitude leaves behind. Measured
-        2026-10-06 across three M10 runs, against commanded altitudes reached to
-        within 0.13 m:
-
-            forward  +2.3 m      right  +1.8 m      left  +1.9 m
-            BACKWARD  +14.6 m
-
-        14.6 m is more than M10's 6 m vertical stagger, so Drone3 climbs out of
-        its lane into Drone1's and the two collide. The collision is a
-        consequence of this, not of multi-drone flight.
-
-        `moveByVelocityZBodyFrameAsync`, which takes a z to hold, was tried and
-        DID NOT FIX IT: Drone3 still climbed about 13 m, and the run then hung in
-        `land` with Drone1 released at 31.18 m and falling. Reverted. Whatever
-        holds altitude through a backward leg on this build, it is not that call
-        used this way. See the phase log for 2026-10-06.
         """
         self.client.moveByVelocityBodyFrameAsync(
             vx, vy, 0.0, duration, vehicle_name=self.name
