@@ -152,11 +152,24 @@ MIN_ALTITUDE = -2.0      # metres NED; below this is effectively ground level
 # as airborne and land it first. Disarming while airborne cuts the motors.
 AIRBORNE_MARGIN = 1.0    # metres
 
+# Bounds on `land`, because an unbounded one does not merely fail -- it strands an
+# armed aircraft in mid air and never returns. Seen three times on 2026-10-06.
+# A descent from 60 m at 2 m/s is 30 s, so 90 s cannot cut a legitimate one short.
+LAND_DESCENT_TIMEOUT = 45.0   # seconds for the controlled descent
+LAND_TIMEOUT = 20.0           # seconds for landAsync itself
+LANDED_AGL_MAX = 3.0          # metres; above this, `land` did not land
+
 # How far a run's measured ground may differ from the first run's before the run
 # is refused. reset_world() returns every vehicle to the same pose, so the ground
 # under a given drone is a constant for the session; a disagreement means the
 # measurement is wrong, not that the ground moved.
 GROUND_REFERENCE_TOLERANCE = 2.0   # metres
+
+# How far two DIFFERENT drones' grounds may differ. They spawn SPACING metres
+# apart on one patch of terrain, so this is relief, not frame error. Wider than
+# the per-drone tolerance because the terrain genuinely varies: 29.25, 29.28 and
+# 27.29 were measured across the four M10 spawn points, a 1.99 m spread.
+GROUND_SPREAD_TOLERANCE = 5.0      # metres
 
 # Per-vehicle ground height, first measured wins. Guarded because DroneRunner
 # threads arm concurrently.
@@ -188,10 +201,53 @@ def forget_ground_reference(name: str | None = None) -> None:
 
 
 def check_ground_reference(name: str, ground_z: float) -> float:
-    """Record or verify the ground for `name`. Returns the session reference."""
+    """Record or verify the ground for `name`. Returns the session reference.
+
+    Checks against this drone's own history AND against the other drones in the
+    scene. The per-drone check alone has a hole: a drone's FIRST reading becomes
+    the reference and is never questioned. Measured 2026-10-06, two drones armed
+    seconds apart in the same world -- `Drone1 ground z = 29.25` and
+    `Drone3 ground z = -0.28`. Drone3's was its first, so it was accepted, and
+    Drone3 then flew its 18 m leg at about 50 m.
+
+    Drones spawn SPACING metres apart on one patch of ground, so their ground
+    heights differ by terrain relief, not by 29 m. The disagreement is the signal.
+    """
     with _GROUND_LOCK:
         reference = _GROUND_REFERENCE.get(name)
         if reference is None:
+            others = {k: v for k, v in _GROUND_REFERENCE.items() if k != name}
+            # WHICH reading is wrong, not merely which arrived second. In NED a
+            # larger z is lower, and an aircraft can only ever be AT or ABOVE the
+            # ground -- so of two disagreeing readings the LARGER is nearer the
+            # true ground, and a too-small one belongs to an aircraft that never
+            # came down. Refusing the later arrival instead got this backwards in
+            # flight on 2026-10-06: Drone3 armed first with -0.23, became the
+            # reference, and Drone1's correct 29.25 was the one refused.
+            deepest = max(others.items(), key=lambda kv: kv[1], default=None)
+            if deepest is not None and deepest[1] - ground_z > GROUND_SPREAD_TOLERANCE:
+                raise GroundReferenceError(
+                    f"{name}: measured ground z = {ground_z:.2f}, which is "
+                    f"{deepest[1] - ground_z:.2f} m ABOVE the ground "
+                    f"{deepest[0]} found in the same scene ({deepest[1]:.2f}, "
+                    f"tolerance {GROUND_SPREAD_TOLERANCE}). An aircraft cannot "
+                    f"be below the ground, so this reading was taken in mid "
+                    f"air. Refusing to fly."
+                )
+            lowest = min(others.values(), default=None)
+            if lowest is not None and ground_z - lowest > GROUND_SPREAD_TOLERANCE:
+                # This reading is the lower one, so it is the credible one and the
+                # drones already registered are the suspects. Adopt it and correct
+                # them, loudly: a run already refused is better than one flown
+                # against a ground 29 m in the air.
+                stale = {k: v for k, v in _GROUND_REFERENCE.items()
+                         if ground_z - v > GROUND_SPREAD_TOLERANCE}
+                for k in stale:
+                    _GROUND_REFERENCE.pop(k, None)
+                print(f"  [ground] {name} found ground at {ground_z:.2f}; "
+                      f"discarding higher readings from "
+                      f"{', '.join(f'{k}={v:.2f}' for k, v in stale.items())}",
+                      flush=True)
             _GROUND_REFERENCE[name] = ground_z
             return ground_z
     if abs(ground_z - reference) > GROUND_REFERENCE_TOLERANCE:
@@ -418,7 +474,7 @@ class SeparationMonitor:
         # runs, penetration to 0.152 m, while all three records said
         # `collision: false`. The pre-fix M10 recorded that same contact only
         # because the flight never landed.
-        self.collisions: list[dict[str, Any]] = []
+        self._by_pair: dict[tuple[str, str], dict[str, Any]] = {}
         self._seen: set[tuple[str, Any]] = set()
         self.samples = 0
         self.errors = 0
@@ -440,20 +496,40 @@ class SeparationMonitor:
             info = self.client.simGetCollisionInfo(vehicle_name=name)
             if not getattr(info, "has_collided", False):
                 continue
-            key = (name, getattr(info, "time_stamp", None))
-            if key in self._seen:
+            stamp = getattr(info, "time_stamp", None)
+            if (name, stamp) in self._seen:
                 continue
-            self._seen.add(key)
+            self._seen.add((name, stamp))
             obj = getattr(info, "object_name", "") or ""
-            self.collisions.append({
-                "drone": name,
-                "object": obj,
-                "kind": classify_contact(obj, self.names),
-                "is_ground": is_ground(obj),
-                "penetration_depth": round(
-                    float(getattr(info, "penetration_depth", 0.0)), 3),
-                "at_s": round(time.time() - self._started, 2),
-            })
+            at = round(time.time() - self._started, 2)
+            pen = round(float(getattr(info, "penetration_depth", 0.0)), 3)
+            # Collapsed per (drone, object). Sustained contact produces a new
+            # timestamp every poll: one stalled flight on 2026-10-06 recorded
+            # 3256 events, which would bury the record it is meant to inform.
+            # First seen, last seen, how many and the worst penetration say
+            # everything those 3256 rows said.
+            existing = self._by_pair.get((name, obj))
+            if existing is None:
+                self._by_pair[(name, obj)] = {
+                    "drone": name,
+                    "object": obj,
+                    "kind": classify_contact(obj, self.names),
+                    "is_ground": is_ground(obj),
+                    "events": 1,
+                    "first_at_s": at,
+                    "last_at_s": at,
+                    "max_penetration_depth": pen,
+                }
+            else:
+                existing["events"] += 1
+                existing["last_at_s"] = at
+                existing["max_penetration_depth"] = max(
+                    existing["max_penetration_depth"], pen)
+
+    @property
+    def contacts(self) -> list[dict[str, Any]]:
+        """One row per (drone, object) pair, in the order first seen."""
+        return sorted(self._by_pair.values(), key=lambda c: c["first_at_s"])
 
     def _run(self) -> None:
         while not self._stop.is_set():
@@ -504,9 +580,9 @@ class SeparationMonitor:
             "interval_s": self.interval,
             "per_pair_min_m": {k: round(v, 2) for k, v in sorted(self.pair_min.items())},
             "per_pair_min_at_s": dict(sorted(self.pair_min_at.items())),
-            "collisions_polled": self.collisions,
-            "drone_collisions": [c for c in self.collisions if c["kind"] == "drone"],
-            "obstacle_collisions": [c for c in self.collisions if c["kind"] == "obstacle"],
+            "collisions_polled": self.contacts,
+            "drone_collisions": [c for c in self.contacts if c["kind"] == "drone"],
+            "obstacle_collisions": [c for c in self.contacts if c["kind"] == "obstacle"],
         }
 
 
@@ -1027,11 +1103,20 @@ class DroneRunner:
             previous = current
         self.ground_z = previous
 
-        # Cross-check against the session. The settle loop cannot tell an
-        # aircraft resting on the ground from one held motionless above it, so
-        # this is the only thing standing between a bad reading and a whole run
-        # of altitudes measured against it.
-        check_ground_reference(self.name, self.ground_z)
+        # Cross-check against the session, and ADOPT what it returns. The settle
+        # loop cannot tell an aircraft resting on the ground from one held
+        # motionless above it, so this is the only thing standing between a bad
+        # reading and a whole run of altitudes measured against it.
+        #
+        # Adopting the return matters when another drone has already found a
+        # lower ground: this run then uses that one instead of its own. It does
+        # NOT help when the bad reading arms first -- measured 2026-10-06, Drone3
+        # arming with -0.18 before Drone1 found 29.25, and flying its whole
+        # mission against it. Only `land`'s own verification catches that, which
+        # it did: the run failed loudly rather than being recorded as valid. A
+        # barrier that armed every drone before fixing the ground would close it
+        # properly, and is not written yet.
+        self.ground_z = check_ground_reference(self.name, self.ground_z)
 
         # Only now take control, with the drone at rest on the ground.
         self.client.enableApiControl(True, vehicle_name=self.name)
@@ -1150,9 +1235,28 @@ class DroneRunner:
             # straight to landAsync from cruise means a fast descent onto a
             # surface the physics does not model.
             self.client.moveToZAsync(
-                self.ground_z - 1.0, 2.0, vehicle_name=self.name
+                self.ground_z - 1.0, 2.0, timeout_sec=LAND_DESCENT_TIMEOUT,
+                vehicle_name=self.name
             ).join()
-            self.client.landAsync(vehicle_name=self.name).join()
+            self.client.landAsync(
+                timeout_sec=LAND_TIMEOUT, vehicle_name=self.name).join()
+            # VERIFY, and raise if it did not land. Both calls above can return
+            # having moved the aircraft nowhere: measured 2026-10-06, moveToZAsync
+            # running 27.1 s and returning with the aircraft still at 54.17 m when
+            # asked for 1 m, then landAsync returning in 0.2 s from the same
+            # place, after which control was released and the aircraft was left
+            # airborne.
+            #
+            # Raising matters more than it looks. Teardown skips its own landing
+            # when the plan's last step was a successful `land` -- `skip_landing`
+            # is passed exactly then -- so a `land` that reports success without
+            # landing disables the one safeguard against releasing control in
+            # mid air. Failing here makes teardown do its job.
+            agl = self._agl()
+            if agl is not None and agl > LANDED_AGL_MAX:
+                raise PlanError(
+                    f"land did not descend: {agl:.2f} m above ground "
+                    f"(target {LANDED_AGL_MAX} m). The aircraft is still flying.")
         else:  # unreachable: validate() rejects unknown actions
             raise PlanError(f"unhandled action {action!r}")
 

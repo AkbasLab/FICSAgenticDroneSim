@@ -87,9 +87,36 @@ class GroundReferenceTests(unittest.TestCase):
         agent.check_ground_reference("Drone1", 29.25)
         agent.check_ground_reference("Drone2", 29.28)
         agent.forget_ground_reference("Drone1")
-        self.assertEqual(agent.check_ground_reference("Drone1", 5.0), 5.0)
+        # Re-registering is allowed, but still has to agree with Drone2, which
+        # is why 5.0 is refused here where a lone drone would have been believed.
+        self.assertEqual(agent.check_ground_reference("Drone1", 29.30), 29.30)
         with self.assertRaises(agent.GroundReferenceError):
             agent.check_ground_reference("Drone2", 5.0)
+
+    def test_a_first_reading_is_checked_against_the_other_drones(self):
+        """The hole the per-drone check left, and the case that exposed it.
+
+        Measured 2026-10-06: two drones armed seconds apart in the same world
+        reported 29.25 and -0.28. The second was that drone's first reading, so
+        nothing questioned it, and it flew its 18 m leg at about 50 m.
+        """
+        agent.check_ground_reference("Drone1", 29.25)
+        with self.assertRaises(agent.GroundReferenceError) as caught:
+            agent.check_ground_reference("Drone3", -0.28)
+        message = str(caught.exception)
+        self.assertIn("Drone1", message)
+        self.assertIn("-0.28", message)
+
+    def test_real_terrain_relief_between_spawn_points_is_allowed(self):
+        """The four M10 spawn points measured 29.25, 29.28, 29.28 and 27.29."""
+        for name, value in (("Drone1", 29.25), ("Drone2", 29.28),
+                            ("Drone3", 29.28), ("Drone4", 27.29)):
+            self.assertEqual(agent.check_ground_reference(name, value), value)
+
+    def test_the_spread_tolerance_is_wider_than_the_per_drone_one(self):
+        """Terrain varies between spawn points; one drone's ground does not."""
+        self.assertGreater(agent.GROUND_SPREAD_TOLERANCE,
+                           agent.GROUND_REFERENCE_TOLERANCE)
 
     def test_error_is_a_runtime_error_so_fly_records_it_as_a_failure(self):
         self.assertTrue(issubclass(agent.GroundReferenceError, RuntimeError))
@@ -155,3 +182,37 @@ class ContactClassificationTests(unittest.TestCase):
         self.assertEqual(kinds.count("drone"), 6)
         self.assertEqual(kinds.count("camera"), 3)
         self.assertEqual(kinds.count("ground"), 7)
+
+
+class GroundCredibilityTests(unittest.TestCase):
+    """Which of two disagreeing readings is believed.
+
+    In NED a larger z is lower, and an aircraft can only be at or above the
+    ground, so the larger reading is nearer the truth. Refusing whichever
+    arrived second got this backwards in flight on 2026-10-06: Drone3 armed
+    first with -0.23, became the reference, and Drone1's correct 29.25 was
+    refused.
+    """
+
+    def setUp(self):
+        agent.forget_ground_reference()
+
+    tearDown = setUp
+
+    def test_a_mid_air_reading_is_refused_however_late_it_arrives(self):
+        agent.check_ground_reference("Drone1", 29.25)
+        with self.assertRaises(agent.GroundReferenceError):
+            agent.check_ground_reference("Drone3", -0.23)
+
+    def test_a_credible_reading_is_adopted_even_if_it_arrives_second(self):
+        """The flight case, in the order it actually happened."""
+        agent.check_ground_reference("Drone3", -0.23)        # bad, arrives first
+        self.assertEqual(agent.check_ground_reference("Drone1", 29.25), 29.25)
+
+    def test_adopting_it_discards_the_readings_it_contradicts(self):
+        agent.check_ground_reference("Drone3", -0.23)
+        agent.check_ground_reference("Drone1", 29.25)
+        # Drone3's -0.23 is gone, so re-arming it must now agree with 29.25.
+        with self.assertRaises(agent.GroundReferenceError):
+            agent.check_ground_reference("Drone3", -0.23)
+        self.assertEqual(agent.check_ground_reference("Drone3", 29.28), 29.28)

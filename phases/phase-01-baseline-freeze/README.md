@@ -1205,6 +1205,82 @@ Noted in passing: Drone4, uninvolved in that test, sat at **29.35 m AGL** at its
 reset pose without falling, `api=False`. That is the ground-reference hazard the
 session guard was added for, observed again.
 
+### 2026-10-06 — `land` can no longer hang, and the ground guard picks the credible reading
+
+Three defects, each found by the previous one's fix being flown.
+
+#### `land` was unbounded, and it did not merely fail
+
+Instrumented to time its two halves separately, the failure is exact: **`moveToZAsync`
+ran 27.1 s and returned with the aircraft still at 54.17 m when asked for 1 m**,
+then **`landAsync` returned in 0.2 s from the same place**. Control was then
+released, leaving an armed aircraft at 54 m. In the two-drone case the call never
+returned at all — the aircraft sat at 54.05 m, armed, for minutes.
+
+Both calls now take `timeout_sec` (45 s for the descent, 20 s for `landAsync`; a
+60 m descent at 2 m/s is 30 s, so neither can cut a legitimate landing short), and
+`land` **verifies** afterwards: above 3 m AGL it raises.
+
+Raising is the point, not the timeout. Teardown skips its own landing when the
+plan's last step was a successful `land` — `skip_landing` is passed exactly then —
+so a `land` that reports success without landing disables the only safeguard
+against releasing control in mid air. The height-authoritative `_is_airborne` fix
+from earlier today can never fire in that path, because it is never consulted.
+Failing makes teardown try.
+
+Flown: `land did not descend: 23.25 m above ground (target 3.0 m). The aircraft is
+still flying.` Recorded as the run's failure, where before it was recorded as a
+completed flight.
+
+#### The ground guard was refusing the wrong drone
+
+The per-drone check had a hole: a drone's **first** reading becomes the session
+reference and is never questioned. Measured with two drones arming seconds apart
+in the same world — `Drone1 ground z = 29.25` and `Drone3 ground z = -0.28`.
+
+Adding a cross-drone check was not enough, and the first attempt got it backwards
+**in flight**: Drone3 armed first with −0.23, became the reference, and Drone1's
+*correct* 29.25 was the reading refused. Refusing whichever arrives second is not
+the same as refusing whichever is wrong.
+
+In NED a larger z is lower, and an aircraft can only ever be **at or above** the
+ground. So of two disagreeing readings the **larger** is nearer the truth, and a
+too-small one was taken in mid air. The guard now refuses the reading that sits
+above the lowest ground any drone has found, and when a *lower* ground arrives it
+adopts it and discards the higher ones, saying so:
+
+```
+[ground] Drone1 found ground at 29.25; discarding higher readings from Drone3=-0.18
+```
+
+`arm()` now adopts what the check returns, so a drone arming after a good reading
+uses it rather than its own. **This does not close the hole when the bad reading
+arms first** — Drone3 did, and flew its whole mission against −0.18 — and that is
+recorded rather than papered over. Only `land`'s verification caught that run, and
+it did. A barrier arming every drone before fixing the ground would close it
+properly and is not written.
+
+Tolerance is 5 m between drones against 2 m for one drone's own history, because
+terrain genuinely varies: 29.25, 29.28, 29.28 and 27.29 across the four M10 spawn
+points, a 1.99 m spread.
+
+#### Sustained contact was burying the record
+
+One stalled flight recorded **3256 collision events**, because sustained contact
+produces a new timestamp every poll. Collapsed to one row per (drone, object)
+with first seen, last seen, count and worst penetration — the same flight now
+records **2 rows**, which say everything the 3256 said.
+
+#### And a hypothesis withdrawn before it was written down
+
+The watchdog reported Drone1 frozen at 54.38 m with a downward velocity of
+8.58 m/s for ninety seconds, which looked exactly like a stale client connection —
+and would have explained the collision/position contradiction neatly. Checked
+before claiming it: a fresh client read the same 2.00 m as the long-lived one once
+the aircraft had come down. **The connection was not stale.** The aircraft really
+did hang at 54.38 m, and `linear_velocity` is the field that is unreliable for a
+disarmed vehicle. The contradiction stands unexplained.
+
 ### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after
