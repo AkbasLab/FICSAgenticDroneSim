@@ -216,3 +216,56 @@ class GroundCredibilityTests(unittest.TestCase):
         with self.assertRaises(agent.GroundReferenceError):
             agent.check_ground_reference("Drone3", -0.23)
         self.assertEqual(agent.check_ground_reference("Drone3", 29.28), 29.28)
+
+
+class GroundBarrierTests(unittest.TestCase):
+    """Judging a reading needs the complete set, which needs a barrier.
+
+    Without one the first drone to arm sets the reference unchallenged. Measured
+    2026-10-06: Drone3 armed at -0.18 before Drone1 found 29.25, and flew its
+    whole mission against it.
+    """
+
+    def setUp(self):
+        agent.forget_ground_reference()
+
+    tearDown = setUp
+
+    def test_one_reading_alone_is_not_judged(self):
+        """A single-drone run has nothing to compare against."""
+        agent.register_ground("Drone1", -0.18)
+        agent.validate_grounds("Drone1")          # must not raise
+
+    def test_the_mid_air_reading_is_refused_whichever_registered_first(self):
+        for order in ([("Drone3", -0.18), ("Drone1", 29.25)],
+                      [("Drone1", 29.25), ("Drone3", -0.18)]):
+            agent.forget_ground_reference()
+            for name, z in order:
+                agent.register_ground(name, z)
+            agent.validate_grounds("Drone1")      # the credible one is fine
+            with self.assertRaises(agent.GroundReferenceError):
+                agent.validate_grounds("Drone3")
+
+    def test_real_terrain_relief_passes(self):
+        for name, z in (("Drone1", 29.25), ("Drone2", 29.28),
+                        ("Drone3", 29.28), ("Drone4", 27.29)):
+            agent.register_ground(name, z)
+        for name in ("Drone1", "Drone2", "Drone3", "Drone4"):
+            agent.validate_grounds(name)
+
+    def test_the_message_lists_every_reading_for_diagnosis(self):
+        agent.register_ground("Drone1", 29.25)
+        agent.register_ground("Drone3", -0.18)
+        with self.assertRaises(agent.GroundReferenceError) as caught:
+            agent.validate_grounds("Drone3")
+        message = str(caught.exception)
+        for fragment in ("Drone1=29.25", "Drone3=-0.18"):
+            self.assertIn(fragment, message)
+
+    def test_it_refuses_rather_than_substituting_another_drones_ground(self):
+        """The deepest reading is another drone's terrain, not a replacement."""
+        agent.register_ground("Drone1", 29.25)
+        agent.register_ground("Drone3", -0.18)
+        with self.assertRaises(agent.GroundReferenceError):
+            agent.validate_grounds("Drone3")
+        self.assertNotIn("Drone3", agent._GROUND_REFERENCE)

@@ -1281,6 +1281,61 @@ the aircraft had come down. **The connection was not stale.** The aircraft reall
 did hang at 54.38 m, and `linear_velocity` is the field that is unreliable for a
 disarmed vehicle. The contradiction stands unexplained.
 
+### 2026-10-06 — the ground barrier, and `land` failures turn out to follow contact
+
+#### No drone takes off before every ground reading is in
+
+The hole left earlier today: a drone's first reading became the session reference
+unchallenged, so when the bad one armed first it flew the whole mission. Judging a
+reading needs the complete set, and the complete set does not exist until every
+drone has armed — so `fly_plans` now gives a multi-drone run a
+`threading.Barrier`. Each drone measures its ground, registers it, waits, and only
+then is any of them judged.
+
+It **refuses** rather than substituting. The deepest reading belongs to another
+drone over its own terrain, so it proves this drone's number is wrong without
+being a replacement for it, and flying against a guess produces data that looks
+valid — the exact failure this area of the code exists to prevent. A broken or
+timed-out barrier is not fatal on its own: the comparison still runs over whatever
+registered, and the per-drone history check still applies.
+
+Verified on four drones after a simulator restart. All four accepted:
+
+```
+Drone4 ground z = 27.29    Drone2 = 29.28    Drone1 = 29.25    Drone3 = 29.28
+```
+
+That 1.99 m spread is real terrain relief across the spawn points and passes,
+which is the behaviour that matters — a guard that refused legitimate variation
+would be worse than none. Five tests cover it, including both arming orders of
+the measured failure.
+
+#### `land` fails when the aircraft is in contact with another drone
+
+Worth stating because it reframes a defect recorded three times today as
+independent. In this run Drone1 ended at **31.83 m** with `land did not descend`;
+Drone3 had arrived at **31.51 m**; the two were in contact from t+17.51 to
+t+17.96. Every `land` failure seen today involved a drone touching another drone,
+and across the **24 single-drone runs** flown earlier `land` did not fail once.
+
+So the hang is most likely a *consequence* of contact — a controller unable to
+descend against a contact constraint — rather than a fault in `land` itself.
+Bounding and verifying it remains right regardless: it converts an armed aircraft
+stranded in mid air into a recorded failure. But it is a symptom, and fixing the
+contact would remove the cause.
+
+The cost is visible: a failing `land` now burns about 130 s, the 45 s descent and
+20 s `landAsync` bounds attempted twice, once by the plan and once by teardown.
+Acceptable while failures are rare, and worth revisiting if they are not.
+
+#### Unchanged and still unexplained
+
+Drone3 still gains 13.4 m on its backward leg (18.12 → 31.51), and the monitor
+still never reports the pair closer than **8.02 m** — the spawn offset — in a run
+where the physics engine recorded them interpenetrating. Contacts now collapse
+properly: two rows, five events each, worst penetration 0.009 m, where a stalled
+flight previously produced 3256 rows.
+
 ### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after

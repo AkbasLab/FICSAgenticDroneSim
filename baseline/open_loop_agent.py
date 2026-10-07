@@ -191,13 +191,61 @@ class GroundReferenceError(RuntimeError):
     """
 
 
+# Raw readings for this run, before any of them is trusted. The barrier below
+# exists because a reading can only be judged against the others, and the others
+# are not known until every drone has armed.
+_GROUND_RAW: dict[str, float] = {}
+GROUND_BARRIER_TIMEOUT = 30.0   # seconds to wait for the other drones to arm
+
+
+def register_ground(name: str, ground_z: float) -> None:
+    """Record what `name` measured, without judging it yet."""
+    with _GROUND_LOCK:
+        _GROUND_RAW[name] = ground_z
+
+
+def validate_grounds(name: str) -> None:
+    """Refuse this run if `name`'s reading cannot be right.
+
+    Called after every drone in the run has registered, so the comparison is
+    against a complete set. An aircraft can only be AT or ABOVE the ground, and
+    in NED a larger z is lower, so the deepest reading in the scene is the best
+    evidence of where the ground is. A reading sitting well above it was taken in
+    mid air.
+
+    This refuses rather than substituting. The deepest reading belongs to another
+    drone over its own terrain, so it is not this drone's ground either -- it is
+    only proof that this drone's number is wrong. Flying a mission against a
+    guess would produce data that looks valid, which is the failure mode this
+    whole area of the code exists to prevent.
+    """
+    with _GROUND_LOCK:
+        readings = dict(_GROUND_RAW)
+    mine = readings.get(name)
+    if mine is None or len(readings) < 2:
+        return
+    deepest_name, deepest = max(readings.items(), key=lambda kv: kv[1])
+    if deepest - mine > GROUND_SPREAD_TOLERANCE:
+        raise GroundReferenceError(
+            f"{name}: measured ground z = {mine:.2f}, which is "
+            f"{deepest - mine:.2f} m above the ground {deepest_name} found in "
+            f"the same scene ({deepest:.2f}, tolerance "
+            f"{GROUND_SPREAD_TOLERANCE}). An aircraft cannot be below the "
+            f"ground, so this was measured in mid air. Refusing to fly: all "
+            f"readings this run were "
+            + ", ".join(f"{k}={v:.2f}" for k, v in sorted(readings.items()))
+        )
+
+
 def forget_ground_reference(name: str | None = None) -> None:
     """Drop the cached ground, for one vehicle or all. For tests and restarts."""
     with _GROUND_LOCK:
         if name is None:
             _GROUND_REFERENCE.clear()
+            _GROUND_RAW.clear()
         else:
             _GROUND_REFERENCE.pop(name, None)
+            _GROUND_RAW.pop(name, None)
 
 
 def check_ground_reference(name: str, ground_z: float) -> float:
@@ -987,9 +1035,15 @@ class DroneRunner:
     runner its own client before suspecting anything else.
     """
 
-    def __init__(self, client, name: str) -> None:
+    def __init__(self, client, name: str, barrier: Any = None) -> None:
         self.client = client
         self.name = name          # must match a vehicle in settings.json
+        # Set by fly_plans for a multi-drone run: every drone measures its ground,
+        # then waits here, then all of them are judged against the complete set.
+        # Without it the first drone to arm sets the reference unchallenged, and a
+        # bad first reading flies a whole mission -- measured 2026-10-06, Drone3
+        # arming at -0.18 before Drone1 found 29.25.
+        self.barrier = barrier
         self.ground_z = 0.0       # filled in by arm(), used by land()
         self.ground_settled = False   # did the drone stop falling before
                                       # arm() read the ground? see arm()
@@ -1116,6 +1170,16 @@ class DroneRunner:
         # it did: the run failed loudly rather than being recorded as valid. A
         # barrier that armed every drone before fixing the ground would close it
         # properly, and is not written yet.
+        register_ground(self.name, self.ground_z)
+        if self.barrier is not None:
+            # Wait for the others to measure. A broken or timed-out barrier is not
+            # fatal on its own: validate_grounds below still compares whatever was
+            # registered, and the per-drone history check still applies.
+            try:
+                self.barrier.wait(timeout=GROUND_BARRIER_TIMEOUT)
+            except Exception:
+                pass
+        validate_grounds(self.name)
         self.ground_z = check_ground_reference(self.name, self.ground_z)
 
         # Only now take control, with the drone at rest on the ground.
@@ -1657,7 +1721,7 @@ def fly_plans(client, records: list[PlanRecord], host: str = "127.0.0.1",
         # IOLoop and BufferError exceptions under concurrent use, and both
         # drones stay on the ground.
         own = connect(host, port)
-        outcome = DroneRunner(own, record.drone).fly(record.plan)
+        outcome = DroneRunner(own, record.drone, barrier).fly(record.plan)
         with lock:                     # list.append is atomic, but be explicit
             outcomes.append(outcome)
 
@@ -1669,6 +1733,10 @@ def fly_plans(client, records: list[PlanRecord], host: str = "127.0.0.1",
     # the flight threads issue commands, and sharing one msgpack-rpc socket
     # across threads is the open question this file has carried since 2026-09-24.
     # Not something to find out about through a rare, unreproducible failure.
+    # One barrier for the whole run, so no drone takes off before every drone's
+    # ground reading is in. See DroneRunner.arm.
+    barrier = threading.Barrier(len(records)) if len(records) > 1 else None
+
     monitor = SeparationMonitor(connect(host, port), [r.drone for r in records])
     monitor.start()
 
