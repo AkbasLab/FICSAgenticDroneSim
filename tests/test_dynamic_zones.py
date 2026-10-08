@@ -166,3 +166,38 @@ class TestScorerAndLoading(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestWorldFrameAndAgentRecovery(unittest.TestCase):
+    """Bugs found by actually running the study, not by the unit tests above."""
+
+    def test_position_world_decides_whether_the_drone_is_inside(self):
+        zone = NoFlyZone("Z", 20.0, 40.0, 20.0, 40.0, active_from_s=10.0)
+        belief = _belief(position=(0.0, 0.0, 8.0), t=20.0)    # LOCAL (0,0): outside the zone
+        g = _guardian(zone)
+        self.assertNotEqual(g.evaluate(_fly(0, 0), belief).fallback, FallbackAction.EXIT_ZONE)
+        g = _guardian(zone)
+        # the same drone, spawned at world (30, 30), is actually inside it
+        ev = g.evaluate(_fly(0, 0), belief, position_world=(30.0, 30.0, 8.0))
+        self.assertEqual(ev.fallback, FallbackAction.EXIT_ZONE)
+
+    def test_a_steered_out_agent_does_not_end_the_mission_or_claim_it_arrived(self):
+        from fics_drone.agents.persistent_agent import PersistentAgent
+        from fics_drone.simulator.kinematic_mock_adapter import KinematicMockVehicleAdapter
+        scenario = load_scenario(SCENARIO_PATH)
+        # Drone1 searches Sector A (20-40); a zone over it switches on mid-mission
+        scenario.no_fly_zones = [NoFlyZone("Z", 22.0, 40.0, 22.0, 40.0, active_from_s=4.0)]
+        spec = scenario.drones[0]
+        agent = PersistentAgent(KinematicMockVehicleAdapter(spec.name, speed_mps=15.0), scenario,
+                                spec.sector, spec.spawn_offset, spec.battery_s, drone_name=spec.name)
+        report = agent.run()
+        steer = [e for e in agent.guardian_log.entries if e.fallback == "exit_zone"]
+        self.assertTrue(steer, "the zone should have caught the drone at least once")
+        # With a zone sitting permanently over its sector the policy's search legs keep being
+        # blocked, so the designed ending is the guardian's escalated return-home. What must NOT
+        # happen is the bug the study exposed: stopping, or landing, at the exit point.
+        x, y, _ = agent.belief.position
+        self.assertLess((x * x + y * y) ** 0.5, 5.0, f"ended away from home: {agent.belief.position}")
+        first_steer = next(i for i, step in enumerate(report.trace) if "exit_zone" in step)
+        self.assertFalse(any(step.startswith("skill_succeeded->land") for step in report.trace[first_steer:first_steer + 2]),
+                         "landed right after the steer-out, i.e. treated the exit point as home")

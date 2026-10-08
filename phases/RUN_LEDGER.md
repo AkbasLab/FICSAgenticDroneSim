@@ -57,6 +57,8 @@ Fill in exact dates and folders when Arshad confirms them.
 
 | `runs/probe_llama31_8b_schema_v2`, 100 seeded situations (seed 17), llama3.1:8b digest 46e0c10c039e, temp 0, CPU, ~1 h, current 12.3 schema + 15-tool set | none 17% legal; context 98%; repair 15% raw, 100% flown legal, 85% needed repair at mean 5.0 m; guardian-reason feedback: 83 illegal first proposals, legal on retry only 8%, same point again 61%; fallback 0% everywhere; mean confidence 0.8 for legal AND illegal | diagnostic series under the new schema. Replaces the old-schema numbers for citation. Not yet "valid study data" (no frozen-series declaration) |
 
+| `runs/dynamic_zone_mock_pilot`, `scripts/run_dynamic_zone_study.py`, 4 conditions x 3 repeats, 4 agents, deterministic policy, kinematic mock (no simulator, no LLM) | static: 0 interventions of 82 commands. appear / appear_expire: 1 intervention of 83 (one steer-out, Drone1), ~15 telemetry samples (~3 s at 5 Hz) inside the active zone before the guardian caught it. drift: 3 interventions of 83, 1 steer-out, ~17-18 samples (~3.5 s) inside. Targets 2/2 and every drone home in all 12 runs; coverage 91% static vs 90% dynamic (both under the scenario's 95% requirement, so no run passes overall) | pilot, MOCK ONLY. The mock is deterministic: all 3 repeats per condition are identical (mission 25.2 s in every run), so the repeats add no information. appear and appear_expire are identical because the policy never waits for a zone to expire. Steer-out distance and mission-time cost were NOT recorded |
+
 Open: the -11.8 m / 64 s landing from the full mission. Next step is to repeat the full mission a few times and log `land()` duration and the post-landing position each time, to see whether it recurs.
 
 ## 4. Conditions of the data

@@ -142,7 +142,11 @@ class SafetyGuardian:
         conflicting_commands checks against."""
         self._command_in_flight = False
 
-    def evaluate(self, command: Command, belief) -> GuardianEvaluation:
+    def evaluate(self, command: Command, belief, position_world=None) -> GuardianEvaluation:
+        """`position_world` is the aircraft's own position in the shared WORLD frame (the frame
+        zones are defined in). A belief only knows its local frame, so a caller whose drone
+        spawned away from the origin must pass this; without it the belief position is used,
+        which is correct only where local and world coincide."""
         if self.escalated:
             # Once escalated, the guardian stops asking the policy and steers the
             # aircraft home itself - sticky on purpose. Without this, a policy that's
@@ -153,7 +157,7 @@ class SafetyGuardian:
             # what's proposed until it actually reaches home - at which point
             # _escalate() itself clears this flag, since there's nothing left to steer.
             return self._escalate(belief, ["escalated"])
-        exit_evaluation = self._exit_active_zone(belief)
+        exit_evaluation = self._exit_active_zone(belief, position_world)
         if exit_evaluation is not None:
             return exit_evaluation
         checks = self._run_checks(command, belief)
@@ -229,7 +233,7 @@ class SafetyGuardian:
         zones are read as always-active (the conservative, pre-GMB behaviour)."""
         return getattr(belief, "elapsed_s", None)
 
-    def _exit_active_zone(self, belief) -> Optional[GuardianEvaluation]:
+    def _exit_active_zone(self, belief, position_world=None) -> Optional[GuardianEvaluation]:
         """GMB: a scheduled or drifting zone can switch on, or move, on top of an aircraft
         that was legal a moment ago. Static zones can't (a drone never enters one, the
         restricted_zones check stops it first), so only dynamic zones trigger this. When it
@@ -237,7 +241,7 @@ class SafetyGuardian:
         every active zone, instead of waiting for the policy to notice. One-shot per
         evaluation: the next proposal is judged normally once the aircraft is out."""
         t = self._now(belief)
-        position = getattr(belief, "position", None)
+        position = position_world if position_world is not None else getattr(belief, "position", None)
         if t is None or position is None:
             return None
         x, y, z = position

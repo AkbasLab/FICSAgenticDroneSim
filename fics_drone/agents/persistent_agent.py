@@ -31,7 +31,7 @@ from .llm_tools import BY_NAME
 from .decision_log import DecisionLogger
 from .ground_truth import SensorModel
 from .objectives import Objective, ReplanEvent
-from .safety_guardian import Command, GuardianOutcome, SafetyGuardian, SafetyLimits
+from .safety_guardian import Command, FallbackAction, GuardianOutcome, SafetyGuardian, SafetyLimits
 from .search_policy import SearchAgentPolicy
 
 MAX_STEPS = 500  # hard backstop against a future undiscovered infinite-loop bug in the policy -
@@ -597,7 +597,8 @@ class PersistentAgent:
         world_target = _to_world(local_target, self.spawn_offset)
         command = Command(kind="fly", target=world_target, purpose=purpose,
                            speed_mps=getattr(self.adapter, "speed_mps", 0.0), timeout_s=SKILL_TIMEOUT_S)
-        evaluation = self.guardian.evaluate(command, self.belief)
+        evaluation = self.guardian.evaluate(command, self.belief,
+                                           position_world=_to_world(self.belief.position, self.spawn_offset))
         self.guardian_log.record(len(self.guardian_log.entries), command, evaluation)
 
         if evaluation.outcome == GuardianOutcome.REJECT_AND_REPLAN:
@@ -613,6 +614,15 @@ class PersistentAgent:
                 result = go_to_waypoint(self.adapter, *_to_local(evaluation.command.target, self.spawn_offset))
             self.belief.position = result.final_position or self.belief.position
             self.guardian.command_completed()
+            if evaluation.fallback == FallbackAction.EXIT_ZONE:
+                # GMB: a zone switched on over the aircraft and the guardian steered it out.
+                # That is one corrective move, not the end of the flight. Reported as
+                # GUARDIAN_BLOCKED, not success: the proposed command was NOT flown (the exit
+                # was), so the policy must re-plan from where the aircraft now is - a
+                # RETURN_HOME leg that was replaced by an exit has not reached home yet.
+                # (Every other fallback is terminal: home, then land.)
+                self.belief.self_state.last_block_reason = evaluation.reason
+                return ReplanEvent.GUARDIAN_BLOCKED
             return ReplanEvent.GUARDIAN_ESCALATED
 
         # APPROVE or APPROVE_WITH_MODIFICATION - fly whatever the guardian actually approved,

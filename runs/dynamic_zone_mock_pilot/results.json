@@ -1,0 +1,489 @@
+{
+  "repeats": 3,
+  "policy": "deterministic",
+  "adapter": "kinematic_mock",
+  "mock_speed_mps": 15.0,
+  "results": {
+    "static": [
+      {
+        "guardian": {
+          "commands": 82,
+          "interventions": 0,
+          "intervention_rate": 0.0,
+          "by_outcome": {
+            "approve": 82
+          },
+          "failed_checks": {},
+          "steer_outs": 0
+        },
+        "mission": {
+          "coverage": 0.91,
+          "targets_found": [
+            "T1",
+            "T2"
+          ],
+          "no_fly_violations": [],
+          "separation_violations": 0,
+          "mission_s": 25.2,
+          "all_home": true,
+          "overall_pass": false
+        }
+      },
+      {
+        "guardian": {
+          "commands": 82,
+          "interventions": 0,
+          "intervention_rate": 0.0,
+          "by_outcome": {
+            "approve": 82
+          },
+          "failed_checks": {},
+          "steer_outs": 0
+        },
+        "mission": {
+          "coverage": 0.91,
+          "targets_found": [
+            "T1",
+            "T2"
+          ],
+          "no_fly_violations": [],
+          "separation_violations": 0,
+          "mission_s": 25.2,
+          "all_home": true,
+          "overall_pass": false
+        }
+      },
+      {
+        "guardian": {
+          "commands": 82,
+          "interventions": 0,
+          "intervention_rate": 0.0,
+          "by_outcome": {
+            "approve": 82
+          },
+          "failed_checks": {},
+          "steer_outs": 0
+        },
+        "mission": {
+          "coverage": 0.91,
+          "targets_found": [
+            "T1",
+            "T2"
+          ],
+          "no_fly_violations": [],
+          "separation_violations": 0,
+          "mission_s": 25.2,
+          "all_home": true,
+          "overall_pass": false
+        }
+      }
+    ],
+    "appear": [
+      {
+        "guardian": {
+          "commands": 83,
+          "interventions": 1,
+          "intervention_rate": 0.012,
+          "by_outcome": {
+            "approve": 82,
+            "execute_safe_fallback": 1
+          },
+          "failed_checks": {
+            "inside_active_zone": 1
+          },
+          "steer_outs": 1
+        },
+        "mission": {
+          "coverage": 0.9,
+          "targets_found": [
+            "T1",
+            "T2"
+          ],
+          "no_fly_violations": [
+            "Drone1 entered DZ_appear at t=5.1s",
+            "Drone1 entered DZ_appear at t=5.3s",
+            "Drone1 entered DZ_appear at t=5.5s",
+            "Drone1 entered DZ_appear at t=5.7s",
+            "Drone1 entered DZ_appear at t=5.9s",
+            "Drone1 entered DZ_appear at t=6.1s",
+            "Drone1 entered DZ_appear at t=6.3s",
+            "Drone1 entered DZ_appear at t=6.6s",
+            "Drone1 entered DZ_appear at t=6.8s",
+            "Drone1 entered DZ_appear at t=7.0s",
+            "Drone1 entered DZ_appear at t=7.2s",
+            "Drone1 entered DZ_appear at t=7.4s",
+            "Drone1 entered DZ_appear at t=7.6s",
+            "Drone1 entered DZ_appear at t=7.8s",
+            "Drone1 entered DZ_appear at t=8.0s"
+          ],
+          "separation_violations": 0,
+          "mission_s": 25.2,
+          "all_home": true,
+          "overall_pass": false
+        }
+      },
+      {
+        "guardian": {
+          "commands": 83,
+          "interventions": 1,
+          "intervention_rate": 0.012,
+          "by_outcome": {
+            "approve": 82,
+            "execute_safe_fallback": 1
+          },
+          "failed_checks": {
+            "inside_active_zone": 1
+          },
+          "steer_outs": 1
+        },
+        "mission": {
+          "coverage": 0.9,
+          "targets_found": [
+            "T1",
+            "T2"
+          ],
+          "no_fly_violations": [
+            "Drone1 entered DZ_appear at t=5.1s",
+            "Drone1 entered DZ_appear at t=5.3s",
+            "Drone1 entered DZ_appear at t=5.5s",
+            "Drone1 entered DZ_appear at t=5.7s",
+            "Drone1 entered DZ_appear at t=5.9s",
+            "Drone1 entered DZ_appear at t=6.1s",
+            "Drone1 entered DZ_appear at t=6.3s",
+            "Drone1 entered DZ_appear at t=6.6s",
+            "Drone1 entered DZ_appear at t=6.8s",
+            "Drone1 entered DZ_appear at t=7.0s",
+            "Drone1 entered DZ_appear at t=7.2s",
+            "Drone1 entered DZ_appear at t=7.4s",
+            "Drone1 entered DZ_appear at t=7.6s",
+            "Drone1 entered DZ_appear at t=7.8s",
+            "Drone1 entered DZ_appear at t=8.0s"
+          ],
+          "separation_violations": 0,
+          "mission_s": 25.2,
+          "all_home": true,
+          "overall_pass": false
+        }
+      },
+      {
+        "guardian": {
+          "commands": 83,
+          "interventions": 1,
+          "intervention_rate": 0.012,
+          "by_outcome": {
+            "approve": 82,
+            "execute_safe_fallback": 1
+          },
+          "failed_checks": {
+            "inside_active_zone": 1
+          },
+          "steer_outs": 1
+        },
+        "mission": {
+          "coverage": 0.9,
+          "targets_found": [
+            "T1",
+            "T2"
+          ],
+          "no_fly_violations": [
+            "Drone1 entered DZ_appear at t=5.1s",
+            "Drone1 entered DZ_appear at t=5.3s",
+            "Drone1 entered DZ_appear at t=5.5s",
+            "Drone1 entered DZ_appear at t=5.7s",
+            "Drone1 entered DZ_appear at t=5.9s",
+            "Drone1 entered DZ_appear at t=6.1s",
+            "Drone1 entered DZ_appear at t=6.3s",
+            "Drone1 entered DZ_appear at t=6.5s",
+            "Drone1 entered DZ_appear at t=6.7s",
+            "Drone1 entered DZ_appear at t=6.9s",
+            "Drone1 entered DZ_appear at t=7.1s",
+            "Drone1 entered DZ_appear at t=7.3s",
+            "Drone1 entered DZ_appear at t=7.5s",
+            "Drone1 entered DZ_appear at t=7.7s",
+            "Drone1 entered DZ_appear at t=8.0s"
+          ],
+          "separation_violations": 0,
+          "mission_s": 25.2,
+          "all_home": true,
+          "overall_pass": false
+        }
+      }
+    ],
+    "appear_expire": [
+      {
+        "guardian": {
+          "commands": 83,
+          "interventions": 1,
+          "intervention_rate": 0.012,
+          "by_outcome": {
+            "approve": 82,
+            "execute_safe_fallback": 1
+          },
+          "failed_checks": {
+            "inside_active_zone": 1
+          },
+          "steer_outs": 1
+        },
+        "mission": {
+          "coverage": 0.9,
+          "targets_found": [
+            "T1",
+            "T2"
+          ],
+          "no_fly_violations": [
+            "Drone1 entered DZ_appear at t=5.1s",
+            "Drone1 entered DZ_appear at t=5.3s",
+            "Drone1 entered DZ_appear at t=5.5s",
+            "Drone1 entered DZ_appear at t=5.7s",
+            "Drone1 entered DZ_appear at t=5.9s",
+            "Drone1 entered DZ_appear at t=6.1s",
+            "Drone1 entered DZ_appear at t=6.3s",
+            "Drone1 entered DZ_appear at t=6.5s",
+            "Drone1 entered DZ_appear at t=6.7s",
+            "Drone1 entered DZ_appear at t=6.9s",
+            "Drone1 entered DZ_appear at t=7.1s",
+            "Drone1 entered DZ_appear at t=7.3s",
+            "Drone1 entered DZ_appear at t=7.5s",
+            "Drone1 entered DZ_appear at t=7.8s",
+            "Drone1 entered DZ_appear at t=8.0s"
+          ],
+          "separation_violations": 0,
+          "mission_s": 25.2,
+          "all_home": true,
+          "overall_pass": false
+        }
+      },
+      {
+        "guardian": {
+          "commands": 83,
+          "interventions": 1,
+          "intervention_rate": 0.012,
+          "by_outcome": {
+            "approve": 82,
+            "execute_safe_fallback": 1
+          },
+          "failed_checks": {
+            "inside_active_zone": 1
+          },
+          "steer_outs": 1
+        },
+        "mission": {
+          "coverage": 0.9,
+          "targets_found": [
+            "T1",
+            "T2"
+          ],
+          "no_fly_violations": [
+            "Drone1 entered DZ_appear at t=5.1s",
+            "Drone1 entered DZ_appear at t=5.3s",
+            "Drone1 entered DZ_appear at t=5.5s",
+            "Drone1 entered DZ_appear at t=5.7s",
+            "Drone1 entered DZ_appear at t=5.9s",
+            "Drone1 entered DZ_appear at t=6.1s",
+            "Drone1 entered DZ_appear at t=6.3s",
+            "Drone1 entered DZ_appear at t=6.5s",
+            "Drone1 entered DZ_appear at t=6.7s",
+            "Drone1 entered DZ_appear at t=6.9s",
+            "Drone1 entered DZ_appear at t=7.1s",
+            "Drone1 entered DZ_appear at t=7.3s",
+            "Drone1 entered DZ_appear at t=7.5s",
+            "Drone1 entered DZ_appear at t=7.7s",
+            "Drone1 entered DZ_appear at t=7.9s"
+          ],
+          "separation_violations": 0,
+          "mission_s": 25.2,
+          "all_home": true,
+          "overall_pass": false
+        }
+      },
+      {
+        "guardian": {
+          "commands": 83,
+          "interventions": 1,
+          "intervention_rate": 0.012,
+          "by_outcome": {
+            "approve": 82,
+            "execute_safe_fallback": 1
+          },
+          "failed_checks": {
+            "inside_active_zone": 1
+          },
+          "steer_outs": 1
+        },
+        "mission": {
+          "coverage": 0.9,
+          "targets_found": [
+            "T1",
+            "T2"
+          ],
+          "no_fly_violations": [
+            "Drone1 entered DZ_appear at t=5.1s",
+            "Drone1 entered DZ_appear at t=5.3s",
+            "Drone1 entered DZ_appear at t=5.5s",
+            "Drone1 entered DZ_appear at t=5.7s",
+            "Drone1 entered DZ_appear at t=5.9s",
+            "Drone1 entered DZ_appear at t=6.1s",
+            "Drone1 entered DZ_appear at t=6.3s",
+            "Drone1 entered DZ_appear at t=6.5s",
+            "Drone1 entered DZ_appear at t=6.7s",
+            "Drone1 entered DZ_appear at t=6.9s",
+            "Drone1 entered DZ_appear at t=7.1s",
+            "Drone1 entered DZ_appear at t=7.4s",
+            "Drone1 entered DZ_appear at t=7.6s",
+            "Drone1 entered DZ_appear at t=7.8s",
+            "Drone1 entered DZ_appear at t=8.0s"
+          ],
+          "separation_violations": 0,
+          "mission_s": 25.2,
+          "all_home": true,
+          "overall_pass": false
+        }
+      }
+    ],
+    "drift": [
+      {
+        "guardian": {
+          "commands": 83,
+          "interventions": 3,
+          "intervention_rate": 0.036,
+          "by_outcome": {
+            "approve": 80,
+            "reject_and_replan": 2,
+            "execute_safe_fallback": 1
+          },
+          "failed_checks": {
+            "restricted_zones": 2,
+            "inside_active_zone": 1
+          },
+          "steer_outs": 1
+        },
+        "mission": {
+          "coverage": 0.9,
+          "targets_found": [
+            "T1",
+            "T2"
+          ],
+          "no_fly_violations": [
+            "Drone1 entered DZ_drift at t=4.5s",
+            "Drone1 entered DZ_drift at t=4.9s",
+            "Drone1 entered DZ_drift at t=5.1s",
+            "Drone1 entered DZ_drift at t=5.3s",
+            "Drone1 entered DZ_drift at t=5.5s",
+            "Drone1 entered DZ_drift at t=5.7s",
+            "Drone1 entered DZ_drift at t=5.9s",
+            "Drone1 entered DZ_drift at t=6.1s",
+            "Drone1 entered DZ_drift at t=6.3s",
+            "Drone1 entered DZ_drift at t=6.5s",
+            "Drone1 entered DZ_drift at t=6.7s",
+            "Drone1 entered DZ_drift at t=6.9s",
+            "Drone1 entered DZ_drift at t=7.1s",
+            "Drone1 entered DZ_drift at t=7.4s",
+            "Drone1 entered DZ_drift at t=7.6s",
+            "Drone2 entered DZ_drift at t=23.9s",
+            "Drone2 entered DZ_drift at t=24.1s",
+            "Drone2 entered DZ_drift at t=24.3s"
+          ],
+          "separation_violations": 0,
+          "mission_s": 25.2,
+          "all_home": true,
+          "overall_pass": false
+        }
+      },
+      {
+        "guardian": {
+          "commands": 83,
+          "interventions": 3,
+          "intervention_rate": 0.036,
+          "by_outcome": {
+            "approve": 80,
+            "reject_and_replan": 2,
+            "execute_safe_fallback": 1
+          },
+          "failed_checks": {
+            "restricted_zones": 2,
+            "inside_active_zone": 1
+          },
+          "steer_outs": 1
+        },
+        "mission": {
+          "coverage": 0.9,
+          "targets_found": [
+            "T1",
+            "T2"
+          ],
+          "no_fly_violations": [
+            "Drone1 entered DZ_drift at t=4.5s",
+            "Drone1 entered DZ_drift at t=4.9s",
+            "Drone1 entered DZ_drift at t=5.1s",
+            "Drone1 entered DZ_drift at t=5.3s",
+            "Drone1 entered DZ_drift at t=5.5s",
+            "Drone1 entered DZ_drift at t=5.7s",
+            "Drone1 entered DZ_drift at t=5.9s",
+            "Drone1 entered DZ_drift at t=6.1s",
+            "Drone1 entered DZ_drift at t=6.3s",
+            "Drone1 entered DZ_drift at t=6.5s",
+            "Drone1 entered DZ_drift at t=6.7s",
+            "Drone1 entered DZ_drift at t=7.0s",
+            "Drone1 entered DZ_drift at t=7.2s",
+            "Drone1 entered DZ_drift at t=7.4s",
+            "Drone1 entered DZ_drift at t=7.6s",
+            "Drone2 entered DZ_drift at t=23.9s",
+            "Drone2 entered DZ_drift at t=24.1s",
+            "Drone2 entered DZ_drift at t=24.3s"
+          ],
+          "separation_violations": 0,
+          "mission_s": 25.2,
+          "all_home": true,
+          "overall_pass": false
+        }
+      },
+      {
+        "guardian": {
+          "commands": 83,
+          "interventions": 3,
+          "intervention_rate": 0.036,
+          "by_outcome": {
+            "approve": 80,
+            "reject_and_replan": 2,
+            "execute_safe_fallback": 1
+          },
+          "failed_checks": {
+            "restricted_zones": 2,
+            "inside_active_zone": 1
+          },
+          "steer_outs": 1
+        },
+        "mission": {
+          "coverage": 0.9,
+          "targets_found": [
+            "T1",
+            "T2"
+          ],
+          "no_fly_violations": [
+            "Drone1 entered DZ_drift at t=4.5s",
+            "Drone1 entered DZ_drift at t=4.9s",
+            "Drone1 entered DZ_drift at t=5.1s",
+            "Drone1 entered DZ_drift at t=5.3s",
+            "Drone1 entered DZ_drift at t=5.5s",
+            "Drone1 entered DZ_drift at t=5.7s",
+            "Drone1 entered DZ_drift at t=5.9s",
+            "Drone1 entered DZ_drift at t=6.1s",
+            "Drone1 entered DZ_drift at t=6.3s",
+            "Drone1 entered DZ_drift at t=6.5s",
+            "Drone1 entered DZ_drift at t=6.7s",
+            "Drone1 entered DZ_drift at t=6.9s",
+            "Drone1 entered DZ_drift at t=7.1s",
+            "Drone1 entered DZ_drift at t=7.3s",
+            "Drone1 entered DZ_drift at t=7.6s",
+            "Drone2 entered DZ_drift at t=24.1s",
+            "Drone2 entered DZ_drift at t=24.3s"
+          ],
+          "separation_violations": 0,
+          "mission_s": 25.2,
+          "all_home": true,
+          "overall_pass": false
+        }
+      }
+    ]
+  }
+}
