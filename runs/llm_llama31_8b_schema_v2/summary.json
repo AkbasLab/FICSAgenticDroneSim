@@ -1,0 +1,34 @@
+{
+  "model_card": {
+    "backend": "ollama",
+    "model": "llama3.1:8b",
+    "digest": "46e0c10c039e",
+    "temperature": 0.0,
+    "seed": 17,
+    "is_pinned": true,
+    "warnings": []
+  },
+  "summary": {
+    "assessed_risk": {
+      "low": 2
+    },
+    "mean_confidence": 0.8,
+    "messages_sent": 0,
+    "model_owned_decisions": 3,
+    "fallback": 1,
+    "fallback_rate": 0.3333333333333333,
+    "corrected": 0,
+    "rejected_as": {
+      "timeout": 1
+    },
+    "model_chose": {
+      "go_to_waypoint": 2
+    },
+    "waypoints_proposed": 2,
+    "waypoints_repaired": 0,
+    "guardian_blocked": 1,
+    "guardian_blocked_checks": [
+      "separation"
+    ]
+  }
+}

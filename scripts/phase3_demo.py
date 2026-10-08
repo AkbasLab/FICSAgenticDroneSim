@@ -1,92 +1,79 @@
-"""Phase 3 exit criterion: four drones take off, go to distinct waypoints, hold,
-return home, and land - each skill returning a STRUCTURED result (not a print).
+"""Phase 3 exit criterion: N drones take off, fly to distinct waypoints, hold,
+return home and land - concurrently, every skill reporting SUCCESS.
 
-Deterministic on the mock adapter (no simulator needed):
-    python scripts/phase3_demo.py
-
-Fly it for real in AirSim (simulator running, drones spawned):
-    python scripts/phase3_demo.py --adapter airsim
+Usage:
+    python -m scripts.phase3_demo                            # 4 drones, mock adapter
+    python -m scripts.phase3_demo --drones 2 --adapter airsim
+    python -m scripts.phase3_demo --names Drone1,Drone2 --adapter airsim
 """
 
 import argparse
-import os
+import math
 import sys
+import threading
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from fics_drone.control import skills
+from fics_drone.control.navigation import DEFAULT_HEIGHT
+from fics_drone.core.skill_result import SkillStatus
+from fics_drone.simulator.mock_adapter import MockVehicleAdapter
 
-from agentic_uav.control import skills as sk
-from agentic_uav.control.skill_executor import SkillExecutor
-from agentic_uav.core.models import Position3D
-
-
-def make_adapter(name):
-    if name == "mock":
-        from agentic_uav.simulator.mock_adapter import MockVehicleAdapter
-        return MockVehicleAdapter()
-    if name == "airsim":
-        from agentic_uav.simulator.airsim_adapter import AirSimVehicleAdapter
-        return AirSimVehicleAdapter()
-    raise ValueError("adapter must be 'mock' or 'airsim'")
+WAYPOINT_RADIUS = 10.0
+HOLD_SECS = 2.0
 
 
-# four distinct waypoints (a rough square around the origin, at cruise altitude)
-WAYPOINTS = {
-    "Drone1": Position3D(20.0, 0.0, -8.0),
-    "Drone2": Position3D(0.0, 20.0, -8.0),
-    "Drone3": Position3D(-20.0, 0.0, -8.0),
-    "Drone4": Position3D(0.0, -20.0, -8.0),
-}
+def waypoint_for(index, total):
+    angle = 2 * math.pi * index / total
+    return (WAYPOINT_RADIUS * math.cos(angle), WAYPOINT_RADIUS * math.sin(angle), DEFAULT_HEIGHT)
 
 
-def run_one(executor, vid, waypoint):
-    """Take off -> go to waypoint -> hold -> return home -> land."""
-    plan = [
-        ("TAKE_OFF", sk.TakeOffCommand()),
-        ("GO_TO_WAYPOINT", sk.GoToWaypointCommand(waypoint=waypoint)),
-        ("HOLD_POSITION", sk.HoldPositionCommand(duration_s=3.0)),
-        ("RETURN_HOME", sk.ReturnHomeCommand()),
-        ("LAND", sk.LandCommand()),
-    ]
-    results = []
-    for name, command in plan:
-        r = executor.execute(vid, command)
-        results.append((name, r))
-        print(f"  [{vid}] {name:16} -> {r.status.value:8} "
-              f"({r.duration_s:.1f}s)"
-              + (f"  error={r.error_code}" if r.error_code else ""))
-        if r.status.value not in ("success",):
-            break
-    return results
+def make_adapter(kind, name):
+    if kind == "mock":
+        return MockVehicleAdapter(name)
+    from fics_drone.simulator.airsim_adapter import AirSimVehicleAdapter
+    return AirSimVehicleAdapter(name)
+
+
+def run_one_drone(adapter, waypoint, out):
+    out.append(("take_off", skills.take_off(adapter)))
+    out.append(("go_to_waypoint", skills.go_to_waypoint(adapter, *waypoint)))
+    out.append(("hold_position", skills.hold_position(adapter, HOLD_SECS)))
+    out.append(("return_home", skills.return_home(adapter)))
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--adapter", default="mock", help="mock | airsim")
-    args = ap.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--drones", type=int, default=4)
+    parser.add_argument("--adapter", choices=["mock", "airsim"], default="mock")
+    parser.add_argument("--names", type=str, default=None,
+                         help="comma-separated vehicle names (must match settings.json "
+                              "for --adapter airsim); overrides --drones count")
+    args = parser.parse_args()
 
-    adapter = make_adapter(args.adapter)
-    executor = SkillExecutor(adapter)
+    names = args.names.split(",") if args.names else [f"Drone{i + 1}" for i in range(args.drones)]
+    adapters = {n: make_adapter(args.adapter, n) for n in names}
+    waypoints = {n: waypoint_for(i, len(names)) for i, n in enumerate(names)}
+    results = {n: [] for n in names}
 
-    if args.adapter == "airsim":
-        from agentic_uav.simulator import scenario_manager
-        scenario_manager.spawn_missing_drones(adapter.client, len(WAYPOINTS))
+    threads = [threading.Thread(target=run_one_drone, args=(adapters[n], waypoints[n], results[n]))
+               for n in names]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
 
-    print(f"Phase 3 demo - {len(WAYPOINTS)} drones ({args.adapter} adapter)\n")
+    all_ok = True
+    for name in names:
+        print(f"\n{name}:")
+        for step_name, r in results[name]:
+            ok = r.status == SkillStatus.SUCCESS
+            all_ok = all_ok and ok
+            detail = f" error={r.error}" if r.error else ""
+            print(f"  {step_name:16s} {r.status.value:8s} pos={r.final_position} "
+                  f"elapsed={r.elapsed_s:.1f}s{detail}")
 
-    all_results = {}
-    # mock is deterministic; run sequentially so the output is readable. On
-    # airsim you'd thread these (each drone has its own client).
-    for vid, wp in WAYPOINTS.items():
-        print(f"{vid}: take off -> {(wp.x, wp.y, wp.z)} -> hold -> home -> land")
-        all_results[vid] = run_one(executor, vid, wp)
-        print()
-
-    # exit-criterion check: every skill of every drone succeeded
-    ok = all(r.status.value == "success"
-             for results in all_results.values() for _n, r in results)
-    print("EXIT CRITERION:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
+    print(f"\n{'ALL DRONES SUCCEEDED' if all_ok else 'SOME STEPS FAILED'}")
+    sys.exit(0 if all_ok else 1)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

@@ -1,0 +1,69 @@
+{
+  "drone": "Drone3",
+  "model_card": {
+    "backend": "ollama",
+    "model": "llama3.1:8b",
+    "digest": "46e0c10c039e",
+    "temperature": 0.0,
+    "seed": 17,
+    "is_pinned": true,
+    "warnings": []
+  },
+  "decisions": [
+    {
+      "step": 1,
+      "source": "model",
+      "objective": "go_to_waypoint",
+      "reason_code": "nothing_more_to_wait_for",
+      "waypoint": [
+        1.0,
+        20.0
+      ],
+      "rejected_as": "bad_fields",
+      "corrected": true,
+      "prompts": [
+        "You are one drone in a search team. Your own sector is already finished.\nChoose your next step. You may ONLY pick one of the options below.\n\nSITUATION\n- last_event: skill_succeeded\n- battery_remaining: 96%\n- listen_rounds_used: 1 of 3\n- own_targets: 0\n- second_hand_targets: 2\nTEAMMATES\n  Drone1: last heard 0s ago, last at (-1, -1)\n  Drone2: last heard 0s ago, last at (1, 20)\n  Drone4: last heard 0s ago, last at (-21, 39)\nMAP (world meters)\n- you are at (39, -21)\n- sector A: x 20..40, y 20..40\n- sector B: x -40..-20, y 20..40\n- sector C: x 20..40, y -40..-20\n- sector D: x -40..-20, y -40..-20\nOPTIONS\n- listen: stay here a few more seconds in case a teammate is about to report a target\n- go_to_waypoint: fly to world position (x, y) in meters at your current altitude (add \"x\" and \"y\" number fields), e.g. to look somewhere new\n- check_for_orphans: check whether a teammate's sector has been abandoned, and take it over if so\n- return_home: stop and fly home to land\n\nReply with ONLY a JSON object: {\"objective\": \"<option>\", \"reason_code\": \"<code>\"}\nreason_code must be one of: waiting_for_report, nothing_more_to_wait_for, teammate_may_need_help, battery_conserving, my_work_is_done, search_elsewhere",
+        "You are one drone in a search team. Your own sector is already finished.\nChoose your next step. You may ONLY pick one of the options below.\n\nSITUATION\n- last_event: skill_succeeded\n- battery_remaining: 96%\n- listen_rounds_used: 1 of 3\n- own_targets: 0\n- second_hand_targets: 2\nTEAMMATES\n  Drone1: last heard 0s ago, last at (-1, -1)\n  Drone2: last heard 0s ago, last at (1, 20)\n  Drone4: last heard 0s ago, last at (-21, 39)\nMAP (world meters)\n- you are at (39, -21)\n- sector A: x 20..40, y 20..40\n- sector B: x -40..-20, y 20..40\n- sector C: x 20..40, y -40..-20\n- sector D: x -40..-20, y -40..-20\nOPTIONS\n- listen: stay here a few more seconds in case a teammate is about to report a target\n- go_to_waypoint: fly to world position (x, y) in meters at your current altitude (add \"x\" and \"y\" number fields), e.g. to look somewhere new\n- check_for_orphans: check whether a teammate's sector has been abandoned, and take it over if so\n- return_home: stop and fly home to land\n\nReply with ONLY a JSON object: {\"objective\": \"<option>\", \"reason_code\": \"<code>\"}\nreason_code must be one of: waiting_for_report, nothing_more_to_wait_for, teammate_may_need_help, battery_conserving, my_work_is_done, search_elsewhere\n\nYOUR PREVIOUS ANSWER WAS REJECTED: missing field(s): ['x', 'y']. Answer again, following the format exactly."
+      ],
+      "raw_outputs": [
+        "{\n  \"objective\": \"go_to_waypoint\",\n  \"reason_code\": \"nothing_more_to_wait_for\"\n}",
+        "{\n  \"objective\": \"go_to_waypoint\",\n  \"reason_code\": \"nothing_more_to_wait_for\",\n  \"x\": 1,\n  \"y\": 20\n}"
+      ]
+    },
+    {
+      "step": 2,
+      "source": "model",
+      "objective": "go_to_waypoint",
+      "reason_code": "nothing_more_to_wait_for",
+      "waypoint": [
+        1.0,
+        20.0
+      ],
+      "rejected_as": "bad_fields",
+      "corrected": true,
+      "prompts": [
+        "You are one drone in a search team. Your own sector is already finished.\nChoose your next step. You may ONLY pick one of the options below.\n\nSITUATION\n- last_event: guardian_blocked\n- battery_remaining: 89%\n- listen_rounds_used: 2 of 3\n- own_targets: 0\n- second_hand_targets: 2\nTEAMMATES\n  Drone1: last heard 19s ago, last at (-1, -1)\n  Drone2: last heard 19s ago, last at (1, 20)\n  Drone4: last heard 19s ago, last at (-21, 39)\nMAP (world meters)\n- you are at (39, -21)\n- sector A: x 20..40, y 20..40\n- sector B: x -40..-20, y 20..40\n- sector C: x 20..40, y -40..-20\n- sector D: x -40..-20, y -40..-20\nOPTIONS\n- listen: stay here a few more seconds in case a teammate is about to report a target\n- go_to_waypoint: fly to world position (x, y) in meters at your current altitude (add \"x\" and \"y\" number fields), e.g. to look somewhere new\n- check_for_orphans: check whether a teammate's sector has been abandoned, and take it over if so\n- return_home: stop and fly home to land\n\nReply with ONLY a JSON object: {\"objective\": \"<option>\", \"reason_code\": \"<code>\"}\nreason_code must be one of: waiting_for_report, nothing_more_to_wait_for, teammate_may_need_help, battery_conserving, my_work_is_done, search_elsewhere",
+        "You are one drone in a search team. Your own sector is already finished.\nChoose your next step. You may ONLY pick one of the options below.\n\nSITUATION\n- last_event: guardian_blocked\n- battery_remaining: 89%\n- listen_rounds_used: 2 of 3\n- own_targets: 0\n- second_hand_targets: 2\nTEAMMATES\n  Drone1: last heard 19s ago, last at (-1, -1)\n  Drone2: last heard 19s ago, last at (1, 20)\n  Drone4: last heard 19s ago, last at (-21, 39)\nMAP (world meters)\n- you are at (39, -21)\n- sector A: x 20..40, y 20..40\n- sector B: x -40..-20, y 20..40\n- sector C: x 20..40, y -40..-20\n- sector D: x -40..-20, y -40..-20\nOPTIONS\n- listen: stay here a few more seconds in case a teammate is about to report a target\n- go_to_waypoint: fly to world position (x, y) in meters at your current altitude (add \"x\" and \"y\" number fields), e.g. to look somewhere new\n- check_for_orphans: check whether a teammate's sector has been abandoned, and take it over if so\n- return_home: stop and fly home to land\n\nReply with ONLY a JSON object: {\"objective\": \"<option>\", \"reason_code\": \"<code>\"}\nreason_code must be one of: waiting_for_report, nothing_more_to_wait_for, teammate_may_need_help, battery_conserving, my_work_is_done, search_elsewhere\n\nYOUR PREVIOUS ANSWER WAS REJECTED: missing field(s): ['x', 'y']. Answer again, following the format exactly."
+      ],
+      "raw_outputs": [
+        "{\n  \"objective\": \"go_to_waypoint\",\n  \"reason_code\": \"nothing_more_to_wait_for\"\n}",
+        "{\n  \"objective\": \"go_to_waypoint\",\n  \"reason_code\": \"nothing_more_to_wait_for\",\n  \"x\": 1,\n  \"y\": 20\n}"
+      ]
+    },
+    {
+      "step": 3,
+      "source": "model",
+      "objective": "check_for_orphans",
+      "reason_code": "nothing_more_to_wait_for",
+      "waypoint": null,
+      "rejected_as": null,
+      "corrected": false,
+      "prompts": [
+        "You are one drone in a search team. Your own sector is already finished.\nChoose your next step. You may ONLY pick one of the options below.\n\nSITUATION\n- last_event: guardian_blocked\n- battery_remaining: 83%\n- listen_rounds_used: 3 of 3\n- own_targets: 0\n- second_hand_targets: 2\nTEAMMATES\n  Drone1: last heard 37s ago, last at (-1, -1)\n  Drone2: last heard 37s ago, last at (1, 20)\n  Drone4: last heard 37s ago, last at (-21, 39)\nOPTIONS\n- check_for_orphans: check whether a teammate's sector has been abandoned, and take it over if so\n- return_home: stop and fly home to land\n\nReply with ONLY a JSON object: {\"objective\": \"<option>\", \"reason_code\": \"<code>\"}\nreason_code must be one of: waiting_for_report, nothing_more_to_wait_for, teammate_may_need_help, battery_conserving, my_work_is_done, search_elsewhere"
+      ],
+      "raw_outputs": [
+        "{\n  \"objective\": \"check_for_orphans\",\n  \"reason_code\": \"nothing_more_to_wait_for\"\n}"
+      ]
+    }
+  ]
+}

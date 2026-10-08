@@ -1,97 +1,97 @@
-"""Phase 3 skill-layer tests, all on the kinematic mock (no simulator, no LLM).
+"""Skill contract tests - no simulator. MockVehicleAdapter's `reachable` and
+`position_sequence` knobs let these prove the polling-loop behavior
+(bounded timeout, drift detection, continue-past-failure) deterministically."""
 
-Checks that skills return the right STRUCTURED result: waypoints reached within
-tolerance succeed, unreachable-in-time waypoints time out, waypoint following
-works, and the four-drone exit-criterion mission completes.
+from fics_drone.control import skills
+from fics_drone.core.skill_result import SkillStatus
+from fics_drone.simulator.mock_adapter import MockVehicleAdapter
 
-Run:  python tests/test_skills.py
-"""
-
-import os
-import sys
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from agentic_uav.control import skills as sk
-from agentic_uav.control.skill_executor import SkillExecutor
-from agentic_uav.core.enums import SkillStatus
-from agentic_uav.core.models import Position3D
-from agentic_uav.simulator.mock_adapter import MockVehicleAdapter
-
-passed = 0
-failed = 0
+FAST = dict(timeout_s=0.25)  # short timeout so a deliberate TIMEOUT test stays quick
 
 
-def check(name, cond):
-    global passed, failed
-    if cond:
-        print(f"  ok    {name}")
-        passed += 1
-    else:
-        print(f"  FAIL  {name}")
-        failed += 1
+def test_go_to_waypoint_succeeds_when_reachable():
+    a = MockVehicleAdapter(reachable=True)
+    r = skills.go_to_waypoint(a, 5.0, 0.0, 8.0, **FAST)
+    assert r.status == SkillStatus.SUCCESS
+    assert r.final_position == (5.0, 0.0, 8.0)
+    assert ("move_to", (5.0, 0.0, 8.0)) in a.log
+    print("  ok    go_to_waypoint succeeds and reports the arrival position")
 
 
-def fresh():
+def test_go_to_waypoint_times_out_when_stuck():
+    a = MockVehicleAdapter(reachable=False, start_position=(0.0, 0.0, 8.0))
+    r = skills.go_to_waypoint(a, 500.0, 0.0, 8.0, **FAST)
+    assert r.status == SkillStatus.TIMEOUT
+    assert r.final_position == (0.0, 0.0, 8.0)  # never moved
+    assert r.elapsed_s < 1.0  # bounded - proves it didn't block forever
+    print("  ok    go_to_waypoint gives up and reports TIMEOUT, not stuck forever")
+
+
+def test_hold_position_succeeds_without_drift():
+    a = MockVehicleAdapter(position_sequence=[(0, 0, 8)] * 10)
+    r = skills.hold_position(a, duration_s=0.2, drift_tolerance=1.0)
+    assert r.status == SkillStatus.SUCCESS
+    assert ("hover", None) in a.log
+    print("  ok    hold_position succeeds when position doesn't move")
+
+
+def test_hold_position_fails_on_drift():
+    a = MockVehicleAdapter(position_sequence=[(0, 0, 8), (0, 0, 8), (10, 0, 8)])
+    r = skills.hold_position(a, duration_s=5.0, drift_tolerance=1.0)
+    assert r.status == SkillStatus.FAILED
+    assert "drifted" in r.error
+    print("  ok    hold_position reports FAILED as soon as drift exceeds tolerance")
+
+
+def test_return_home_skips_landing_if_never_arrived():
+    a = MockVehicleAdapter(reachable=False, start_position=(50.0, 0.0, 8.0))
+    r = skills.return_home(a, timeout_s=0.2)
+    assert r.status == SkillStatus.TIMEOUT
+    assert ("land", None) not in a.log
+    print("  ok    return_home does not land if it never reached home")
+
+
+def test_return_home_lands_after_arriving():
+    a = MockVehicleAdapter(reachable=True)
+    r = skills.return_home(a, timeout_s=0.2)
+    assert r.status == SkillStatus.SUCCESS
+    assert ("land", None) in a.log
+    print("  ok    return_home lands once it actually reaches home")
+
+
+def test_follow_waypoints_continues_past_a_failed_leg():
+    # middle waypoint (99,99,8) is never reachable; the other two are.
+    a = MockVehicleAdapter(reachable=True)
+    real_start_move = a.start_move_to
+
+    def flaky_start_move(x, y, z):
+        if (x, y, z) == (99.0, 99.0, 8.0):
+            return  # silently refuse this one leg - position stays put
+        real_start_move(x, y, z)
+
+    a.start_move_to = flaky_start_move
+    route = [(5.0, 0.0, 8.0), (99.0, 99.0, 8.0), (10.0, 0.0, 8.0)]
+    result = skills.follow_waypoints(a, route, timeout_s=0.2)
+
+    assert result.status == SkillStatus.PARTIAL
+    assert len(result.leg_results) == 3
+    assert result.leg_results[0].status == SkillStatus.SUCCESS
+    assert result.leg_results[1].status == SkillStatus.TIMEOUT  # knows WHEN
+    assert result.leg_results[1].final_position is not None      # knows WHERE
+    assert result.leg_results[2].status == SkillStatus.SUCCESS   # kept going after leg 2
+    print("  ok    follow_waypoints reports each leg and continues past a timeout")
+
+
+def test_take_off_and_land_report_success():
     a = MockVehicleAdapter()
-    return a, SkillExecutor(a)
+    assert skills.take_off(a).status == SkillStatus.SUCCESS
+    assert skills.land(a).status == SkillStatus.SUCCESS
+    assert a.log == [("takeoff", None), ("land", None)]
+    print("  ok    take_off and land wrap the adapter calls with a SkillResult")
 
 
-# 1) take off then reach a waypoint -> success, within tolerance
-a, ex = fresh()
-ex.execute("D", sk.TakeOffCommand())
-r = ex.execute("D", sk.GoToWaypointCommand(waypoint=Position3D(30, 0, -8)))
-check("go_to_waypoint reaches target -> success", r.status is SkillStatus.SUCCESS)
-check("final position within tolerance",
-      r.final_position.distance_to(Position3D(30, 0, -8)) <= 1.5)
-check("structured result has timing", r.ended_at >= r.started_at)
-
-# 2) waypoint unreachable within timeout -> timeout
-a, ex = fresh()
-ex.execute("D", sk.TakeOffCommand())
-# 1000 m at 4 m/s needs 250 s, but timeout is 5 s
-r = ex.execute("D", sk.GoToWaypointCommand(
-    waypoint=Position3D(1000, 0, -8), speed_mps=4.0, timeout_s=5.0))
-check("far waypoint with short timeout -> timeout", r.status is SkillStatus.TIMEOUT)
-check("timeout result carries an error code", r.error_code == "timeout")
-
-# 3) follow a list of waypoints -> success, ends at the last one
-a, ex = fresh()
-ex.execute("D", sk.TakeOffCommand())
-wps = [Position3D(10, 0, -8), Position3D(10, 10, -8), Position3D(0, 10, -8)]
-r = ex.execute("D", sk.FollowWaypointsCommand(waypoints=wps))
-check("follow_waypoints -> success", r.status is SkillStatus.SUCCESS)
-check("ends at final waypoint",
-      r.final_position.distance_to(wps[-1]) <= 1.5)
-
-# 4) hold returns success and advances the clock
-a, ex = fresh()
-ex.execute("D", sk.TakeOffCommand())
-before = a.now("D")
-r = ex.execute("D", sk.HoldPositionCommand(duration_s=5.0))
-check("hold -> success", r.status is SkillStatus.SUCCESS)
-check("hold advanced simulated time by ~5s", (a.now("D") - before) >= 5.0)
-
-# 5) land brings the drone to the ground
-a, ex = fresh()
-ex.execute("D", sk.TakeOffCommand())
-r = ex.execute("D", sk.LandCommand())
-check("land -> success", r.status is SkillStatus.SUCCESS)
-check("landed near ground level", abs(a.get_position("D").z) <= 0.5)
-
-# 6) exit criterion: 4 drones take off -> waypoint -> hold -> home -> land
-a, ex = fresh()
-targets = {"D1": Position3D(20, 0, -8), "D2": Position3D(0, 20, -8),
-           "D3": Position3D(-20, 0, -8), "D4": Position3D(0, -20, -8)}
-all_ok = True
-for vid, wp in targets.items():
-    seq = [sk.TakeOffCommand(), sk.GoToWaypointCommand(waypoint=wp),
-           sk.HoldPositionCommand(duration_s=3.0), sk.ReturnHomeCommand(),
-           sk.LandCommand()]
-    for cmd in seq:
-        res = ex.execute(vid, cmd)
-        all_ok = all_ok and res.status is SkillStatus.SUCCESS
-check("four-drone takeoff/waypoint/hold/return/land all succeed", all_ok)
-
-print(f"\n{passed} passed, {failed} failed")
-sys.exit(1 if failed else 0)
+if __name__ == "__main__":
+    tests = [v for k, v in list(globals().items()) if k.startswith("test_")]
+    for t in tests:
+        t()
+    print(f"\n{len(tests)} passed, 0 failed")

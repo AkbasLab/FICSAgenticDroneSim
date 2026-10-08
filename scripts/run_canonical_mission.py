@@ -1,68 +1,64 @@
-"""Run the canonical search-and-relay mission with the scripted controller.
+"""Runs the Phase 4 canonical mission and scores it.
 
-This is the Phase 4 exit criterion in runnable form: load the canonical
-scenario, fly the fixed non-agentic script on the deterministic mock simulator
-(or AirSim with --airsim), and print the evaluated mission report. Exit code 0
-means the mission met every success criterion.
-
-    python scripts/run_canonical_mission.py
-    python scripts/run_canonical_mission.py --airsim
+    python scripts/run_canonical_mission.py           # mock (kinematic), scored
+    python scripts/run_canonical_mission.py --airsim  # fly it for real in CarlaAir
 """
 
 import argparse
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agentic_uav.experiments.mission_runner import run_scripted_mission
-from agentic_uav.simulator.mock_adapter import MockVehicleAdapter
-from agentic_uav.simulator.scenario_manager import load_scenario
+from fics_drone.core.scenario import load_scenario
+from fics_drone.evaluation.metrics import score_run
+from fics_drone.experiments.mission_runner import run_scripted_mission
+from fics_drone.simulator.kinematic_mock_adapter import KinematicMockVehicleAdapter
+from fics_drone.telemetry.recorder import TelemetryRecorder
 
-DEFAULT_SCENARIO = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "configs", "missions", "search_relay_001.yaml")
+DEFAULT_SCENARIO = os.path.join(os.path.dirname(__file__), "..", "configs", "missions",
+                                 "search_relay_001.json")
+
+
+def build_adapters(scenario, airsim: bool):
+    if airsim:
+        from fics_drone.simulator.airsim_adapter import AirSimVehicleAdapter
+        return {d.name: AirSimVehicleAdapter(d.name) for d in scenario.drones}
+    return {d.name: KinematicMockVehicleAdapter(d.name) for d in scenario.drones}
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--scenario", default=DEFAULT_SCENARIO)
-    ap.add_argument("--airsim", action="store_true",
-                    help="fly on AirSim instead of the mock simulator")
-    args = ap.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--scenario", default=DEFAULT_SCENARIO)
+    parser.add_argument("--airsim", action="store_true")
+    args = parser.parse_args()
 
     scenario = load_scenario(args.scenario)
+    adapters = build_adapters(scenario, args.airsim)
 
-    if args.airsim:
-        from agentic_uav.simulator import scenario_manager
-        from agentic_uav.simulator.airsim_adapter import AirSimVehicleAdapter
-        adapter = AirSimVehicleAdapter()
-        # self-heal: add any vehicles the sim doesn't already have
-        scenario_manager.spawn_missing_drones(adapter.client,
-                                              len(scenario.vehicles))
-    else:
-        adapter = MockVehicleAdapter(ground_z=0.0)
+    offsets = {d.name: d.spawn_offset for d in scenario.drones}
+    recorder = TelemetryRecorder(adapters, world_offsets=offsets)
+    recorder.start()
+    import time
+    start = time.monotonic()
+    run_scripted_mission(scenario, adapters)
+    elapsed = time.monotonic() - start
+    recorder.stop()
 
-    report = run_scripted_mission(scenario, adapter)
-    _print_report(scenario, report)
-    return 0 if report.success else 1
-
-
-def _print_report(scenario, report):
-    print(f"\n=== Canonical mission: {scenario.scenario_id} ===")
-    print(f"assignment / skills: {report.detail}")
-    print(f"coverage: {report.coverage:.1%} "
-          f"(required {scenario.mission.required_coverage:.0%})")
-    print(f"sectors searched: {report.sectors_searched}")
-    print("detections:")
-    for d in report.detections:
-        flag = "reported" if d.reported else "NOT reported"
-        print(f"  {d.target_id} by {d.by_vehicle} at t={d.at_time_s:.1f}s ({flag})")
-    print("\ncriteria:")
-    for name, ok in report.criteria.items():
-        print(f"  [{'PASS' if ok else 'FAIL'}] {name}")
-    print(f"\nMISSION {'SUCCESS' if report.success else 'FAILED'}\n")
+    report = score_run(scenario, recorder.log, elapsed)
+    print(f"Coverage: {report.coverage_fraction:.1%} ({'PASS' if report.coverage_pass else 'FAIL'})")
+    print(f"Targets found: {report.targets_found} ({'PASS' if report.targets_pass else 'FAIL'})")
+    print(f"No-fly violations: {report.no_fly_violations or 'none'} "
+          f"({'PASS' if report.no_fly_pass else 'FAIL'})")
+    print(f"Separation violations: {report.separation_violations or 'none'} "
+          f"({'PASS' if report.separation_pass else 'FAIL'})")
+    print(f"Battery: {report.battery_violations or 'within budget'} "
+          f"({'PASS' if report.battery_pass else 'FAIL'})")
+    print(f"Deadline: {report.deadline_s:.1f}s / {scenario.deadline_s}s "
+          f"({'PASS' if report.deadline_pass else 'FAIL'})")
+    print(f"All home: {report.all_home} ({'PASS' if report.all_home_pass else 'FAIL'})")
+    print(f"\nOVERALL: {'PASS' if report.overall_pass else 'FAIL'}")
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

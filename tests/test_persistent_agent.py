@@ -1,139 +1,170 @@
-"""Phase 5 tests: the deterministic persistent agent completes a search task
-from a task alone (no preflight plan), and reacts correctly to low battery and
-to a failed navigation skill.
+"""Phase 5 tests. The policy (a pure function of belief+event) is tested in
+isolation - fast, no adapter, no real time. Two slower integration tests run
+the full agent against the kinematic mock to prove the whole loop actually
+flies and lands.
 """
 
 import os
 import sys
+import unittest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agentic_uav.agents.objectives import AgentEvent, SearchTask
-from agentic_uav.agents.persistent_agent import PersistentAgent
-from agentic_uav.core.models import NavOutcome, Position3D
-from agentic_uav.simulator.ground_truth import GroundTruth, SensorModel
-from agentic_uav.simulator.mock_adapter import MockVehicleAdapter
-from agentic_uav.simulator.scenario_manager import load_scenario
+from fics_drone.agents.belief import Belief
+from fics_drone.agents.belief_schema import MissionBelief, SelfState
+from fics_drone.agents.guardian import Guardian
+from fics_drone.agents.objectives import Objective, ReplanEvent
+from fics_drone.agents.persistent_agent import PersistentAgent
+from fics_drone.agents.search_policy import SearchAgentPolicy
+from fics_drone.core.scenario import NoFlyZone, load_scenario
+from fics_drone.simulator.kinematic_mock_adapter import KinematicMockVehicleAdapter
 
-SCENARIO = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                        "configs", "missions", "search_relay_001.yaml")
-
-
-def _setup(sector_id="S1"):
-    """Build the scenario, the task, and the sensor that is the agent's only
-    route to ground truth (Phase 6.2 - the task itself carries no targets)."""
-    scenario = load_scenario(SCENARIO)
-    sector = next(s for s in scenario.sectors if s.sector_id == sector_id)
-    vehicle = scenario.vehicles[0]
-    task = SearchTask(task_id=f"search_{sector_id}", sector=sector,
-                      report_to=scenario.base.position)
-    sensor = SensorModel(GroundTruth(scenario))
-    return scenario, sector, vehicle, task, sensor
+SCENARIO_PATH = os.path.join(os.path.dirname(__file__), "..", "configs", "missions",
+                              "search_relay_001.json")
 
 
-def test_agent_completes_search_task():
-    scenario, sector, vehicle, task, sensor = _setup("S1")
-    agent = PersistentAgent(vehicle.vehicle_id, MockVehicleAdapter(0.0),
-                            home=vehicle.start, battery_total_s=vehicle.battery_s,
-                            cruise_altitude=sector.altitude, sensor=sensor)
-    r = agent.run(task)
-    assert r.completed, r.decisions
-    assert r.sector_searched and r.reported and r.returned_home and r.landed
+class TestSearchPolicy(unittest.TestCase):
+    def setUp(self):
+        self.policy = SearchAgentPolicy()
+
+    def _belief(self, phase, position=(0, 0, 0), elapsed_s=0.0, battery_s=100.0,
+                nav_retries=0, search_queue=None):
+        b = Belief(self_state=SelfState(position=position, elapsed_s=elapsed_s, battery_s=battery_s,
+                                         phase=phase, nav_retries=nav_retries),
+                   mission=MissionBelief(sector_id="A", search_queue=search_queue or []))
+        return b
+
+    def test_task_assigned_leads_to_takeoff(self):
+        b = self._belief("pre_takeoff")
+        objective, phase = self.policy.decide(b, ReplanEvent.TASK_ASSIGNED)
+        self.assertEqual(objective, Objective.TAKE_OFF)
+        self.assertEqual(phase, "climbing")
+
+    def test_critical_battery_forces_return_home_while_searching(self):
+        b = self._belief("searching", elapsed_s=95.0, battery_s=100.0)  # 5% remaining < 12% critical
+        objective, phase = self.policy.decide(b, ReplanEvent.SKILL_SUCCEEDED)
+        self.assertEqual(objective, Objective.RETURN_HOME)
+        self.assertEqual(phase, "returning")
+
+    def test_critical_battery_does_not_re_trigger_once_already_returning(self):
+        b = self._belief("returning", elapsed_s=95.0, battery_s=100.0)
+        objective, phase = self.policy.decide(b, ReplanEvent.SKILL_SUCCEEDED)
+        self.assertEqual(objective, Objective.LAND)  # proceeds normally, not stuck re-deciding RETURN_HOME
+
+    def test_target_detected_leads_to_report_then_return_home(self):
+        b = self._belief("searching")
+        objective, phase = self.policy.decide(b, ReplanEvent.TARGET_DETECTED)
+        self.assertEqual(objective, Objective.REPORT)
+        b.phase = phase
+        objective, phase = self.policy.decide(b, ReplanEvent.REPORT_SENT)
+        self.assertEqual(objective, Objective.RETURN_HOME)
+
+    def test_empty_search_queue_leads_to_listening_first(self):
+        """Phase 7: an agent with nothing left to search lingers a few rounds
+        for a late teammate broadcast before heading home, instead of
+        leaving the instant its own work is done."""
+        b = self._belief("searching", search_queue=[])
+        objective, phase = self.policy.decide(b, ReplanEvent.SKILL_SUCCEEDED)
+        self.assertEqual(objective, Objective.LISTEN)
+        self.assertEqual(phase, "listening")
+
+    def test_listening_checks_for_orphans_after_enough_rounds(self):
+        """Phase 9: listening exhausted now checks for a teammate's orphaned
+        task before heading home, instead of going straight to RETURN_HOME."""
+        b = self._belief("listening")
+        b.self_state.listen_rounds = self.policy.listen_rounds
+        objective, phase = self.policy.decide(b, ReplanEvent.SKILL_SUCCEEDED)
+        self.assertEqual(objective, Objective.CHECK_FOR_ORPHANS)
+        self.assertEqual(phase, "checking_for_orphans")
+
+    def test_check_for_orphans_with_nothing_found_returns_home(self):
+        b = self._belief("checking_for_orphans")
+        objective, phase = self.policy.decide(b, ReplanEvent.SKILL_SUCCEEDED)
+        self.assertEqual(objective, Objective.RETURN_HOME)
+        self.assertEqual(phase, "returning")
+
+    def test_check_for_orphans_finding_one_resumes_searching(self):
+        b = self._belief("checking_for_orphans")
+        objective, phase = self.policy.decide(b, ReplanEvent.NEW_TASK_ASSIGNED)
+        self.assertEqual(objective, Objective.SEARCH_SECTOR)
+        self.assertEqual(phase, "searching")
+
+    def test_nav_retries_exceeded_aborts_to_return_home(self):
+        b = self._belief("searching", nav_retries=SearchAgentPolicy().max_nav_retries)
+        objective, phase = self.policy.decide(b, ReplanEvent.SKILL_FAILED)
+        self.assertEqual(objective, Objective.RETURN_HOME)
+
+    def test_nav_failure_under_retry_limit_tries_again(self):
+        b = self._belief("searching", nav_retries=0)
+        objective, phase = self.policy.decide(b, ReplanEvent.SKILL_FAILED)
+        self.assertEqual(objective, Objective.SEARCH_SECTOR)
+        self.assertEqual(phase, "searching")
+
+    def test_returning_never_loops_forever_on_repeated_failure(self):
+        """The real bug this caught live: retrying RETURN_HOME when the
+        objective that just failed WAS RETURN_HOME degenerated into the
+        policy returning the exact same (RETURN_HOME, "returning") forever,
+        with no actual exit - 3 of 4 drones completed a real mission, the
+        4th spun on this transition indefinitely with no error. Once
+        retries are exhausted, the agent must land in place, never keep
+        retrying the one thing that's already failing."""
+        b = self._belief("returning", nav_retries=SearchAgentPolicy().max_nav_retries)
+        objective, phase = self.policy.decide(b, ReplanEvent.SKILL_FAILED)
+        self.assertEqual(objective, Objective.LAND)
+        self.assertEqual(phase, "landing")
+
+    def test_returning_retries_before_giving_up(self):
+        b = self._belief("returning", nav_retries=0)
+        objective, phase = self.policy.decide(b, ReplanEvent.SKILL_FAILED)
+        self.assertEqual(objective, Objective.RETURN_HOME)
+        self.assertEqual(phase, "returning")
+
+    def test_guardian_blocked_leg_does_not_count_as_a_nav_retry(self):
+        b = self._belief("searching", nav_retries=0)
+        objective, phase = self.policy.decide(b, ReplanEvent.GUARDIAN_BLOCKED)
+        self.assertEqual(objective, Objective.SEARCH_SECTOR)
+        self.assertEqual(b.nav_retries, 0)  # policy itself never mutates belief
 
 
-def test_no_preflight_plan_one_skill_at_a_time():
-    """The agent must decide skills incrementally, not emit a full plan up front.
-    Each decision is a single (event -> objective) step, in the right order."""
-    scenario, sector, vehicle, task, sensor = _setup("S1")
-    agent = PersistentAgent(vehicle.vehicle_id, MockVehicleAdapter(0.0),
-                            home=vehicle.start, battery_total_s=vehicle.battery_s,
-                            cruise_altitude=sector.altitude, sensor=sensor)
-    r = agent.run(task)
-    objectives = [d.split("->")[1] for d in r.decisions]
-    # the first decision reacts to task assignment, not a precomputed plan
-    assert r.decisions[0].startswith("task_assigned")
-    # objectives appear in the expected closed-loop order
-    for step in ["take_off", "go_to_sector", "search_sector", "report",
-                 "return_home", "land", "done"]:
-        assert step in objectives, (step, objectives)
-    assert objectives.index("take_off") < objectives.index("search_sector")
-    assert objectives.index("search_sector") < objectives.index("land")
+class TestGuardian(unittest.TestCase):
+    def test_blocks_a_point_inside_a_no_fly_zone(self):
+        zone = NoFlyZone(id="Z1", x_min=0, x_max=10, y_min=0, y_max=10)
+        guardian = Guardian([zone])
+        allowed, reason = guardian.check((5.0, 5.0, 8.0))
+        self.assertFalse(allowed)
+        self.assertIn("Z1", reason)
+
+    def test_allows_a_clear_point(self):
+        zone = NoFlyZone(id="Z1", x_min=0, x_max=10, y_min=0, y_max=10)
+        guardian = Guardian([zone])
+        allowed, reason = guardian.check((50.0, 50.0, 8.0))
+        self.assertTrue(allowed)
 
 
-def test_detects_target_in_sector():
-    scenario, sector, vehicle, task, sensor = _setup("S1")  # T1 lives in S1
-    agent = PersistentAgent(vehicle.vehicle_id, MockVehicleAdapter(0.0),
-                            home=vehicle.start, battery_total_s=vehicle.battery_s,
-                            cruise_altitude=sector.altitude, sensor=sensor)
-    r = agent.run(task)
-    assert "T1" in r.detections
+class TestPersistentAgentIntegration(unittest.TestCase):
+    def test_agent_finds_target_and_completes_in_sector_with_a_target(self):
+        scenario = load_scenario(SCENARIO_PATH)
+        spec = next(d for d in scenario.drones if d.sector == "A")  # A has target T1
+        adapter = KinematicMockVehicleAdapter(spec.name, speed_mps=25.0)
+        agent = PersistentAgent(adapter, scenario, "A", spec.spawn_offset, spec.battery_s)
+        report = agent.run()
 
+        self.assertEqual(report.target_found, "T1")
+        self.assertEqual(report.trace[-1], "skill_succeeded->done")
+        self.assertIn("target_detected->report", report.trace)
+        self.assertIn("report_sent->return_home", report.trace)
 
-def test_low_battery_returns_without_finishing_search():
-    scenario, sector, vehicle, task, sensor = _setup("S1")
-    # only enough battery to take off and start heading out
-    agent = PersistentAgent(vehicle.vehicle_id, MockVehicleAdapter(0.0),
-                            home=vehicle.start, battery_total_s=8.0,
-                            cruise_altitude=sector.altitude, sensor=sensor)
-    r = agent.run(task)
-    assert not r.completed
-    assert r.aborted_safely          # it still landed safely
-    assert not r.sector_searched     # it did NOT keep searching on low battery
-    assert r.landed
-    events = [e.split(":")[0] for e in r.detail.split(" | ")]
-    assert AgentEvent.BATTERY_LOW.value in events
+    def test_agent_completes_without_a_target_in_sector_without_one(self):
+        scenario = load_scenario(SCENARIO_PATH)
+        spec = next(d for d in scenario.drones if d.sector == "B")  # B has no target
+        adapter = KinematicMockVehicleAdapter(spec.name, speed_mps=25.0)
+        agent = PersistentAgent(adapter, scenario, "B", spec.spawn_offset, spec.battery_s)
+        report = agent.run()
 
-
-class FlakyAdapter(MockVehicleAdapter):
-    """Times out the first go_to_waypoint call, then behaves normally.
-    Used to prove the agent recovers from a failed navigation skill."""
-
-    def __init__(self, *a, **k):
-        super().__init__(*a, **k)
-        self._failed_once = False
-
-    def go_to_waypoint(self, vehicle_id, waypoint, speed_mps, timeout_s):
-        if not self._failed_once:
-            self._failed_once = True
-            self._p(vehicle_id)          # ensure state exists
-            self._advance(vehicle_id, 1.0)
-            return NavOutcome(final_position=self.get_position(vehicle_id),
-                              elapsed_s=1.0, timed_out=True)
-        return super().go_to_waypoint(vehicle_id, waypoint, speed_mps, timeout_s)
-
-
-def test_recovers_from_failed_navigation():
-    scenario, sector, vehicle, task, sensor = _setup("S1")
-    agent = PersistentAgent(vehicle.vehicle_id, FlakyAdapter(0.0),
-                            home=vehicle.start, battery_total_s=vehicle.battery_s,
-                            cruise_altitude=sector.altitude, sensor=sensor)
-    r = agent.run(task)
-    # despite the first nav failure, it retried and finished the task
-    assert r.completed, r.decisions
-    assert any("go_to_sector" in d and ("skill_timeout" in d or "skill_failed" in d)
-               for d in r.decisions) or "skill_timeout" in r.detail
+        self.assertIsNone(report.target_found)
+        self.assertEqual(report.trace[-1], "skill_succeeded->done")
+        self.assertNotIn("target_detected->report", report.trace)
 
 
 if __name__ == "__main__":
-    tests = [
-        ("agent completes the search task from a task alone",
-         test_agent_completes_search_task),
-        ("decides one skill at a time (no preflight plan)",
-         test_no_preflight_plan_one_skill_at_a_time),
-        ("detects the target in its sector", test_detects_target_in_sector),
-        ("low battery -> return/land without finishing search",
-         test_low_battery_returns_without_finishing_search),
-        ("recovers from a failed navigation skill",
-         test_recovers_from_failed_navigation),
-    ]
-    passed = failed = 0
-    for name, fn in tests:
-        try:
-            fn()
-            print(f"  ok    {name}")
-            passed += 1
-        except AssertionError as e:
-            print(f"  FAIL  {name}: {e}")
-            failed += 1
-    print(f"\n{passed} passed, {failed} failed")
-    sys.exit(1 if failed else 0)
+    unittest.main()

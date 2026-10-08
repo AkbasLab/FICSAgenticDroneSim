@@ -1,225 +1,142 @@
-"""Phase 6 tests: structured belief, truth/belief separation, staleness, and the
-decision log that shows what the agent knew and did not know.
-
-The leak tests are the important ones. A decentralized experiment is only
-meaningful if the agent genuinely lacks global information, so these check that
-claim two ways: structurally (no ground-truth objects reachable from the belief)
-and behaviourally (a target outside sensing range is never learned about).
-"""
+"""Phase 6 exit criterion, enforced as tests, not just a design intention.
+'Rule to preserve: an agent must never hold a GroundTruth, Scenario, or
+Target. Everything reaches belief through SensorModel.' If a later change
+hands an agent scenario data directly, these are the tests meant to fail."""
 
 import os
 import sys
+import unittest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agentic_uav.agents.belief_schema import (
-    Provenance, Source, TeamBelief,
-)
-from agentic_uav.agents.objectives import SearchTask
-from agentic_uav.agents.persistent_agent import PersistentAgent
-from agentic_uav.core.mission_models import MissionScenario, Target
-from agentic_uav.core.models import Position3D
-from agentic_uav.simulator.ground_truth import GroundTruth, SensorModel
-from agentic_uav.simulator.mock_adapter import MockVehicleAdapter
-from agentic_uav.simulator.scenario_manager import load_scenario
+from fics_drone.agents.belief_schema import Provenance
+from fics_drone.agents.decision_log import DecisionLogger
+from fics_drone.agents.ground_truth import GroundTruth, PerceivedTarget, SensorModel
+from fics_drone.agents.objectives import Objective, ReplanEvent
+from fics_drone.agents.persistent_agent import PersistentAgent
+from fics_drone.core.scenario import Scenario, Target, load_scenario
+from fics_drone.simulator.kinematic_mock_adapter import KinematicMockVehicleAdapter
 
-SCENARIO = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                        "configs", "missions", "search_relay_001.yaml")
-
-
-def _agent(sector_id="S1", battery=None, scenario=None, with_sensor=True):
-    scenario = scenario or load_scenario(SCENARIO)
-    sector = next(s for s in scenario.sectors if s.sector_id == sector_id)
-    vehicle = scenario.vehicles[0]
-    truth = GroundTruth(scenario)
-    sensor = SensorModel(truth) if with_sensor else None
-    agent = PersistentAgent(
-        vehicle.vehicle_id, MockVehicleAdapter(0.0), home=vehicle.start,
-        battery_total_s=battery or vehicle.battery_s,
-        cruise_altitude=sector.altitude, sensor=sensor,
-        roster=truth.roster(), sector_ids=truth.sector_ids())
-    agent.belief.brief(scenario)
-    task = SearchTask(task_id=f"search_{sector_id}", sector=sector,
-                      report_to=scenario.base.position)
-    return agent, task, scenario
+SCENARIO_PATH = os.path.join(os.path.dirname(__file__), "..", "configs", "missions",
+                              "search_relay_001.json")
+BANNED_TYPES = (Scenario, Target, GroundTruth)
 
 
-# --- 6.1 structure ---
-
-def test_belief_has_all_schema_sections():
-    agent, _task, _s = _agent()
-    b = agent.belief
-    for section in ["self_", "mission", "local_map", "team",
-                    "communication", "assumptions"]:
-        assert hasattr(b, section), section
-    k = b.known()
-    for section in ["self", "mission", "local_map", "team",
-                    "communication", "assumptions"]:
-        assert section in k, section
-
-
-def test_phase5_accessors_still_work():
-    """The flat Phase 5 API must survive the restructure (behavior preservation)."""
-    agent, _task, _s = _agent()
-    b = agent.belief
-    assert b.vehicle_id == "Drone1"
-    assert b.battery_frac == 1.0
-    assert not b.low_battery and not b.critical_battery
-    assert b.near_home
-    assert b.detections == []
+def _walk_for_banned_types(obj, seen=None):
+    """Recursively walks a belief's object graph. Returns every banned
+    ground-truth object found anywhere inside it, however deeply nested."""
+    if seen is None:
+        seen = set()
+    if id(obj) in seen or obj is None:
+        return []
+    seen.add(id(obj))
+    found = []
+    if isinstance(obj, BANNED_TYPES):
+        found.append(obj)
+    if hasattr(obj, "__dict__"):
+        for v in vars(obj).values():
+            found.extend(_walk_for_banned_types(v, seen))
+    elif isinstance(obj, dict):
+        for v in obj.values():
+            found.extend(_walk_for_banned_types(v, seen))
+    elif isinstance(obj, (list, tuple, set)):
+        for v in obj:
+            found.extend(_walk_for_banned_types(v, seen))
+    return found
 
 
-# --- 6.2 truth vs belief ---
+class TestGroundTruthIsolation(unittest.TestCase):
+    def test_belief_never_holds_a_ground_truth_object_after_a_full_run(self):
+        scenario = load_scenario(SCENARIO_PATH)
+        spec = next(d for d in scenario.drones if d.sector == "A")
+        adapter = KinematicMockVehicleAdapter(spec.name, speed_mps=25.0)
+        agent = PersistentAgent(adapter, scenario, "A", spec.spawn_offset, spec.battery_s)
+        agent.run()
 
-def _reachable_objects(root, max_depth=6):
-    """Walk an object graph collecting instances (for the leak test)."""
-    seen, out, stack = set(), [], [(root, 0)]
-    while stack:
-        obj, depth = stack.pop()
-        if depth > max_depth or id(obj) in seen:
-            continue
-        seen.add(id(obj))
-        out.append(obj)
-        children = []
-        if isinstance(obj, dict):
-            children = list(obj.keys()) + list(obj.values())
-        elif isinstance(obj, (list, tuple, set)):
-            children = list(obj)
-        elif hasattr(obj, "__dict__"):
-            children = list(vars(obj).values())
-        for c in children:
-            if not isinstance(c, (str, int, float, bool, type(None))):
-                stack.append((c, depth + 1))
-    return out
+        leaked = _walk_for_banned_types(agent.belief)
+        self.assertEqual(leaked, [], f"belief graph contains ground-truth objects: {leaked}")
 
+    def test_agent_only_learns_the_target_in_its_own_sector(self):
+        """Sector A holds T1, Sector D holds T2 - an agent searching A must
+        never learn T2 exists, and vice versa. This is exactly the
+        accidental-global-information bug Phase 6 exists to catch."""
+        scenario = load_scenario(SCENARIO_PATH)
 
-def test_belief_contains_no_ground_truth():
-    """No GroundTruth / MissionScenario / Target objects reachable from belief."""
-    agent, task, _s = _agent()
-    agent.run(task)
-    leaked = [o for o in _reachable_objects(agent.belief)
-              if isinstance(o, (GroundTruth, SensorModel, MissionScenario, Target))]
-    assert not leaked, f"ground truth leaked into belief: {leaked}"
+        spec_a = next(d for d in scenario.drones if d.sector == "A")
+        agent_a = PersistentAgent(KinematicMockVehicleAdapter(spec_a.name, speed_mps=25.0),
+                                   scenario, "A", spec_a.spawn_offset, spec_a.battery_s)
+        agent_a.run()
+        self.assertIn("T1", agent_a.belief.mission.targets_known)
+        self.assertNotIn("T2", agent_a.belief.mission.targets_known)
 
+        spec_d = next(d for d in scenario.drones if d.sector == "D")
+        agent_d = PersistentAgent(KinematicMockVehicleAdapter(spec_d.name, speed_mps=25.0),
+                                   scenario, "D", spec_d.spawn_offset, spec_d.battery_s)
+        agent_d.run()
+        self.assertIn("T2", agent_d.belief.mission.targets_known)
+        self.assertNotIn("T1", agent_d.belief.mission.targets_known)
 
-def test_task_carries_no_target_list():
-    _agent_, task, _s = _agent()
-    assert not hasattr(task, "targets_of_interest")
+    def test_sensor_model_returns_plain_data_not_scenario_target_instances(self):
+        scenario = load_scenario(SCENARIO_PATH)
+        sensor = SensorModel(scenario)
+        target = scenario.targets[0]
+        seen = sensor.perceive((target.x, target.y, 8.0))
+        self.assertTrue(seen)
+        for s in seen:
+            self.assertIsInstance(s, PerceivedTarget)
+            self.assertNotIsInstance(s, Target)
 
-
-def test_target_outside_sensing_range_is_never_learned():
-    """Behavioural proof of no global information: a target in a sector the agent
-    does not search must not appear in its belief."""
-    agent, task, scenario = _agent("S1")   # T1 is in S1, T2 is far away in S3
-    r = agent.run(task)
-    assert "T1" in r.detections            # it flew over T1, so it saw it
-    assert "T2" not in r.detections        # it never went near T2
-    assert "T2" not in agent.belief.local_map.target_ids
-
-
-def test_agent_without_sensor_perceives_nothing():
-    agent, task, _s = _agent(with_sensor=False)
-    r = agent.run(task)
-    assert r.detections == []              # no sensor, no knowledge
-    assert r.completed                     # but it still completes the task
+    def test_sensor_sees_nothing_outside_every_targets_radius(self):
+        scenario = load_scenario(SCENARIO_PATH)
+        sensor = SensorModel(scenario)
+        self.assertEqual(sensor.perceive((1000.0, 1000.0, 8.0)), [])
 
 
-# --- 6.3 staleness ---
+class TestProvenanceDecay(unittest.TestCase):
+    def test_confidence_halves_after_one_half_life(self):
+        p = Provenance(timestamp=0.0, source="teammate_report", base_confidence=1.0)
+        self.assertAlmostEqual(p.decayed_confidence(now=20.0), 0.5, places=3)
 
-def test_teammate_confidence_decays_with_age():
-    team = TeamBelief()
-    team.update("Drone2", now=0.0, source=Source.PEER_MESSAGE,
-                position=Position3D(10, 10, -8), status="ok")
-    rec = team.teammates["Drone2"]
-    assert rec.status_confidence(0.0) == 1.0
-    mid = rec.status_confidence(20.0)      # one half-life
-    assert 0.4 < mid < 0.6
-    assert rec.status_confidence(0.0) > mid > rec.status_confidence(29.0)
+    def test_confidence_quarters_after_two_half_lives(self):
+        p = Provenance(timestamp=0.0, source="teammate_report", base_confidence=1.0)
+        self.assertAlmostEqual(p.decayed_confidence(now=40.0), 0.25, places=3)
 
-
-def test_stale_and_expired_records_are_flagged():
-    team = TeamBelief()
-    team.update("Drone2", now=0.0, source=Source.PEER_MESSAGE,
-                position=Position3D(10, 10, -8), status="ok")
-    rec = team.teammates["Drone2"]
-    assert not rec.is_stale(0.0)
-    assert rec.is_stale(40.0)              # confidence decayed below threshold
-    assert rec.is_expired(31.0)            # past the peer-message TTL (30s)
-    assert rec.status_confidence(31.0) == 0.0
-    assert team.fresh(0.0) and not team.fresh(40.0)
+    def test_becomes_stale_after_ttl_elapses(self):
+        p = Provenance(timestamp=0.0, source="teammate_report")
+        self.assertFalse(p.is_stale(now=30.0, ttl_s=60.0))
+        self.assertTrue(p.is_stale(now=61.0, ttl_s=60.0))
 
 
-def test_old_position_report_is_not_treated_as_current():
-    """The whole point of 6.3: an old report must be visibly stale in the belief."""
-    agent, _task, _s = _agent()
-    b = agent.belief
-    b.receive_teammate_report("Drone2", position=Position3D(40, 40, -8),
-                              status="ok", sent_at=0.0)
-    b.now = 45.0                            # 45 seconds later, no new contact
-    snapshot = b.known()["team"]["Drone2"]
-    assert snapshot["stale"] is True
-    assert snapshot["age_s"] == 45.0
-    assert snapshot["status_confidence"] < 0.5
-    assert "Drone2" in " ".join(b.unknown(roster=["Drone1", "Drone2"]))
+class TestDecisionLog(unittest.TestCase):
+    def test_log_entries_show_both_knew_and_did_not_know(self):
+        scenario = load_scenario(SCENARIO_PATH)
+        spec = next(d for d in scenario.drones if d.sector == "A")
+        logger = DecisionLogger()
+        agent = PersistentAgent(KinematicMockVehicleAdapter(spec.name, speed_mps=25.0),
+                                 scenario, "A", spec.spawn_offset, spec.battery_s,
+                                 logger=logger, drone_name=spec.name)
+        agent.run()
 
+        self.assertTrue(logger.entries)
+        for e in logger.entries:
+            self.assertTrue(e.knew)
+            self.assertTrue(e.did_not_know)
+            self.assertTrue(e.decided)
 
-# --- exit criterion: the log shows knowledge AND gaps ---
+    def test_json_round_trip(self):
+        logger = DecisionLogger()
+        scenario = load_scenario(SCENARIO_PATH)
+        spec = next(d for d in scenario.drones if d.sector == "B")
+        agent = PersistentAgent(KinematicMockVehicleAdapter(spec.name, speed_mps=25.0),
+                                 scenario, "B", spec.spawn_offset, spec.battery_s,
+                                 logger=logger, drone_name=spec.name)
+        agent.run()
 
-def test_decision_log_records_known_and_unknown():
-    agent, task, _s = _agent()
-    r = agent.run(task)
-    log = r.log
-    assert len(log.records) == r.steps
-    for rec in log.records:
-        assert rec.known["self"]["vehicle_id"] == "Drone1"
-        assert "local_map" in rec.known and "team" in rec.known
-        assert isinstance(rec.unknown, list)
-        assert rec.objective
-    # early on it knows of no targets; by the end it has observed one
-    assert "no targets observed yet" in log.records[0].unknown
-    assert log.records[-1].known["local_map"]["observed_targets"] == ["T1"]
-    # and the gaps shrink as it learns
-    assert "sector S1 not searched by me" in log.records[0].unknown
-    assert "sector S1 not searched by me" not in log.records[-1].unknown
-
-
-def test_decision_log_serialises_to_json():
-    import json
-    agent, task, _s = _agent()
-    r = agent.run(task)
-    data = json.loads(r.log.to_json())
-    assert isinstance(data, list) and data
-    assert {"step", "triggers", "known", "unknown", "objective"} <= set(data[0])
+        out_path = os.path.join(os.path.dirname(__file__), "_tmp_decision_log.json")
+        logger.to_json(out_path)
+        self.assertTrue(os.path.exists(out_path))
+        os.remove(out_path)
 
 
 if __name__ == "__main__":
-    tests = [
-        ("belief has all six schema sections", test_belief_has_all_schema_sections),
-        ("Phase 5 flat accessors still work", test_phase5_accessors_still_work),
-        ("no ground truth reachable from belief", test_belief_contains_no_ground_truth),
-        ("task carries no target list", test_task_carries_no_target_list),
-        ("target outside sensing range is never learned",
-         test_target_outside_sensing_range_is_never_learned),
-        ("agent without a sensor perceives nothing",
-         test_agent_without_sensor_perceives_nothing),
-        ("teammate confidence decays with age",
-         test_teammate_confidence_decays_with_age),
-        ("stale and expired records are flagged",
-         test_stale_and_expired_records_are_flagged),
-        ("old position report is not treated as current",
-         test_old_position_report_is_not_treated_as_current),
-        ("decision log records known AND unknown",
-         test_decision_log_records_known_and_unknown),
-        ("decision log serialises to JSON", test_decision_log_serialises_to_json),
-    ]
-    passed = failed = 0
-    for name, fn in tests:
-        try:
-            fn()
-            print(f"  ok    {name}")
-            passed += 1
-        except AssertionError as e:
-            print(f"  FAIL  {name}: {e}")
-            failed += 1
-    print(f"\n{passed} passed, {failed} failed")
-    sys.exit(1 if failed else 0)
+    unittest.main()

@@ -1,127 +1,88 @@
-"""Replay the same mission under all four communication conditions (Phase 10).
+"""Phase 10: replays the same allocation mission under each named network
+condition and prints delivery stats, so "the agentic version holds up under
+severe comms" means something checkable, not just claimed.
 
-Same scenario, same seed, same agents — only the network changes. That is the
-point: any difference in outcome is attributable to communication, because
-nothing else varied.
-
-    python scripts/run_comms_study.py
-    python scripts/run_comms_study.py --seed 42
-    python scripts/run_comms_study.py --estimates   # what agents *think* the link is
-    python scripts/run_comms_study.py --condition severe --messages
+    python scripts/run_comms_study.py                  # all conditions
+    python scripts/run_comms_study.py --condition severe
+    python scripts/run_comms_study.py --seed 42         # a different draw
+    python scripts/run_comms_study.py --estimates       # agents' own view of link quality
 """
 
 import argparse
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agentic_uav.coordination import comms_conditions as cc
-from agentic_uav.coordination.tasks import TaskStatus
-from agentic_uav.experiments.team_runner import build_allocating_team, run_team
-from agentic_uav.simulator.mock_adapter import MockVehicleAdapter
-from agentic_uav.simulator.scenario_manager import load_scenario
+from fics_drone.agents.comms_estimator import CommsEstimator
+from fics_drone.core.scenario import load_scenario
+from fics_drone.coordination.comms_conditions import BY_NAME, ORDER
+from fics_drone.coordination.message_bus import MessageBus
+from fics_drone.coordination.network_model import NetworkModel
+from fics_drone.experiments.team_runner import run_team_threaded
+from fics_drone.simulator.kinematic_mock_adapter import KinematicMockVehicleAdapter
 
-DEFAULT_SCENARIO = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "configs", "missions", "search_relay_001.yaml")
+DEFAULT_SCENARIO = os.path.join(os.path.dirname(__file__), "..", "configs", "missions",
+                                 "search_relay_001.json")
 
 
-def run_one(scenario, profile, seed, lease_s, heartbeat_s):
-    agents, tasks, bus, _truth = build_allocating_team(
-        scenario, lambda vid: MockVehicleAdapter(0.0),
-        network=profile, seed=seed, lease_s=lease_s,
-        heartbeat_interval_s=heartbeat_s)
-    report = run_team(agents, tasks, bus)
+def run_condition(scenario, condition_name: str, seed: int, with_estimates: bool):
+    profile = BY_NAME[condition_name]
+    network_model = NetworkModel(profile, seed=seed)
+    bus = MessageBus(network_model=network_model)
+    adapters = {d.name: KinematicMockVehicleAdapter(d.name, speed_mps=25.0) for d in scenario.drones}
+    estimators = {d.name: CommsEstimator() for d in scenario.drones} if with_estimates else None
+    reports, agents, bus = run_team_threaded(scenario, adapters, bus=bus, comms_estimators=estimators)
 
-    completed = {}
-    for a in agents:
-        for t in a.allocator.board.all():
-            if t.status is TaskStatus.COMPLETE:
-                completed.setdefault(t.task_id, t.assigned_agent)
-    return agents, bus, report, completed
+    sent = len(bus.log)
+    delivered_entries = [e for e in bus.log if e.delivered]
+    delivered = len(delivered_entries)
+    mean_delay_ms = (sum(e.delay_s for e in delivered_entries) / delivered * 1000.0) if delivered else 0.0
+    drops = {}
+    for e in bus.log:
+        if not e.delivered:
+            drops[e.reason] = drops.get(e.reason, 0) + 1
+    # Sector assignment is static here (Phase 7's run_team_threaded, on purpose -
+    # see team_runner.py), so "sectors" reports whether each drone's own mission
+    # actually ran to completion despite the degraded link, not whether it won a sector.
+    sectors_done = sum(1 for r in reports.values() if r.trace and r.trace[-1] == "skill_succeeded->done")
+
+    stats = {
+        "condition": condition_name, "sectors": f"{sectors_done}/{len(scenario.sectors)}",
+        "sent": sent, "delivered": delivered,
+        "rate": f"{(delivered / sent * 100.0) if sent else 0.0:.0f}%",
+        "delay": f"{mean_delay_ms / 1000.0:.2f}s", "drops": drops,
+    }
+    return stats, agents, estimators
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--scenario", default=DEFAULT_SCENARIO)
-    ap.add_argument("--seed", type=int, default=17)
-    ap.add_argument("--condition", default=None,
-                    help="run just one: nominal | moderate | severe | partitioned")
-    ap.add_argument("--lease", type=float, default=150.0)
-    ap.add_argument("--heartbeat", type=float, default=15.0)
-    ap.add_argument("--estimates", action="store_true",
-                    help="show each agent's ESTIMATE of link quality")
-    ap.add_argument("--messages", action="store_true")
-    args = ap.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--scenario", default=DEFAULT_SCENARIO)
+    parser.add_argument("--condition", choices=ORDER, default=None, help="default: run all")
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--estimates", action="store_true")
+    args = parser.parse_args()
 
     scenario = load_scenario(args.scenario)
-    names = [args.condition] if args.condition else cc.ORDER
+    conditions = [args.condition] if args.condition else ORDER
 
-    print(f"\n=== Communication study (seed {args.seed}) ===")
-    print("conditions are experimental parameters, not a model of a real radio:\n")
-    print(cc.summary())
-    print()
+    print(f"{'condition':<12}{'sectors':<9}{'sent':<7}{'deliv':<7}{'rate':<7}{'delay':<9}drops")
+    for name in conditions:
+        stats, agents, estimators = run_condition(scenario, name, args.seed, args.estimates)
+        drops_str = ", ".join(f"{k}={v}" for k, v in stats["drops"].items()) or "none"
+        print(f"{stats['condition']:<12}{stats['sectors']:<9}{stats['sent']:<7}{stats['delivered']:<7}"
+              f"{stats['rate']:<7}{stats['delay']:<9}{drops_str}")
 
-    header = (f"{'condition':<13} {'sectors':>8} {'sent':>6} {'deliv':>6} "
-              f"{'rate':>6} {'delay':>8}  drops")
-    print(header)
-    print("-" * len(header))
-
-    results = {}
-    for name in names:
-        profile = cc.condition(name)
-        agents, bus, report, completed = run_one(
-            scenario, profile, args.seed, args.lease, args.heartbeat)
-        s = bus.stats()
-        results[name] = (agents, bus, completed, s)
-
-        drops = ", ".join(f"{k}={v}" for k, v in sorted(
-            s["drop_reasons"].items())) or "none"
-        print(f"{name:<13} {len(completed):>4}/{len(scenario.sectors):<3} "
-              f"{s['sent']:>6} {s['delivered']:>6} "
-              f"{s['delivery_rate']:>5.0%} {s['mean_delivery_delay_s']:>7.2f}s  {drops}")
-
-    if args.estimates:
-        _print_estimates(results)
-    if args.messages and len(names) == 1:
-        print("\n=== message log ===")
-        print(results[names[0]][1].log.format_text(limit=25))
-
-    print()
-    return 0
-
-
-def _print_estimates(results):
-    """What each agent BELIEVES the link is doing, vs what it was configured to do.
-
-    The agent never reads the configuration - these estimates come only from
-    sequence gaps, arrival times and heartbeat rates.
-
-    Two things to read carefully:
-      * `msg_age` is how old messages are when the agent reads them, NOT wire
-        latency. It is dominated by decision cadence (tens of seconds), so it is
-        expected to be far larger than the configured latency.
-      * `est_loss` counts everything that failed to arrive, including messages
-        the rate limiter refused. Under `severe` that is most of them, so the
-        estimate legitimately exceeds the configured packet-loss probability.
-    """
-    print("\n=== agents' own estimates vs the configured values ===")
-    for name, (agents, bus, _completed, _s) in results.items():
-        cfg = bus.network.profile if bus.network else None
-        cfg_loss = cfg.packet_loss_probability if cfg else 0.0
-        cfg_lat = (cfg.latency_ms_mean / 1000.0) if cfg else 0.0
-        print(f"\n  {name}  (configured: loss {cfg_loss:.0%}, "
-              f"wire latency {cfg_lat:.2f}s)")
-        for a in agents:
-            if a.comms is None:
-                continue
-            est = a.comms.summary(a.belief.now)
-            print(f"    {a.vehicle_id}: est_loss={est['estimated_loss_rate']:.0%} "
-                  f"msg_age={est['estimated_message_age_s']:.1f}s "
-                  f"heartbeat_rate={est['heartbeat_arrival_rate']:.2f} "
-                  f"silence={est['silence_s']:.0f}s")
+        if estimators:
+            for agent_name, est in estimators.items():
+                for peer in agents:
+                    if peer == agent_name:
+                        continue
+                    loss = est.estimated_loss_rate(peer)
+                    if loss is not None:
+                        print(f"    {agent_name} estimates {peer}: loss={loss:.2f}")
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

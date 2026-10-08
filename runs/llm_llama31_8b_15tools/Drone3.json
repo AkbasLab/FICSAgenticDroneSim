@@ -1,0 +1,105 @@
+{
+  "drone": "Drone3",
+  "model_card": {
+    "backend": "ollama",
+    "model": "llama3.1:8b",
+    "digest": "46e0c10c039e",
+    "temperature": 0.0,
+    "seed": 17,
+    "is_pinned": true,
+    "warnings": []
+  },
+  "decisions": [
+    {
+      "step": 1,
+      "source": "model",
+      "objective": "go_to_waypoint",
+      "tool": "go_to_waypoint",
+      "args": {},
+      "reason_code": "search_elsewhere",
+      "waypoint": [
+        20.0,
+        20.0
+      ],
+      "raw_waypoint": [
+        20.0,
+        20.0
+      ],
+      "repaired": false,
+      "repair_distance_m": null,
+      "assessment": {
+        "mission_progress": "partial",
+        "communication_status": "good",
+        "current_risk": "low"
+      },
+      "confidence": 0.8,
+      "messages": [],
+      "rejected_as": null,
+      "corrected": false,
+      "prompts": [
+        "You are one drone in a search team. Your own sector is already finished.\nChoose your next step. You may ONLY pick one of the tools below.\n\nSITUATION\n- last_event: skill_succeeded\n- battery_remaining: 96%\n- role: scout\n- listen_rounds_used: 1 of 3\n- actions_used: 0 of 8\n- own_targets: 0\n- second_hand_targets: 2\nTEAMMATES\n  Drone1: last heard 0s ago, last at (-1, -1)\n  Drone2: last heard 0s ago, last at (1, 20)\n  Drone4: last heard 0s ago, last at (-21, 39)\nTASKS (as you currently see them)\n- search_A (sector A): complete by Drone2\n- search_B (sector B): complete by Drone4\n- search_C (sector C): complete by Drone3\n- search_D (sector D): complete by Drone1\nMAP (world meters)\n- you are at (39, -21)\n- sector A: x 20..40, y 20..40\n- sector B: x -40..-20, y 20..40\n- sector C: x 20..40, y -40..-20\n- sector D: x -40..-20, y -40..-20\nOPTIONS\n- return_home: stop and fly home to land.\n- hold: stay here a few more seconds in case a teammate is about to report.\n- act_as_relay: become a relay: hold station and keep reporting in (does not route traffic for others).\n- go_to_waypoint: fly to world position (x, y) in meters at your current altitude, e.g. to look somewhere new. Parameters: \"x\" and \"y\" numbers.\n- request_help: ask teammates for help (informational; never an order). Parameters: \"recipients\" a list from ['Drone1', 'Drone2', 'Drone4'].\n- change_role: change your role: scout (searches), relay (holds station) or reserve (spare). Parameters: \"new_role\" one of ['relay', 'reserve'].\n\nReply with ONLY a JSON object of exactly this shape:\n{\"situation_assessment\": {\"mission_progress\": \"<none|partial|complete>\", \"communication_status\": \"<good|degraded|lost>\", \"current_risk\": \"<low|medium|high>\"}, \"selected_tool\": \"<option>\", \"parameters\": {\"reason_code\": \"<code>\"}, \"outgoing_messages\": [], \"confidence\": <number from 0 to 1>}\nparameters must also contain whatever parameters the chosen option lists, and nothing else.\nFor go_to_waypoint, for example: {\"reason_code\": \"<code>\", \"x\": <number>, \"y\": <number>}\nreason_code must be one of: waiting_for_report, nothing_more_to_wait_for, teammate_may_need_help, battery_conserving, my_work_is_done, search_elsewhere\noutgoing_messages is [] unless you want to ask teammates for help; then each message is {\"message_type\": \"help_request\", \"recipients\": [\"<teammate name from TEAMMATES>\"], \"payload\": {\"reason_code\": \"<code>\"}} (at most 4, help_request is the only type allowed)"
+      ],
+      "raw_outputs": [
+        "{\n  \"situation_assessment\": {\n    \"mission_progress\": \"partial\",\n    \"communication_status\": \"good\",\n    \"current_risk\": \"low\"\n  },\n  \"selected_tool\": \"go_to_waypoint\",\n  \"parameters\": {\n    \"reason_code\": \"search_elsewhere\",\n    \"x\": 20,\n    \"y\": 20\n  },\n  \"outgoing_messages\": [],\n  \"confidence\": 0.8\n}"
+      ]
+    },
+    {
+      "step": 2,
+      "source": "model",
+      "objective": "go_to_waypoint",
+      "tool": "go_to_waypoint",
+      "args": {},
+      "reason_code": "search_elsewhere",
+      "waypoint": [
+        0.0,
+        -40.0
+      ],
+      "raw_waypoint": [
+        0.0,
+        -40.0
+      ],
+      "repaired": false,
+      "repair_distance_m": null,
+      "assessment": {
+        "mission_progress": "partial",
+        "communication_status": "good",
+        "current_risk": "low"
+      },
+      "confidence": 0.8,
+      "messages": [],
+      "rejected_as": null,
+      "corrected": false,
+      "prompts": [
+        "You are one drone in a search team. Your own sector is already finished.\nChoose your next step. You may ONLY pick one of the tools below.\n\nSITUATION\n- last_event: skill_succeeded\n- battery_remaining: 82%\n- role: scout\n- listen_rounds_used: 2 of 3\n- actions_used: 1 of 8\n- own_targets: 0\n- second_hand_targets: 2\nTEAMMATES\n  Drone1: last heard 41s ago, last at (-1, -1)\n  Drone2: last heard 41s ago, last at (1, 20)\n  Drone4: last heard 0s ago, last at (20, 20)\nTASKS (as you currently see them)\n- search_A (sector A): complete by Drone2\n- search_B (sector B): complete by Drone4\n- search_C (sector C): complete by Drone3\n- search_D (sector D): complete by Drone1\nMAP (world meters)\n- you are at (20, 20)\n- sector A: x 20..40, y 20..40\n- sector B: x -40..-20, y 20..40\n- sector C: x 20..40, y -40..-20\n- sector D: x -40..-20, y -40..-20\nOPTIONS\n- return_home: stop and fly home to land.\n- hold: stay here a few more seconds in case a teammate is about to report.\n- act_as_relay: become a relay: hold station and keep reporting in (does not route traffic for others).\n- go_to_waypoint: fly to world position (x, y) in meters at your current altitude, e.g. to look somewhere new. Parameters: \"x\" and \"y\" numbers.\n- request_help: ask teammates for help (informational; never an order). Parameters: \"recipients\" a list from ['Drone1', 'Drone2', 'Drone4'].\n- change_role: change your role: scout (searches), relay (holds station) or reserve (spare). Parameters: \"new_role\" one of ['relay', 'reserve'].\n\nReply with ONLY a JSON object of exactly this shape:\n{\"situation_assessment\": {\"mission_progress\": \"<none|partial|complete>\", \"communication_status\": \"<good|degraded|lost>\", \"current_risk\": \"<low|medium|high>\"}, \"selected_tool\": \"<option>\", \"parameters\": {\"reason_code\": \"<code>\"}, \"outgoing_messages\": [], \"confidence\": <number from 0 to 1>}\nparameters must also contain whatever parameters the chosen option lists, and nothing else.\nFor go_to_waypoint, for example: {\"reason_code\": \"<code>\", \"x\": <number>, \"y\": <number>}\nreason_code must be one of: waiting_for_report, nothing_more_to_wait_for, teammate_may_need_help, battery_conserving, my_work_is_done, search_elsewhere\noutgoing_messages is [] unless you want to ask teammates for help; then each message is {\"message_type\": \"help_request\", \"recipients\": [\"<teammate name from TEAMMATES>\"], \"payload\": {\"reason_code\": \"<code>\"}} (at most 4, help_request is the only type allowed)"
+      ],
+      "raw_outputs": [
+        "{\n  \"situation_assessment\": {\n    \"mission_progress\": \"partial\",\n    \"communication_status\": \"good\",\n    \"current_risk\": \"low\"\n  },\n  \"selected_tool\": \"go_to_waypoint\",\n  \"parameters\": {\n    \"reason_code\": \"search_elsewhere\",\n    \"x\": 0,\n    \"y\": -40\n  },\n  \"outgoing_messages\": [],\n  \"confidence\": 0.8\n}"
+      ]
+    },
+    {
+      "step": 3,
+      "source": "fallback",
+      "objective": "check_for_orphans",
+      "tool": null,
+      "args": {},
+      "reason_code": null,
+      "waypoint": null,
+      "raw_waypoint": null,
+      "repaired": false,
+      "repair_distance_m": null,
+      "assessment": null,
+      "confidence": null,
+      "messages": [],
+      "rejected_as": "bad_fields",
+      "corrected": false,
+      "prompts": [
+        "You are one drone in a search team. Your own sector is already finished.\nChoose your next step. You may ONLY pick one of the tools below.\n\nSITUATION\n- last_event: skill_succeeded\n- battery_remaining: 70%\n- role: scout\n- listen_rounds_used: 3 of 3\n- actions_used: 2 of 8\n- own_targets: 0\n- second_hand_targets: 2\nTEAMMATES\n  Drone1: last heard 77s ago, last at (-1, -1)\n  Drone2: last heard 77s ago, last at (1, 20)\n  Drone4: last heard 37s ago, last at (20, 20)\nTASKS (as you currently see them)\n- search_A (sector A): complete by Drone2\n- search_B (sector B): complete by Drone4\n- search_C (sector C): complete by Drone3\n- search_D (sector D): complete by Drone1\nOPTIONS\n- return_home: stop and fly home to land.\n- request_help: ask teammates for help (informational; never an order). Parameters: \"recipients\" a list from ['Drone1', 'Drone2', 'Drone4'].\n- change_role: change your role: scout (searches), relay (holds station) or reserve (spare). Parameters: \"new_role\" one of ['relay', 'reserve'].\n\nReply with ONLY a JSON object of exactly this shape:\n{\"situation_assessment\": {\"mission_progress\": \"<none|partial|complete>\", \"communication_status\": \"<good|degraded|lost>\", \"current_risk\": \"<low|medium|high>\"}, \"selected_tool\": \"<option>\", \"parameters\": {\"reason_code\": \"<code>\"}, \"outgoing_messages\": [], \"confidence\": <number from 0 to 1>}\nparameters must also contain whatever parameters the chosen option lists, and nothing else.\nreason_code must be one of: waiting_for_report, nothing_more_to_wait_for, teammate_may_need_help, battery_conserving, my_work_is_done, search_elsewhere\noutgoing_messages is [] unless you want to ask teammates for help; then each message is {\"message_type\": \"help_request\", \"recipients\": [\"<teammate name from TEAMMATES>\"], \"payload\": {\"reason_code\": \"<code>\"}} (at most 4, help_request is the only type allowed)",
+        "You are one drone in a search team. Your own sector is already finished.\nChoose your next step. You may ONLY pick one of the tools below.\n\nSITUATION\n- last_event: skill_succeeded\n- battery_remaining: 70%\n- role: scout\n- listen_rounds_used: 3 of 3\n- actions_used: 2 of 8\n- own_targets: 0\n- second_hand_targets: 2\nTEAMMATES\n  Drone1: last heard 77s ago, last at (-1, -1)\n  Drone2: last heard 77s ago, last at (1, 20)\n  Drone4: last heard 37s ago, last at (20, 20)\nTASKS (as you currently see them)\n- search_A (sector A): complete by Drone2\n- search_B (sector B): complete by Drone4\n- search_C (sector C): complete by Drone3\n- search_D (sector D): complete by Drone1\nOPTIONS\n- return_home: stop and fly home to land.\n- request_help: ask teammates for help (informational; never an order). Parameters: \"recipients\" a list from ['Drone1', 'Drone2', 'Drone4'].\n- change_role: change your role: scout (searches), relay (holds station) or reserve (spare). Parameters: \"new_role\" one of ['relay', 'reserve'].\n\nReply with ONLY a JSON object of exactly this shape:\n{\"situation_assessment\": {\"mission_progress\": \"<none|partial|complete>\", \"communication_status\": \"<good|degraded|lost>\", \"current_risk\": \"<low|medium|high>\"}, \"selected_tool\": \"<option>\", \"parameters\": {\"reason_code\": \"<code>\"}, \"outgoing_messages\": [], \"confidence\": <number from 0 to 1>}\nparameters must also contain whatever parameters the chosen option lists, and nothing else.\nreason_code must be one of: waiting_for_report, nothing_more_to_wait_for, teammate_may_need_help, battery_conserving, my_work_is_done, search_elsewhere\noutgoing_messages is [] unless you want to ask teammates for help; then each message is {\"message_type\": \"help_request\", \"recipients\": [\"<teammate name from TEAMMATES>\"], \"payload\": {\"reason_code\": \"<code>\"}} (at most 4, help_request is the only type allowed)\n\nYOUR PREVIOUS ANSWER WAS REJECTED: missing parameter(s) for request_help: ['recipients']. Answer again, following the format exactly."
+      ],
+      "raw_outputs": [
+        "{\n  \"situation_assessment\": {\n    \"mission_progress\": \"partial\",\n    \"communication_status\": \"good\",\n    \"current_risk\": \"low\"\n  },\n  \"selected_tool\": \"request_help\",\n  \"parameters\": {\n    \"reason_code\": \"teammate_may_need_help\"\n  },\n  \"outgoing_messages\": [\n    {\n      \"message_type\": \"help_request\",\n      \"recipients\": [\"Drone1\"],\n      \"payload\": {\n        \"reason_code\": \"teammate_may_need_help\"\n      }\n    }\n  ],\n  \"confidence\": 0.8\n}",
+        "{\n  \"situation_assessment\": {\n    \"mission_progress\": \"partial\",\n    \"communication_status\": \"good\",\n    \"current_risk\": \"low\"\n  },\n  \"selected_tool\": \"request_help\",\n  \"parameters\": {\n    \"reason_code\": \"teammate_may_need_help\",\n    \"recipients\": [\"Drone1\", \"Drone2\", \"Drone4\"]\n  },\n  \"outgoing_messages\": [\n    {\n      \"message_type\": \"help_request\",\n      \"recipients\": [\"Drone1\"],\n      \"payload\": {\n        \"reason_code\": \"teammate_may_need_help\"\n      }\n    },\n    {\n      \"message_type\": \"help_request\",\n      \"recipients\": [\"Drone2\"],\n      \"payload\": {\n        \"reason_code\": \"teammate_may_need_help\"\n      }\n    },\n    {\n      \"message_type\": \"help_request\",\n      \"recipients\": [\"Drone4\"],\n      \"payload\": {\n        \"reason_code\": \"teammate_may_need_help"
+      ]
+    }
+  ]
+}

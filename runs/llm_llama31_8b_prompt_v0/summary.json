@@ -1,0 +1,29 @@
+{
+  "model_card": {
+    "backend": "ollama",
+    "model": "llama3.1:8b",
+    "digest": "46e0c10c039e",
+    "temperature": 0.0,
+    "seed": 17,
+    "is_pinned": true,
+    "warnings": []
+  },
+  "summary": {
+    "model_owned_decisions": 6,
+    "fallback": 0,
+    "fallback_rate": 0.0,
+    "corrected": 4,
+    "rejected_as": {
+      "bad_fields": 4
+    },
+    "model_chose": {
+      "go_to_waypoint": 4,
+      "check_for_orphans": 2
+    },
+    "waypoints_proposed": 4,
+    "guardian_blocked": 4,
+    "guardian_blocked_checks": [
+      "separation"
+    ]
+  }
+}
