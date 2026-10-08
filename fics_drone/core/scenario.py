@@ -5,7 +5,7 @@ rules that judge a run against this."""
 
 import json
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 
 @dataclass
@@ -42,14 +42,46 @@ class Target:
 
 @dataclass
 class NoFlyZone:
+    """A box the drones must not enter. By default it is static and always
+    active. GMB (dynamic boundaries) adds an optional schedule, all in mission
+    seconds: active from `active_from_s` until `active_until_s` (None = never
+    expires), and drifting at (vx, vy) m/s from the moment it activates. Every
+    field has a default, so existing scenario files load unchanged.
+
+    `contains(x, y)` with no time ignores the schedule and tests the base box,
+    which is the conservative reading (treat the zone as always there). Pass t
+    to get the scheduled answer."""
     id: str
     x_min: float
     x_max: float
     y_min: float
     y_max: float
+    active_from_s: float = 0.0
+    active_until_s: Optional[float] = None
+    vx: float = 0.0
+    vy: float = 0.0
 
-    def contains(self, x: float, y: float) -> bool:
-        return self.x_min <= x <= self.x_max and self.y_min <= y <= self.y_max
+    @property
+    def is_dynamic(self) -> bool:
+        return (self.active_from_s > 0.0 or self.active_until_s is not None
+                or self.vx != 0.0 or self.vy != 0.0)
+
+    def active_at(self, t: float) -> bool:
+        return t >= self.active_from_s and (self.active_until_s is None or t < self.active_until_s)
+
+    def bounds_at(self, t: float) -> Tuple[float, float, float, float]:
+        """(x_min, x_max, y_min, y_max) at time t. The drift starts when the zone activates."""
+        dt = max(0.0, t - self.active_from_s)
+        dx, dy = self.vx * dt, self.vy * dt
+        return self.x_min + dx, self.x_max + dx, self.y_min + dy, self.y_max + dy
+
+    def contains(self, x: float, y: float, t: Optional[float] = None) -> bool:
+        if t is None:
+            return self.x_min <= x <= self.x_max and self.y_min <= y <= self.y_max
+        if not self.active_at(t):
+            return False
+        x0, x1, y0, y1 = self.bounds_at(t)
+        return x0 <= x <= x1 and y0 <= y <= y1
 
 
 @dataclass

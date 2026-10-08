@@ -47,6 +47,7 @@ class FallbackAction(str, Enum):
     RETURN_HOME = "return_home"
     LAND_AT_SAFE_LOCATION = "land_at_safe_location"
     CONTINUE_LAST_VALID_PLAN = "continue_last_valid_plan"
+    EXIT_ZONE = "exit_zone"  # a no-fly zone became active on top of the aircraft: leave it
 
 
 class GuardianOutcome(str, Enum):
@@ -95,6 +96,7 @@ class SafetyLimits:
     max_timeout_s: float = 120.0
     battery_reserve_frac: float = 0.10
     min_separation_m: float = 5.0
+    exit_margin_m: float = 3.0  # how far outside a zone's edge an exit point is placed
 
     @classmethod
     def from_scenario(cls, scenario: Scenario, margin_m: float = 40.0) -> "SafetyLimits":
@@ -151,6 +153,9 @@ class SafetyGuardian:
             # what's proposed until it actually reaches home - at which point
             # _escalate() itself clears this flag, since there's nothing left to steer.
             return self._escalate(belief, ["escalated"])
+        exit_evaluation = self._exit_active_zone(belief)
+        if exit_evaluation is not None:
+            return exit_evaluation
         checks = self._run_checks(command, belief)
         failed = [c for c in checks if not c.passed]
 
@@ -219,6 +224,48 @@ class SafetyGuardian:
         return GuardianEvaluation(GuardianOutcome.EXECUTE_SAFE_FALLBACK, command, reason, fallback, failed_check_names)
 
     @staticmethod
+    def _now(belief) -> Optional[float]:
+        """Mission time in seconds, or None if the belief doesn't carry one - in which case
+        zones are read as always-active (the conservative, pre-GMB behaviour)."""
+        return getattr(belief, "elapsed_s", None)
+
+    def _exit_active_zone(self, belief) -> Optional[GuardianEvaluation]:
+        """GMB: a scheduled or drifting zone can switch on, or move, on top of an aircraft
+        that was legal a moment ago. Static zones can't (a drone never enters one, the
+        restricted_zones check stops it first), so only dynamic zones trigger this. When it
+        happens the guardian stops asking the policy and steers to the nearest point outside
+        every active zone, instead of waiting for the policy to notice. One-shot per
+        evaluation: the next proposal is judged normally once the aircraft is out."""
+        t = self._now(belief)
+        position = getattr(belief, "position", None)
+        if t is None or position is None:
+            return None
+        x, y, z = position
+        zones = [zone for zone in self.limits.restricted_zones if zone.is_dynamic]
+        inside = [zone for zone in zones if zone.contains(x, y, t)]
+        if not inside:
+            return None
+        margin = self.limits.exit_margin_m
+        extent = self.limits.geofence_half_extent_m
+        candidates = []
+        for zone in inside:
+            x0, x1, y0, y1 = zone.bounds_at(t)
+            candidates += [(x0 - margin, y), (x1 + margin, y), (x, y0 - margin), (x, y1 + margin)]
+        usable = [(cx, cy) for cx, cy in candidates
+                  if abs(cx) <= extent and abs(cy) <= extent
+                  and not any(zn.contains(cx, cy, t) for zn in self.limits.restricted_zones)]
+        names = [zone.id for zone in inside]
+        if not usable:
+            return self._escalate(belief, [f"inside_active_zone({', '.join(names)})"])
+        cx, cy = min(usable, key=lambda c: math.dist((x, y), c))
+        command = Command(kind="fly", target=(cx, cy, z), speed_mps=min(5.0, self.limits.max_speed_mps),
+                           timeout_s=30.0, purpose="home")
+        self._command_in_flight = True
+        reason = f"inside active no-fly zone {', '.join(names)} at t={t:.1f}s; exiting to ({cx:.1f}, {cy:.1f})"
+        return GuardianEvaluation(GuardianOutcome.EXECUTE_SAFE_FALLBACK, command, reason,
+                                   FallbackAction.EXIT_ZONE, ["inside_active_zone"])
+
+    @staticmethod
     def _is_at_home(belief) -> bool:
         x, y, _ = belief.position
         return math.hypot(x, y) <= 3.0
@@ -251,13 +298,13 @@ class SafetyGuardian:
         checks = [
             self._check_altitude_bounds(command),
             self._check_geofence(command),
-            self._check_restricted_zones(command),
+            self._check_restricted_zones(command, belief),
             self._check_waypoint_validity(command),
             self._check_max_speed(command),
             self._check_command_timeout(command),
             self._check_battery_reserve(command, belief),
             self._check_separation(command, belief),
-            self._check_landing_site(command),
+            self._check_landing_site(command, belief),
             self._check_conflicting_commands(command),
         ]
         return checks
@@ -281,12 +328,13 @@ class SafetyGuardian:
             return SafetyCheck("geofence", False, f"({x}, {y}) outside +/-{extent}m box", Severity.HARD)
         return SafetyCheck("geofence", True)
 
-    def _check_restricted_zones(self, command: Command) -> SafetyCheck:
+    def _check_restricted_zones(self, command: Command, belief=None) -> SafetyCheck:
         if command.kind != "fly" or command.target is None:
             return SafetyCheck("restricted_zones", True)
         x, y, _ = command.target
+        t = self._now(belief)
         for zone in self.limits.restricted_zones:
-            if zone.contains(x, y):
+            if zone.contains(x, y, t):
                 return SafetyCheck("restricted_zones", False, f"({x}, {y}) inside {zone.id}", Severity.HARD)
         return SafetyCheck("restricted_zones", True)
 
@@ -339,12 +387,13 @@ class SafetyGuardian:
                                     Severity.HARD)
         return SafetyCheck("separation", True)
 
-    def _check_landing_site(self, command: Command) -> SafetyCheck:
+    def _check_landing_site(self, command: Command, belief=None) -> SafetyCheck:
         if command.kind != "land" or command.target is None:
             return SafetyCheck("landing_site", True)
         x, y, _ = command.target
+        t = self._now(belief)
         for zone in self.limits.restricted_zones:
-            if zone.contains(x, y):
+            if zone.contains(x, y, t):
                 return SafetyCheck("landing_site", False, f"landing at ({x}, {y}) inside {zone.id}", Severity.HARD)
         return SafetyCheck("landing_site", True)
 
