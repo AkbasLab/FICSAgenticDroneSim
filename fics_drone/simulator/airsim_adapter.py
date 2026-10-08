@@ -12,9 +12,11 @@ altitude as ground level, and a later land() would disarm mid-air.
 
 import queue
 import threading
+import time
 
 from ..control.navigation import (
-    DEFAULT_HEIGHT, LAND_FAST_ABOVE, LAND_FAST_SPEED, LAND_SETTLE_SECS,
+    DEFAULT_HEIGHT, GROUND_SETTLE_DRIFT_M, GROUND_SETTLE_POLL_S, GROUND_SETTLE_SPEED_MPS,
+    GROUND_SETTLE_TIMEOUT_S, GROUND_SETTLE_WINDOW_S, LAND_FAST_ABOVE, LAND_FAST_SPEED, LAND_SETTLE_SECS,
     LAND_SLOW_SPEED, MOVE_SPEED,
 )
 from ..core.enums import ActionType
@@ -138,8 +140,28 @@ class AirSimVehicleAdapter(VehicleAdapter):
 
     # --- lifecycle ---
 
+    def _wait_until_settled(self, sleep=time.sleep, clock=time.monotonic) -> float:
+        """Block until the drone has been still (low speed, vertical position steady)
+        for GROUND_SETTLE_WINDOW_S and return that NED z. Raises TimeoutError if it never
+        settles, so take-off fails cleanly instead of recording a ground that is wrong."""
+        deadline = clock() + GROUND_SETTLE_TIMEOUT_S
+        streak_start = None
+        streak_z = None
+        while clock() < deadline:
+            z = self._get_position_ned().z_val
+            if self.get_speed() < GROUND_SETTLE_SPEED_MPS:
+                if streak_start is None or abs(z - streak_z) > GROUND_SETTLE_DRIFT_M:
+                    streak_start, streak_z = clock(), z
+                elif clock() - streak_start >= GROUND_SETTLE_WINDOW_S:
+                    return z
+            else:
+                streak_start = None
+            sleep(GROUND_SETTLE_POLL_S)
+        raise TimeoutError(f"{self.vehicle_name} never settled within {GROUND_SETTLE_TIMEOUT_S}s, "
+                           "so ground_z was not recorded")
+
     def connect_and_takeoff(self):
-        self._ground_ned = self._get_position_ned().z_val  # recorded here - see the module docstring
+        self._ground_ned = self._wait_until_settled()  # recorded here - see the module docstring
         with self._lock:
             self.client.takeoffAsync(vehicle_name=self.vehicle_name, timeout_sec=20).join()
         self.set_height(DEFAULT_HEIGHT)  # locks internally

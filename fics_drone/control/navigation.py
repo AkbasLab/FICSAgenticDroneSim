@@ -21,6 +21,16 @@ SKILL_STOP_SPEED_MPS = 0.5  # GO_TO_WAYPOINT requires speed below this, not just
                             # within tolerance, before declaring SUCCESS - otherwise it can
                             # call itself "arrived" while still passing through the target
                             # at speed, which is what was breaking HOLD_POSITION right after
+# Ground reference (connect_and_takeoff): ground_z is read from wherever the drone is
+# at that moment, so it is only trustworthy once the drone has stopped moving. A drone
+# still falling onto its spawn point would record a ground that is too high and put every
+# later altitude, and the landing target, off by the missing drop.
+GROUND_SETTLE_SPEED_MPS = 0.2   # below this counts as "not moving"
+GROUND_SETTLE_DRIFT_M = 0.05    # and vertical position must stay within this...
+GROUND_SETTLE_WINDOW_S = 1.0    # ...for this long before ground_z is recorded
+GROUND_SETTLE_TIMEOUT_S = 15.0  # give up (take-off fails) rather than record a bad ground
+GROUND_SETTLE_POLL_S = 0.1
+
 SKILL_SETTLE_SECS = 0.5   # HOLD_POSITION: small extra margin after start_hover(), on top
                           # of go_to_waypoint's own speed gate - same idea as
                           # LAND_SETTLE_SECS above, applied to holding instead of landing
