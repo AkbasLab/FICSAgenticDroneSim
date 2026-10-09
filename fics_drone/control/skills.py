@@ -22,8 +22,11 @@ from .navigation import (
 def go_to_waypoint(adapter: VehicleAdapter, x: float, y: float, z: float,
                     tolerance: float = SKILL_TOLERANCE_M,
                     timeout_s: float = SKILL_TIMEOUT_S,
-                    max_speed: float = SKILL_STOP_SPEED_MPS) -> SkillResult:
-    """Moves toward the target, then - once within tolerance - actively holds
+                    max_speed: float = SKILL_STOP_SPEED_MPS, interrupt=None) -> SkillResult:
+    """`interrupt`, if given, is called with the current local position on every poll; if it
+    returns True the leg stops (hover) and reports INTERRUPTED. Default None = unchanged.
+
+    Moves toward the target, then - once within tolerance - actively holds
     there (start_hover()) and waits for speed to actually drop, instead of
     just hoping the move command leaves the drone stationary on its own.
     Passively waiting without holding lets the drone drift uncontrolled for
@@ -38,6 +41,9 @@ def go_to_waypoint(adapter: VehicleAdapter, x: float, y: float, z: float,
         while True:
             pos = adapter.get_position()
             elapsed = time.monotonic() - start
+            if interrupt is not None and interrupt(pos):
+                adapter.start_hover()
+                return SkillResult(SkillStatus.INTERRUPTED, pos, elapsed, error="interrupted by monitor")
             close = math.dist(pos, target) <= tolerance
             if close and not holding:
                 adapter.start_hover()

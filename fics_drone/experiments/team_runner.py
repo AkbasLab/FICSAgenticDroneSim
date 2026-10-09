@@ -43,7 +43,8 @@ def _join_all(threads, names):
 
 def run_team_threaded(scenario: Scenario, adapters: Dict[str, object], bus: MessageBus = None,
                        loggers: Dict[str, DecisionLogger] = None,
-                       comms_estimators: Dict[str, "CommsEstimator"] = None) -> Dict[str, AgentReport]:
+                       comms_estimators: Dict[str, "CommsEstimator"] = None,
+                       agent_kwargs: dict = None) -> Dict[str, AgentReport]:
     """Static assignment (scenario's own spec.sector), Phase 7 behavior -
     unchanged, still used where a fixed assignment is what's wanted. Phase 10
     uses this one (not run_team_with_allocation) for the comms study, on
@@ -63,7 +64,7 @@ def run_team_threaded(scenario: Scenario, adapters: Dict[str, object], bus: Mess
         estimator = comms_estimators.get(spec.name) if comms_estimators else None
         agents[spec.name] = PersistentAgent(adapter, scenario, spec.sector, spec.spawn_offset,
                                              spec.battery_s, logger=logger, drone_name=spec.name, link=link,
-                                             comms_estimator=estimator)
+                                             comms_estimator=estimator, **(agent_kwargs or {}))
 
     def fly_one(name):
         reports[name] = agents[name].run()

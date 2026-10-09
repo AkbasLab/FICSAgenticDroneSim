@@ -11,6 +11,7 @@ class SkillStatus(str, Enum):
     TIMEOUT = "timeout"
     FAILED = "failed"
     PARTIAL = "partial"  # FOLLOW_WAYPOINTS only: some legs succeeded, some didn't
+    INTERRUPTED = "interrupted"  # stopped mid-leg because the caller's interrupt check fired (GMB zone monitor)
 
 
 @dataclass

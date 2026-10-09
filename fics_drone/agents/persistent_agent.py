@@ -88,8 +88,14 @@ class PersistentAgent:
                  cruise_height: float = DEFAULT_HEIGHT, logger: DecisionLogger = None,
                  drone_name: str = "drone", link: AgentLink = None,
                  task_board: TaskBoard = None, health_monitor: HealthMonitor = None,
-                 kill_at_s: Optional[float] = None, comms_estimator: CommsEstimator = None):
+                 kill_at_s: Optional[float] = None, comms_estimator: CommsEstimator = None,
+                 zone_monitor: bool = True):
         self.adapter = adapter
+        # GMB: with zone_monitor on, every flight leg polls the guardian each control tick and stops
+        # the moment the aircraft is inside a zone that has just become active. Off = the guardian
+        # only notices at the next command boundary (the pre-monitor behaviour, kept for comparison).
+        self.zone_monitor = zone_monitor
+        self._run_start = None
         self.scenario = scenario
         self.sector = scenario.sector(sector_id)
         self.spawn_offset = spawn_offset
@@ -139,6 +145,7 @@ class PersistentAgent:
 
     def run(self) -> AgentReport:
         start = time.monotonic()
+        self._run_start = start
         event = ReplanEvent.TASK_ASSIGNED
         trace = []
         step = 0
@@ -581,8 +588,26 @@ class PersistentAgent:
                 return ReplanEvent.TARGET_DETECTED
         return ReplanEvent.SKILL_SUCCEEDED
 
+    def _live_elapsed(self) -> float:
+        """Mission seconds NOW. belief.elapsed_s is only refreshed between steps, so inside a
+        long leg it is stale - fine for battery, wrong for a zone that switches on mid-leg."""
+        if self._run_start is None:
+            return self.belief.elapsed_s
+        return time.monotonic() - self._run_start
+
+    def _zone_interrupt(self):
+        """Per-tick check handed to the flight skill, or None when the monitor is off or no zone
+        in this scenario can change (so static missions behave exactly as before)."""
+        if not self.zone_monitor or not any(z.is_dynamic for z in self.guardian.limits.restricted_zones):
+            return None
+
+        def tripped(local_position):
+            world = _to_world(local_position, self.spawn_offset)
+            return self.guardian.in_active_dynamic_zone(world, self._live_elapsed())
+        return tripped
+
     def _guarded_fly(self, local_target: Tuple[float, float, float], trace: List[str],
-                      purpose: str = "mission") -> ReplanEvent:
+                      purpose: str = "mission", _after_interrupt: bool = False) -> ReplanEvent:
         """Every proposed flight target goes through the SafetyGuardian before
         reaching the vehicle - the policy proposes, the guardian disposes.
         `purpose="home"` (RETURN_HOME) exempts battery_reserve/separation, which
@@ -594,6 +619,7 @@ class PersistentAgent:
         fixed cruise speed the way this architecture is built) - a real per-
         command speed proposal doesn't exist here the way FICS's own does, so
         this check is honest about what it can and can't see, not faked."""
+        self.belief.elapsed_s = self._live_elapsed()  # zones are scheduled in mission time
         world_target = _to_world(local_target, self.spawn_offset)
         command = Command(kind="fly", target=world_target, purpose=purpose,
                            speed_mps=getattr(self.adapter, "speed_mps", 0.0), timeout_s=SKILL_TIMEOUT_S)
@@ -629,9 +655,15 @@ class PersistentAgent:
         # which may differ from what was proposed (e.g. altitude clamped into the envelope).
         self.belief.self_state.last_block_reason = None
         final_local = _to_local(evaluation.command.target, self.spawn_offset)
-        result = go_to_waypoint(self.adapter, *final_local)
+        result = go_to_waypoint(self.adapter, *final_local,
+                                 interrupt=None if _after_interrupt else self._zone_interrupt())
         self.belief.position = result.final_position or self.belief.position
         self.guardian.command_completed()
+        if result.status == SkillStatus.INTERRUPTED:
+            # A zone switched on over the aircraft mid-leg. Re-evaluate from where it now is: the
+            # guardian's own steer-out fires first. _after_interrupt stops this recursing.
+            trace.append("zone_interrupt")
+            return self._guarded_fly(local_target, trace, purpose, _after_interrupt=True)
         if result.status == SkillStatus.SUCCESS:
             # Every successful flight command sends a heartbeat - GO_TO_SECTOR,
             # SEARCH_SECTOR legs, and RETURN_HOME all go through here, covering nearly

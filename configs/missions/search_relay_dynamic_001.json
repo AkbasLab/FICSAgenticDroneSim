@@ -1,0 +1,126 @@
+{
+  "scenario_id": "search_relay_dynamic_001",
+  "random_seed": 42,
+  "base_station": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 0.0
+  },
+  "deadline_s": 240.0,
+  "comms_range_m": 60.0,
+  "min_separation_m": 5.0,
+  "required_coverage": 0.95,
+  "drones": [
+    {
+      "name": "Drone1",
+      "battery_s": 300.0,
+      "sector": "A",
+      "spawn_offset": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "Drone2",
+      "battery_s": 300.0,
+      "sector": "B",
+      "spawn_offset": [
+        0.0,
+        20.0,
+        0.0
+      ]
+    },
+    {
+      "name": "Drone3",
+      "battery_s": 300.0,
+      "sector": "C",
+      "spawn_offset": [
+        20.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "Drone4",
+      "battery_s": 300.0,
+      "sector": "D",
+      "spawn_offset": [
+        -20.0,
+        0.0,
+        0.0
+      ]
+    }
+  ],
+  "sectors": [
+    {
+      "id": "A",
+      "x_min": 20.0,
+      "x_max": 40.0,
+      "y_min": 20.0,
+      "y_max": 40.0
+    },
+    {
+      "id": "B",
+      "x_min": -40.0,
+      "x_max": -20.0,
+      "y_min": 20.0,
+      "y_max": 40.0
+    },
+    {
+      "id": "C",
+      "x_min": 20.0,
+      "x_max": 40.0,
+      "y_min": -40.0,
+      "y_max": -20.0
+    },
+    {
+      "id": "D",
+      "x_min": -40.0,
+      "x_max": -20.0,
+      "y_min": -40.0,
+      "y_max": -20.0
+    }
+  ],
+  "targets": [
+    {
+      "id": "T1",
+      "x": 30.0,
+      "y": 30.0,
+      "detection_radius_m": 5.0,
+      "dwell_s": 2.0
+    },
+    {
+      "id": "T2",
+      "x": -30.0,
+      "y": -30.0,
+      "detection_radius_m": 5.0,
+      "dwell_s": 2.0
+    }
+  ],
+  "no_fly_zones": [
+    {
+      "id": "NFZ1",
+      "x_min": -10.0,
+      "x_max": 10.0,
+      "y_min": 45.0,
+      "y_max": 60.0
+    },
+    {
+      "id": "DZ_A",
+      "x_min": 24.0,
+      "x_max": 40.0,
+      "y_min": 24.0,
+      "y_max": 40.0,
+      "active_from_s": 10.0
+    },
+    {
+      "id": "DZ_D",
+      "x_min": -36.0,
+      "x_max": -24.0,
+      "y_min": -36.0,
+      "y_max": -24.0,
+      "active_from_s": 60.0
+    }
+  ]
+}

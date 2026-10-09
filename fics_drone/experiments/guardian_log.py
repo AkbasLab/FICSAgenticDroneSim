@@ -22,6 +22,7 @@ class GuardianLogEntry:
     reason: Optional[str]
     failed_checks: List[str]
     fallback: Optional[str]
+    move_m: Optional[float] = None  # steer-out distance (EXIT_ZONE only)
 
 
 class GuardianLog:
@@ -33,7 +34,8 @@ class GuardianLog:
             step=step, command_kind=command.kind, target=command.target,
             outcome=evaluation.outcome.value, reason=evaluation.reason,
             failed_checks=list(evaluation.failed_checks),
-            fallback=evaluation.fallback.value if evaluation.fallback else None))
+            fallback=evaluation.fallback.value if evaluation.fallback else None,
+            move_m=getattr(evaluation, "move_m", None)))
 
     @property
     def intervention_rate(self) -> float:

@@ -1,0 +1,13 @@
+{
+  "drone": "Drone1",
+  "model_card": {
+    "backend": "ollama",
+    "model": "llama3.1:8b",
+    "digest": "46e0c10c039e",
+    "temperature": 0.0,
+    "seed": 17,
+    "is_pinned": true,
+    "warnings": []
+  },
+  "decisions": []
+}

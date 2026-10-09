@@ -201,3 +201,46 @@ class TestWorldFrameAndAgentRecovery(unittest.TestCase):
         first_steer = next(i for i, step in enumerate(report.trace) if "exit_zone" in step)
         self.assertFalse(any(step.startswith("skill_succeeded->land") for step in report.trace[first_steer:first_steer + 2]),
                          "landed right after the steer-out, i.e. treated the exit point as home")
+
+
+class TestPerTickMonitor(unittest.TestCase):
+    def _run(self, monitor):
+        from fics_drone.agents.persistent_agent import PersistentAgent
+        from fics_drone.simulator.kinematic_mock_adapter import KinematicMockVehicleAdapter
+        scenario = load_scenario(SCENARIO_PATH)
+        # Active from the start, across the diagonal of Drone1's ~28 m leg to Sector A. The leg's
+        # TARGET (20, 20) is outside the zone, so the command is approved; only watching the
+        # position every tick can notice the aircraft flying into it.
+        scenario.no_fly_zones = [NoFlyZone("Z", 8.0, 14.0, 8.0, 14.0, active_from_s=0.1)]
+        spec = scenario.drones[0]
+        agent = PersistentAgent(KinematicMockVehicleAdapter(spec.name, speed_mps=5.0), scenario, spec.sector,
+                                spec.spawn_offset, spec.battery_s, drone_name=spec.name, zone_monitor=monitor)
+        return agent, agent.run()
+
+    def test_monitor_interrupts_a_leg_and_the_guardian_steers_out(self):
+        agent, report = self._run(monitor=True)
+        self.assertIn("zone_interrupt", report.trace)
+        self.assertTrue(any(e.fallback == "exit_zone" and e.move_m is not None for e in agent.guardian_log.entries))
+
+    def test_monitor_off_never_interrupts(self):
+        agent, report = self._run(monitor=False)
+        self.assertNotIn("zone_interrupt", report.trace)
+
+    def test_static_scenarios_get_no_interrupt_check_at_all(self):
+        from fics_drone.agents.persistent_agent import PersistentAgent
+        from fics_drone.simulator.kinematic_mock_adapter import KinematicMockVehicleAdapter
+        scenario = load_scenario(SCENARIO_PATH)   # only a static zone
+        spec = scenario.drones[0]
+        agent = PersistentAgent(KinematicMockVehicleAdapter(spec.name), scenario, spec.sector,
+                                spec.spawn_offset, spec.battery_s, drone_name=spec.name)
+        self.assertIsNone(agent._zone_interrupt())
+
+    def test_the_skill_reports_interrupted_and_stops(self):
+        from fics_drone.control.skills import go_to_waypoint
+        from fics_drone.core.skill_result import SkillStatus
+        from fics_drone.simulator.kinematic_mock_adapter import KinematicMockVehicleAdapter
+        adapter = KinematicMockVehicleAdapter("D", speed_mps=10.0)
+        adapter.connect_and_takeoff()
+        result = go_to_waypoint(adapter, 50.0, 0.0, 8.0, interrupt=lambda pos: pos[0] > 10.0)
+        self.assertEqual(result.status, SkillStatus.INTERRUPTED)
+        self.assertLess(result.final_position[0], 40.0)

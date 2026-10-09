@@ -119,6 +119,7 @@ class GuardianEvaluation:
     reason: Optional[str]
     fallback: Optional[FallbackAction]
     failed_checks: List[str]
+    move_m: Optional[float] = None  # EXIT_ZONE only: how far the steer-out moves the aircraft
 
 
 class SafetyGuardian:
@@ -233,6 +234,15 @@ class SafetyGuardian:
         zones are read as always-active (the conservative, pre-GMB behaviour)."""
         return getattr(belief, "elapsed_s", None)
 
+    def in_active_dynamic_zone(self, position_world, t: Optional[float]) -> bool:
+        """True if this world (x, y) is inside a dynamic zone that is active at mission time t.
+        Cheap and stateless, so a caller can poll it on every control tick (GMB zone monitor).
+        Same test _exit_active_zone uses, so the two can never disagree."""
+        if t is None or position_world is None:
+            return False
+        x, y = position_world[0], position_world[1]
+        return any(zone.is_dynamic and zone.contains(x, y, t) for zone in self.limits.restricted_zones)
+
     def _exit_active_zone(self, belief, position_world=None) -> Optional[GuardianEvaluation]:
         """GMB: a scheduled or drifting zone can switch on, or move, on top of an aircraft
         that was legal a moment ago. Static zones can't (a drone never enters one, the
@@ -267,7 +277,8 @@ class SafetyGuardian:
         self._command_in_flight = True
         reason = f"inside active no-fly zone {', '.join(names)} at t={t:.1f}s; exiting to ({cx:.1f}, {cy:.1f})"
         return GuardianEvaluation(GuardianOutcome.EXECUTE_SAFE_FALLBACK, command, reason,
-                                   FallbackAction.EXIT_ZONE, ["inside_active_zone"])
+                                   FallbackAction.EXIT_ZONE, ["inside_active_zone"],
+                                   move_m=math.dist((x, y), (cx, cy)))
 
     @staticmethod
     def _is_at_home(belief) -> bool:
