@@ -1774,10 +1774,20 @@ def fly_plans(client, records: list[PlanRecord], host: str = "127.0.0.1",
         thread.join()
 
     separation = monitor.stop()
-    if separation["measured"]:
+    # A separation figure only exists when there were two drones to measure
+    # between. The monitor runs for a single drone as well, because collisions
+    # need polling and proximity simply does not apply -- so `measured` being
+    # true says the thread ran, not that there is a distance to report.
+    # Printing it unconditionally gave "closest approach: None m at t+Nones" on
+    # every single-drone run, which is 24 of the 30 in the mission set.
+    if separation.get("min_separation_m") is not None:
         print(f"\nclosest approach: {separation['min_separation_m']} m "
               f"at t+{separation['min_separation_at_s']}s "
               f"({separation['samples']} samples)")
+    elif separation["measured"]:
+        contacts = len(separation.get("collisions_polled") or [])
+        print(f"\nmonitored {separation['samples']} samples, "
+              f"{contacts} contact(s); one drone, so no separation to report")
     return outcomes, separation
 
 

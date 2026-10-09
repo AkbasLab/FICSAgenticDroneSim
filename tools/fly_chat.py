@@ -6,6 +6,20 @@
 Asks how many drones you want and at what speed, then takes an instruction for
 each, in plain English. Anything goes -- this is a sandbox, not the benchmark.
 
+TWO WAYS IT DIFFERS FROM THE STUDY, BOTH DELIBERATE
+---------------------------------------------------
+1. The system prompt gets a sandbox addendum telling the model to invent
+   sensible numbers when the instruction gives none, so "go up high and look
+   around for a while" produces a plan instead of a refusal. The study's prompt
+   is frozen and is NOT changed on disk -- this is a runtime addition.
+
+2. An aircraft whose plan did not ask it to land is LEFT HOVERING, under
+   control, at the altitude it finished at. The runner lands it; here you may
+   want to look at where it ended up. Use `:land` to bring everything down.
+
+Both are printed at startup, because a tool that silently diverges from the
+experiment it claims to mirror is worse than no tool.
+
 WHY THIS EXISTS
 ---------------
 `run_missions.py` flies a fixed set and scores it. That is the right tool for
@@ -27,6 +41,7 @@ do not log; only `main()` does, and this is not it.
 Commands:
     :drones N    change the number of drones (1-4) and respawn
     :speed N     change speed in m/s, and tell the model about it
+    :land        land every aircraft still flying and release control
     :status      where every drone is
     :reset       return all drones to their start poses
     :again       re-fly the last set of plans without asking the model
@@ -54,6 +69,21 @@ MAX_DRONES = 4
 # The study's frozen options, so a plan here is comparable with a recorded one.
 OPTIONS = {"num_gpu": 999, "num_ctx": 4096, "temperature": 0,
            "num_predict": 512, "num_thread": 12}
+
+# Added to the study's system prompt at RUNTIME, never written to the frozen
+# baseline. Without it an instruction with no numbers in it -- "go up high, have
+# a look around, come back" -- leaves the model with nothing to put in the
+# required `duration` and `z` fields, and it tends to refuse or emit an empty
+# plan. A sandbox is for exactly those phrasings, so it is told to choose.
+#
+# This makes sandbox plans NOT directly comparable with recorded ones. That is
+# the trade, and it is announced at startup.
+SANDBOX_ADDENDUM = """
+If the instruction does not give a number, choose a sensible one yourself rather
+than refusing: a few seconds for a duration, 10 to 30 metres for an altitude.
+Vague words map to values -- "a bit" or "briefly" is small, "high" or "a while"
+is larger. Always return a complete plan. Never ask a question, never explain,
+and never return an empty plan."""
 
 C = {"dim": "\033[2m", "b": "\033[1m", "g": "\033[32m", "y": "\033[33m",
      "r": "\033[31m", "c": "\033[36m", "m": "\033[35m", "0": "\033[0m"}
@@ -89,6 +119,73 @@ def status(client):
         say(f"  {d}: x {p.x_val:7.2f}  y {p.y_val:7.2f}  "
             f"{29.25 - p.z_val:6.2f} m AGL   landed={s.landed_state}  "
             f"api={client.isApiControlEnabled(vehicle_name=d)}", "c")
+
+
+class HoverRunner(agent.DroneRunner):
+    """A DroneRunner that leaves the aircraft up if the plan never said land.
+
+    `fly()` calls `_land_and_release(skip_landing=...)`, passing True only when
+    the plan's own last step was a successful `land`. So:
+
+      * plan ended with land  -> skip_landing True  -> behave exactly as the
+        study does: the descent is already under way, release control.
+      * plan had no land      -> skip_landing False -> the study would land it
+        here. We do nothing instead, which leaves the aircraft armed, under API
+        control, and hovering where it finished.
+
+    KEEPING CONTROL IS THE POINT. Releasing it cuts the motors, and an aircraft
+    that is still in the air then falls -- which is the exact failure
+    `_land_and_release` was written to prevent, and which this project watched
+    happen on its first flight. "Leave it hovering" therefore means "stay
+    armed", not "skip the landing".
+
+    The consequence to know about: a drone left hovering cannot be re-armed
+    safely, because `arm()` reads the ground from where the aircraft is sitting
+    and would latch a ground reference tens of metres in the air. The session
+    guard catches it and refuses the run, so the recovery is `:land` or
+    `:reset`.
+    """
+
+    def _land_and_release(self, skip_landing: bool = False) -> None:
+        if skip_landing:
+            return super()._land_and_release(skip_landing=True)
+        self._say("no land step; holding position, control retained "
+                  "(:land to bring it down)")
+
+
+def airborne(client, names, margin=2.0):
+    """Names of drones more than `margin` above the ground, with their height."""
+    up = []
+    for n in names:
+        try:
+            z = client.simGetVehiclePose(n).position.z_val
+        except Exception:
+            continue
+        agl = 29.25 - z
+        if agl > margin:
+            up.append((n, round(agl, 2)))
+    return up
+
+
+def land_all(client, names):
+    """Bring every flying aircraft down and release it."""
+    brought = []
+    for n, agl in airborne(client, names):
+        try:
+            client.enableApiControl(True, vehicle_name=n)
+            client.armDisarm(True, vehicle_name=n)
+            client.landAsync(timeout_sec=agent.LAND_TIMEOUT,
+                             vehicle_name=n).join()
+        except Exception as exc:
+            say(f"  {n}: landing failed: {type(exc).__name__}: {exc}", "r")
+        finally:
+            try:
+                client.armDisarm(False, vehicle_name=n)
+                client.enableApiControl(False, vehicle_name=n)
+            except Exception:
+                pass
+        brought.append((n, agl))
+    return brought
 
 
 def set_speed(speed):
@@ -132,6 +229,16 @@ def report(outcomes, separation):
     if not hits and not obst:
         say("  no drone or obstacle contacts", "dim")
     say()
+
+
+def report_left_flying(client, names):
+    up = airborne(client, names)
+    if up:
+        say("  still flying, holding position: "
+            + ", ".join(f"{n} at {a} m" for n, a in up), "y")
+        say("  :land to bring them down, :reset to return them to the pad",
+            "dim")
+        say()
 
 
 def collect(names):
@@ -189,6 +296,14 @@ def main():
         say(f"endpoint problem: {exc}", "r")
         return 1
     say(f"endpoint OK, serving {MODEL} on the cluster", "g")
+
+    # Both divergences from the study, stated plainly rather than hidden.
+    agent.SYSTEM_PROMPT = agent.SYSTEM_PROMPT.rstrip() + "\n" + SANDBOX_ADDENDUM
+    agent.DroneRunner = HoverRunner
+    say("sandbox mode: the model is told to invent numbers when you give none,",
+        "y")
+    say("and an aircraft is left HOVERING unless the plan says land "
+        "(:land to recover)", "y")
 
     # ------------------------------------------------------- how many drones
     while True:
@@ -258,6 +373,15 @@ def main():
         if line == ":auto":
             confirm = not confirm
             say(f"confirm-before-fly is {'ON' if confirm else 'OFF'}", "y")
+            continue
+        if line == ":land":
+            down = land_all(client, names)
+            if down:
+                for n, agl in down:
+                    say(f"  {n} brought down from {agl} m", "g")
+            else:
+                say("nothing is flying", "dim")
+            status(client)
             continue
         if line == ":reset":
             agent.reset_world(client)
@@ -339,6 +463,16 @@ def main():
                 print()
                 break
 
+        up = airborne(client, names)
+        if up:
+            say("  these are still in the air: "
+                + ", ".join(f"{n} at {a} m" for n, a in up), "y")
+            say("  arming from up there would read the ground wrong, and the "
+                "session guard will refuse the run.", "y")
+            if ask("  land them first? [Y/n] ").lower() in ("", "y", "yes"):
+                for n, a in land_all(client, names):
+                    say(f"  {n} brought down from {a} m", "g")
+
         agent.forget_ground_reference()
         try:
             outcomes, separation = agent.fly_plans(client, records)
@@ -346,6 +480,7 @@ def main():
             say(f"  flight failed: {type(exc).__name__}: {exc}", "r")
             continue
         report(outcomes, separation)
+        report_left_flying(client, names)
 
     say("bye", "dim")
     return 0
