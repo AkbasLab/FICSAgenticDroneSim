@@ -155,6 +155,7 @@ AIRBORNE_MARGIN = 1.0    # metres
 # Bounds on `land`, because an unbounded one does not merely fail -- it strands an
 # armed aircraft in mid air and never returns. Seen three times on 2026-10-06.
 # A descent from 60 m at 2 m/s is 30 s, so 90 s cannot cut a legitimate one short.
+FLY_TO_TIMEOUT = 90.0         # seconds for one fly_to leg; 300 m at 5 m/s is 60 s
 LAND_DESCENT_TIMEOUT = 45.0   # seconds for the controlled descent
 LAND_TIMEOUT = 20.0           # seconds for landAsync itself
 LANDED_AGL_MAX = 3.0          # metres; above this, `land` did not land
@@ -888,6 +889,20 @@ def validate(plan: Any) -> tuple[list[dict[str, Any]], list[str]]:
             if z > 0:
                 notes.append(f"step {position}: z={z} treated as {-z} (NED, negative is up)")
                 z = -float(z)
+            # NOT bounds-checked, unlike set_altitude, and that asymmetry is
+            # REAL and UNRESOLVED. set_altitude refuses z = 0 as "at or below
+            # ground level"; fly_to accepts it, and since altitudes are anchored
+            # to the measured ground, z = 0 means the terrain. Measured
+            # 2026-10-09: two drones told to "return home and land" from 70 m and
+            # 55 m both arrived at 0.04 m AGL after fly_to, where its default
+            # implies 8 m. It explains M04 finishing at 0.27 m where every other
+            # mission finishes near 1.17 m.
+            #
+            # Applying the bounds here was tried and REVERTED the same day: the
+            # model emits {"x":0,"y":0,"z":0} for M04 in all three attempts, so
+            # the bounds turn a 3/3 mission into 0/3. That is a change to what
+            # the study scores, and it needs a decision and a re-fly, not a
+            # quiet fix. See the phase log.
             step = dict(step, z=float(z))
 
         checked.append(step)
@@ -1288,10 +1303,20 @@ class DroneRunner:
             self.client.moveToZAsync(
                 self.ground_z + step["z"], MOVE_SPEED, vehicle_name=self.name).join()
         elif action == "fly_to":
+            # BOUNDED, for the same reason `land` is. An unbounded
+            # moveToPositionAsync against an obstacle does not fail -- it waits
+            # forever, holding the worker thread, which holds the main thread,
+            # which makes Ctrl-C impossible because the interrupt cannot be
+            # delivered into a blocked RPC call. Observed 2026-10-09: two drones
+            # pinned against a hotel at 5 m/s, and the only exit was killing the
+            # simulator.
+            #
+            # The timeout is generous: a 300 m leg at MOVE_SPEED is 60 s, so this
+            # cannot cut short a journey that was going to arrive.
             self.client.moveToPositionAsync(
                 float(step["x"]), float(step["y"]),
                 self.ground_z + float(step.get("z", CRUISE_ALTITUDE)),
-                MOVE_SPEED, vehicle_name=self.name,
+                MOVE_SPEED, timeout_sec=FLY_TO_TIMEOUT, vehicle_name=self.name,
             ).join()
         elif action == "land":
             # Descend to just above the remembered ground height first, slowly

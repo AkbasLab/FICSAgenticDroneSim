@@ -1345,6 +1345,8 @@ the multi-drone missions, or the single-drone missions become invalid.
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-10-09 | **Flight speed is fixed at `MOVE_SPEED = 5.0` and the model cannot set it** | Legs are specified in SECONDS, so speed is the conversion factor between a plan and the world: distance = speed x duration. Let it vary and "fly forward for 5 seconds" stops having one meaning. It would also break the scoring, which compares action SEQUENCES -- two models could emit identical correct sequences and fly completely different missions. And M09/M10 have no collision avoidance, so the vertical stagger is only a margin if closing rates are known. If it ever needs to vary it becomes a declared field in `[protocol]`, recorded per run like `num_ctx`, never an interactive prompt. Why 5 specifically was never recorded and is not reconstructible. |
+| 2026-10-09 | Speed IS adjustable in the interactive sandbox | It records nothing, so there is no unrecorded-variable risk, and varying it is a way to probe whether the backward-leg jump depends on closing speed. The sandbox rewrites the system prompt too, since the speed is baked into it at import and the model would otherwise be told 5.0 while flying at something else. |
 | 2026-09-24 | New repository rather than building on the external clone | It is another author's repo with a published tag; a personal repo avoids rewriting anything of theirs |
 | 2026-09-24 | **Reimplement the baseline; use no external agent code** | No licence means no right to redistribute or derive. Phase 20 publishes an artifact |
 | 2026-09-24 | Purge history rather than delete going forward | History is published too; a deletion commit leaves the code retrievable |

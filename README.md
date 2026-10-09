@@ -159,15 +159,22 @@ docs/       RESEARCH_PLAN · SETUP · CONTROLS · BASELINE_* · carlaair/ refere
 configs/    missions/ — the mission set as data, edit here to add or change one
 baseline/   the open-loop agent — original to this project, and frozen
 scripts/    experiment entry points: run_missions.py
-tools/      development tooling: audit_repo.py, the doc generators
+tools/      development tooling: audit_repo.py, fly_chat.py, the doc generators
 tests/      unit tests for the pure logic — no simulator, no model
 phases/     one folder per phase: objectives, exit criterion, evidence, decisions
 runs/       raw run output; the directory is tracked, its contents are not
 ```
 
 **`scripts/` versus `tools/`**: scripts run experiments and produce evidence;
-tools maintain the repository and never appear in a result. The split follows
-the module tree in `AUV-03`, which Phase 2 builds out.
+tools maintain or explore the repository and **never appear in a result**. The
+split follows the module tree in `AUV-03`, which Phase 2 builds out.
+
+`fly_chat.py` sits on that boundary and is worth explaining: it drives the
+simulator and the model like a script, but records nothing, so it cannot
+contribute to a result. It exists for the question a fixed mission set cannot
+answer -- *what does this model do if I phrase it like THIS* -- and it flies
+through `fly_plans`, the same path the runner uses, so what it shows you
+transfers.
 
 **Two output locations, deliberately.** `runs/agent-log.jsonl` is the raw,
 git-ignored log of *every* planning call ever made on this machine, whatever
@@ -176,8 +183,9 @@ specific scored series. Neither replaces the other: the first is a black box
 recorder, the second is the experimental record.
 
 ```powershell
-python -m unittest discover tests     # 61 tests, no simulator needed
+python -m unittest discover tests     # 90 tests, no simulator needed
 python tools\audit_repo.py            # run before every commit
+python tools\fly_chat.py              # interactive: ask a model, fly the answer
 ```
 
 `docs/` says what the project intends; `phases/` records what it actually did,
