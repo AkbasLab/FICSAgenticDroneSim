@@ -78,7 +78,8 @@ class LLMAgentPolicy:
                  timeout_s: float = DEFAULT_TIMEOUT_S, sectors: Sequence = (),
                  spawn_offset: Tuple[float, float, float] = (0.0, 0.0, 0.0),
                  waypoints_enabled: bool = True, assist: str = "off",
-                 tools: Optional[ReasoningTools] = None, max_model_actions: int = MAX_MODEL_ACTIONS):
+                 tools: Optional[ReasoningTools] = None, max_model_actions: int = MAX_MODEL_ACTIONS,
+                 zones: Sequence = (), show_zones: bool = False):
         if assist not in ASSIST_MODES:
             raise ValueError(f"assist must be one of {ASSIST_MODES}, got {assist!r}")
         if assist != "off" and tools is None:
@@ -91,6 +92,9 @@ class LLMAgentPolicy:
         self.sectors = tuple(sectors)           # mission geometry shown in the prompt (no target locations)
         self.spawn_offset = spawn_offset        # this agent's own local->world offset, for the prompt
         self.waypoints_enabled = waypoints_enabled
+        # GMB: the scenario's no-fly zones, shown in the prompt (as they are right now) only if show_zones.
+        self.zones = tuple(zones)
+        self.show_zones = show_zones
         self.max_model_actions = max_model_actions
         self._pending_waypoint: Optional[Tuple[float, float]] = None
         self._pending_action: Optional[Tuple[str, dict]] = None
@@ -99,6 +103,18 @@ class LLMAgentPolicy:
         self._step = 0
 
     # --- the one method PersistentAgent calls ---
+    def _zone_lines(self, belief):
+        if not self.show_zones:
+            return ()
+        t = belief.elapsed_s
+        lines = []
+        for z in self.zones:
+            if z.active_at(t):
+                x0, x1, y0, y1 = z.bounds_at(t)
+                moving = f", moving ({z.vx:+g}, {z.vy:+g}) m/s" if (z.vx or z.vy) else ""
+                lines.append(f"- {z.id}: x {x0:.0f}..{x1:.0f}, y {y0:.0f}..{y1:.0f}{moving}")
+        return lines
+
     def decide(self, belief: Belief, event: ReplanEvent) -> Tuple[Objective, str]:
         deterministic = self.fallback.decide(belief, event)
         if not self._is_model_decision_point(belief, event):
@@ -185,7 +201,7 @@ class LLMAgentPolicy:
                        if self.assist == "context" and "go_to_waypoint" in offered else ())
             prompt = build_prompt(belief, event, offered, self.fallback.listen_rounds, correction,
                                   sectors=self.sectors, spawn_offset=self.spawn_offset,
-                                  checked_points=checked)
+                                  checked_points=checked, active_zones=self._zone_lines(belief))
             record.prompts.append(prompt)
             try:
                 raw = self.backend.complete(prompt, self.timeout_s)

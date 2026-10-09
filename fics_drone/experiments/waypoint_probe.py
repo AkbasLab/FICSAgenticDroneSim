@@ -54,10 +54,11 @@ def make_situation(scenario: Scenario, rng: random.Random):
     return spec, belief
 
 
-def _policy(backend, scenario, spec, assist: str, timeout_s: float) -> LLMAgentPolicy:
+def _policy(backend, scenario, spec, assist: str, timeout_s: float, show_zones: bool = False) -> LLMAgentPolicy:
     tools = ReasoningTools(scenario, spawn_offset=spec.spawn_offset) if assist != "off" else None
     return LLMAgentPolicy(backend, sectors=scenario.sectors, spawn_offset=spec.spawn_offset,
-                          assist=assist, tools=tools, timeout_s=timeout_s)
+                          assist=assist, tools=tools, timeout_s=timeout_s,
+                          zones=scenario.no_fly_zones, show_zones=show_zones)
 
 
 def _ask(policy: LLMAgentPolicy, belief: Belief, event: ReplanEvent):
@@ -67,7 +68,7 @@ def _ask(policy: LLMAgentPolicy, belief: Belief, event: ReplanEvent):
 
 
 def run_probe(backend: ModelBackend, scenario: Scenario, n: int = 100, seed: int = 17,
-              timeout_s: float = 30.0, progress=None) -> dict:
+              timeout_s: float = 30.0, progress=None, show_zones: bool = False) -> dict:
     rng = random.Random(seed)
     rows: List[dict] = []
     for i in range(n):
@@ -80,7 +81,7 @@ def run_probe(backend: ModelBackend, scenario: Scenario, n: int = 100, seed: int
         row: Dict[str, dict] = {"case": i, "drone": spec.name}
 
         # none (+ feedback retry, sharing the first call)
-        p = _policy(backend, scenario, spec, "off", timeout_s)
+        p = _policy(backend, scenario, spec, "off", timeout_s, show_zones)
         rec = _ask(p, belief, ReplanEvent.SKILL_SUCCEEDED)
         v = verdict(rec.raw_waypoint)
         row["none"] = _summarize(rec, rec.raw_waypoint, v)
@@ -95,7 +96,7 @@ def run_probe(backend: ModelBackend, scenario: Scenario, n: int = 100, seed: int
             row["feedback"] = None   # nothing to retry
 
         for cond in ("context", "repair"):
-            pc = _policy(backend, scenario, spec, cond, timeout_s)
+            pc = _policy(backend, scenario, spec, cond, timeout_s, show_zones)
             recc = _ask(pc, belief, ReplanEvent.SKILL_SUCCEEDED)
             flown = recc.waypoint if recc.raw_waypoint is not None else None
             row[cond] = dict(_summarize(recc, recc.raw_waypoint, verdict(recc.raw_waypoint)),

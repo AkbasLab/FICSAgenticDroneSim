@@ -57,3 +57,40 @@ def test_never_settling_times_out_instead_of_recording_a_bad_ground():
     a = make_adapter(clock, lambda t: 5.0, lambda t: 3.0)
     with pytest.raises(TimeoutError, match="never settled"):
         a._wait_until_settled(sleep=clock.sleep, clock=clock.now)
+
+
+class TestLandingEndCheck:
+    """The landing must fail loudly if it ends away from the ground reference."""
+
+    def _adapter(self, height):
+        a = AirSimVehicleAdapter.__new__(AirSimVehicleAdapter)
+        a.vehicle_name = "Drone1"
+        a.get_height = lambda: height
+        return a
+
+    def test_ending_on_the_ground_reference_passes(self):
+        self._adapter(0.0)._check_landed()
+        self._adapter(-0.4)._check_landed()    # resting a little low
+        self._adapter(1.2)._check_landed()     # a slightly higher patch of ground
+
+    def test_the_observed_minus_11_8_is_a_failure(self):
+        with pytest.raises(RuntimeError, match="-11.80 m"):
+            self._adapter(-11.8)._check_landed()
+
+    def test_landing_on_top_of_something_is_a_failure_too(self):
+        with pytest.raises(RuntimeError, match=r"\+8\.70 m"):
+            self._adapter(8.7)._check_landed()
+
+
+class TestLandAsyncOnlyWhenHeldUp:
+    """Root cause of the live -11.8 m landing: landAsync descends 0.2 m/s until contact, 60 s timeout.
+    With no ground collision that is 12 m. It must not run when the drone is already at the ground."""
+
+    def test_at_the_ground_reference_landasync_is_skipped(self):
+        for h in (0.0, 0.05, 0.3, 0.9, -0.2):
+            assert AirSimVehicleAdapter._needs_land_async(h) is False, h
+
+    def test_clearly_above_the_ground_it_is_still_used(self):
+        # e.g. resting on an awning 8.7 m up: something is holding it, landAsync can settle it there
+        for h in (1.01, 2.0, 8.7):
+            assert AirSimVehicleAdapter._needs_land_async(h) is True, h

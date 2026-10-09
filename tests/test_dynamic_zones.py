@@ -244,3 +244,37 @@ class TestPerTickMonitor(unittest.TestCase):
         result = go_to_waypoint(adapter, 50.0, 0.0, 8.0, interrupt=lambda pos: pos[0] > 10.0)
         self.assertEqual(result.status, SkillStatus.INTERRUPTED)
         self.assertLess(result.final_position[0], 40.0)
+
+
+class TestModelCanBeToldAboutZones(unittest.TestCase):
+    """GMB design question: should the model see the boundaries? Off by default (so earlier
+    results keep their meaning); on, the prompt lists the zones active at decision time."""
+
+    def _prompt(self, show, t):
+        from fics_drone.agents.llm_backends import ScriptedBackend
+        from fics_drone.agents.llm_policy import LLMAgentPolicy
+        scenario = load_scenario(SCENARIO_PATH)
+        zones = [NoFlyZone("DZ", 24.0, 40.0, 24.0, 40.0, active_from_s=10.0, active_until_s=100.0),
+                 NoFlyZone("MV", 0.0, 6.0, 0.0, 6.0, active_from_s=0.0, vx=2.0)]
+        backend = ScriptedBackend()
+        policy = LLMAgentPolicy(backend, sectors=scenario.sectors, zones=zones, show_zones=show)
+        belief = Belief(self_state=SelfState(position=(10.0, 10.0, 8.0), elapsed_s=t, battery_s=300.0),
+                        mission=MissionBelief(sector_id="A", search_queue=[]))
+        belief.phase, belief.listen_rounds = "listening", 1
+        from fics_drone.agents.objectives import ReplanEvent
+        policy.decide(belief, ReplanEvent.SKILL_SUCCEEDED)
+        return "\n".join(backend.prompts)
+
+    def test_off_by_default_the_model_never_sees_zones(self):
+        self.assertNotIn("NO-FLY", self._prompt(False, 50.0))
+
+    def test_on_lists_only_zones_active_now_at_their_current_position(self):
+        text = self._prompt(True, 50.0)
+        self.assertIn("NO-FLY ZONES ACTIVE NOW", text)
+        self.assertIn("DZ: x 24..40, y 24..40", text)
+        self.assertIn("MV: x 100..106", text)            # drifted 2 m/s * 50 s along x
+        self.assertIn("moving (+2, +0) m/s", text)
+
+    def test_a_zone_that_has_not_started_or_has_ended_is_not_listed(self):
+        self.assertNotIn("DZ:", self._prompt(True, 5.0))     # before active_from
+        self.assertNotIn("DZ:", self._prompt(True, 150.0))   # after active_until

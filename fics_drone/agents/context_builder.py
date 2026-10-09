@@ -36,7 +36,7 @@ def _option_line(name: str, choices) -> str:
 def build_prompt(belief: Belief, event: ReplanEvent, offered: Offered,
                  listen_cap: int, correction: Optional[str] = None,
                  sectors: Sequence = (), spawn_offset: Tuple[float, float, float] = (0.0, 0.0, 0.0),
-                 checked_points: Sequence[str] = ()) -> str:
+                 checked_points: Sequence[str] = (), active_zones: Sequence[str] = ()) -> str:
     s, comm = belief.self_state, belief.communication
     own = [t for t in belief.mission.targets_known.values() if t.source == "sensor"]
     second_hand = [t for t in belief.mission.targets_known.values() if t.source != "sensor"]
@@ -66,6 +66,11 @@ def build_prompt(belief: Belief, event: ReplanEvent, offered: Offered,
                      f"- you are at ({pos[0] + spawn_offset[0]:.0f}, {pos[1] + spawn_offset[1]:.0f})",
                      *[f"- sector {sec.id}: x {sec.x_min:.0f}..{sec.x_max:.0f}, y {sec.y_min:.0f}..{sec.y_max:.0f}"
                        for sec in sectors[:8]]]
+        if active_zones:
+            # GMB, opt-in (LLMAgentPolicy(show_zones=True)): the no-fly zones that are active RIGHT NOW,
+            # at their current position. Off by default, so every earlier result still means what it did.
+            map_lines += ["NO-FLY ZONES ACTIVE NOW (world meters; the safety layer refuses any point inside one)",
+                          *list(active_zones)[:8]]
         if checked_points:
             # Phase 12.5: computed by code (reasoning_tools.py), so the model reads verdicts
             # instead of doing distance arithmetic it is bad at.

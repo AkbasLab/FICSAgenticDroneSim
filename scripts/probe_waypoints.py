@@ -51,6 +51,8 @@ def main():
     parser.add_argument("--seed", type=int, default=17)
     parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument("--save", default=None)
+    parser.add_argument("--show-zones", action="store_true",
+                        help="GMB: put the no-fly zones active at the decision time into the model's prompt")
     args = parser.parse_args()
 
     scenario = load_scenario(args.scenario)
@@ -69,7 +71,8 @@ def main():
         if i % 10 == 0 or i == n:
             print(f"  {i}/{n}", flush=True)
 
-    result = run_probe(backend, scenario, n=args.n, seed=args.seed, timeout_s=args.timeout, progress=progress)
+    result = run_probe(backend, scenario, n=args.n, seed=args.seed, timeout_s=args.timeout, progress=progress,
+                       show_zones=args.show_zones)
     print_summary(result)
 
     if args.save:

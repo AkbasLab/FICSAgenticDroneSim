@@ -16,7 +16,8 @@ import time
 
 from ..control.navigation import (
     DEFAULT_HEIGHT, GROUND_SETTLE_DRIFT_M, GROUND_SETTLE_POLL_S, GROUND_SETTLE_SPEED_MPS,
-    GROUND_SETTLE_TIMEOUT_S, GROUND_SETTLE_WINDOW_S, LAND_FAST_ABOVE, LAND_FAST_SPEED, LAND_SETTLE_SECS,
+    GROUND_SETTLE_TIMEOUT_S, GROUND_SETTLE_WINDOW_S, LAND_END_TOLERANCE_M, LAND_FAST_ABOVE, LAND_PROBE_DEPTH_M,
+    LAND_PROBE_SPEED_MPS, LAND_PROBE_TIMEOUT_S, LAND_TOUCHDOWN_HEIGHT_M, LAND_FAST_SPEED, LAND_SETTLE_SECS,
     LAND_SLOW_SPEED, MOVE_SPEED,
 )
 from ..core.enums import ActionType
@@ -110,6 +111,7 @@ class AirSimVehicleAdapter(VehicleAdapter):
         self.client.enableApiControl(True, vehicle_name)
         self.client.armDisarm(True, vehicle_name)
         self._ground_ned = None  # set on connect_and_takeoff()
+        self.landing_note = None  # why the last land() did not disarm, if it did not
         self._lock = threading.Lock()  # protects THIS drone's client from its own
         # flight thread racing the telemetry recorder thread - see module docstring
 
@@ -246,14 +248,79 @@ class AirSimVehicleAdapter(VehicleAdapter):
         import time
         time.sleep(LAND_SETTLE_SECS)
 
+        self.landing_note = None
         with self._lock:
+            stamp_before = self._collision_stamp_locked()
             self.client.moveToPositionAsync(
                 x, y, self._ground_ned, LAND_SLOW_SPEED, vehicle_name=self.vehicle_name,
                 timeout_sec=MOVE_TIMEOUT_S,
             ).join()
-            self.client.landAsync(vehicle_name=self.vehicle_name, timeout_sec=60).join()
+            height = self._height_now_locked()
+            if self._needs_land_async(height):
+                self.client.landAsync(vehicle_name=self.vehicle_name, timeout_sec=60).join()
+            elif not self._probe_for_ground(x, y, stamp_before):
+                # Probed LAND_PROBE_DEPTH_M below the ground reference and never touched anything: the
+                # ground is not solid for this drone (noclip). Disarming would free-fall through it.
+                self.client.moveToPositionAsync(x, y, self._ground_ned, LAND_SLOW_SPEED,
+                                                vehicle_name=self.vehicle_name, timeout_sec=MOVE_TIMEOUT_S).join()
+                _with_timeout(lambda: self.client.hoverAsync(vehicle_name=self.vehicle_name).join(), MOVE_TIMEOUT_S)
+                self.landing_note = ("no ground contact within %.1f m below the ground reference (noclip?): held at "
+                                     "the reference, left armed instead of disarming" % LAND_PROBE_DEPTH_M)
+                return
             # armDisarm is also a plain synchronous call with no timeout concept at all.
             _with_timeout(lambda: self.client.armDisarm(False, self.vehicle_name), RPC_READ_TIMEOUT_S)
+        self._check_landed()
+
+    @staticmethod
+    def _needs_land_async(height_above_ground: float) -> bool:
+        """landAsync only when the drone is still clearly above the ground reference after the slow
+        approach. At the reference it would descend 0.2 m/s with nothing to stop it (see navigation.py)."""
+        return height_above_ground > LAND_TOUCHDOWN_HEIGHT_M
+
+    def _probe_for_ground(self, x: float, y: float, stamp_before) -> bool:
+        """Creep down to LAND_PROBE_DEPTH_M below the ground reference, polling for a NEW collision
+        (the sim's timestamp changes). True = the ground is solid and we are resting on it. False =
+        nothing was touched by the probe depth. Bounded: never sinks more than the probe depth. Holds
+        self._lock already."""
+        import time
+        target = self._ground_ned + LAND_PROBE_DEPTH_M
+        self.client.moveToPositionAsync(x, y, target, LAND_PROBE_SPEED_MPS, vehicle_name=self.vehicle_name,
+                                        timeout_sec=LAND_PROBE_TIMEOUT_S)
+        deadline = time.monotonic() + LAND_PROBE_TIMEOUT_S
+        touched = False
+        while time.monotonic() < deadline:
+            if self._collision_stamp_locked() != stamp_before:
+                touched = True
+                break
+            if self._height_now_locked() <= -LAND_PROBE_DEPTH_M + 0.05:
+                break
+            time.sleep(0.1)
+        _with_timeout(lambda: self.client.hoverAsync(vehicle_name=self.vehicle_name).join(), MOVE_TIMEOUT_S)
+        return touched
+
+    def _collision_stamp_locked(self):
+        """Timestamp of the sim's most recent collision for this drone (changes only on a NEW one),
+        read while self._lock is already held."""
+        return _with_timeout(
+            lambda: self.client.simGetCollisionInfo(self.vehicle_name).time_stamp, RPC_READ_TIMEOUT_S)
+
+    def _height_now_locked(self) -> float:
+        """Height above the ground reference, read while self._lock is ALREADY held (the public
+        readers take the lock themselves and it is not re-entrant)."""
+        z = _with_timeout(
+            lambda: self.client.getMultirotorState(self.vehicle_name).kinematics_estimated.position.z_val,
+            RPC_READ_TIMEOUT_S)
+        return self._from_ned(z)
+
+    def _check_landed(self):
+        """Raise if the drone did not end the landing on the ground reference. The position read
+        here is the same one every later metric uses, so a wrong ending height must fail loudly
+        now rather than flow into the logs as a successful landing."""
+        height = self.get_height()
+        if abs(height) > LAND_END_TOLERANCE_M:
+            raise RuntimeError(
+                f"{self.vehicle_name} landing ended {height:+.2f} m from the ground reference "
+                f"(tolerance {LAND_END_TOLERANCE_M} m): not on the ground it took off from")
 
     # --- run a validated plan ---
 

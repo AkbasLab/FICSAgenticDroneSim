@@ -27,6 +27,8 @@ def main():
     parser.add_argument("--sector", default="A", choices=["A", "B", "C", "D"])
     parser.add_argument("--battery", type=float, default=None)
     parser.add_argument("--airsim", action="store_true")
+    parser.add_argument("--cruise-height", type=float, default=None,
+                        help="search/transit height above ground in metres (default: control.navigation.DEFAULT_HEIGHT)")
     parser.add_argument("--log", action="store_true", help="print the KNEW/DID NOT KNOW/DECIDED trail")
     parser.add_argument("--log-json", default=None, help="also write the full trail to this file")
     args = parser.parse_args()
@@ -43,7 +45,8 @@ def main():
 
     logger = DecisionLogger() if (args.log or args.log_json) else None
     agent = PersistentAgent(adapter, scenario, args.sector, spec.spawn_offset, battery_s,
-                             logger=logger, drone_name=spec.name)
+                             logger=logger, drone_name=spec.name,
+                             **({"cruise_height": args.cruise_height} if args.cruise_height else {}))
     report = agent.run()
 
     if args.log:
