@@ -188,30 +188,75 @@ for path in markdown + python:
 # directory, so they are excluded by name.
 before = {p: io.open(p, encoding="utf-8").read() for p in markdown
           if p.startswith("docs/carlaair/") and not p.endswith(("README.md", "00-architecture.md"))}
-subprocess.run([sys.executable, "tools/build_carlaair_docs.py"],
-               capture_output=True, text=True)
-for path, old in before.items():
-    if io.open(path, encoding="utf-8").read() != old:
-        problems.append(f"generated doc is stale, regenerate: {path}")
+regen = subprocess.run([sys.executable, "tools/build_carlaair_docs.py"],
+                       capture_output=True, text=True)
+
+# CHECK THE RETURN CODE. Without this the check silently does nothing: a
+# generator that crashes leaves every file untouched, the comparison below finds
+# no differences, and the audit reports "clean" -- which is the opposite of the
+# truth, because nothing was verified at all.
+#
+# Found 2026-10-09, having been live long enough that nobody knows how long the
+# drift check had been vacuous. The generator was failing on a UTF-8 decode and
+# the audit was reporting success.
+if regen.returncode != 0:
+    problems.append(
+        "could not regenerate the CarlaAir docs, so drift was NOT checked: "
+        + ((regen.stderr or regen.stdout or "").strip().splitlines() or ["no output"])[-1]
+    )
+else:
+    for path, old in before.items():
+        if io.open(path, encoding="utf-8").read() != old:
+            problems.append(f"generated doc is stale, regenerate: {path}")
 
 # ------------------------------------------------ 6. machine-specific paths
 #
-# A NOTE, not a problem, because some of these are correct: the environment
-# record is supposed to say exactly where things sat on the machine that
-# produced the measurements. The rest are a wall for anyone else, and the
-# Phase 1 exit criterion is explicitly about someone else reproducing this.
-# Judging which is which needs a human, so the audit reports and moves on.
+# Split into DELIBERATE and ACTIONABLE, because one number here can never reach
+# zero and so tells nobody anything. Some of these paths are correct: an
+# environment record is supposed to say exactly where things sat on the machine
+# that produced the measurements, and prose naming where an external document
+# lives is provenance. The rest are a wall for anyone else, and the Phase 1 exit
+# criterion is explicitly about someone else reproducing this.
+#
+# Anything not listed below is ACTIONABLE by default, so a new machine-specific
+# path in a new file surfaces as a problem instead of being absorbed into a
+# total that everyone has learned to ignore.
 machine = re.compile(r"[A-Z]:\\(?:Research|AllSetups|Users)\\")
-counts = {}
+DELIBERATE = {
+    "docs/BASELINE_ENVIRONMENT.md":
+        "a record of the machine that produced the measurements",
+    "tools/build_carlaair_docs.py":
+        "the substitution table that replaces these paths everywhere else",
+    "tools/audit_repo.py":
+        "this detector",
+    "phases/phase-01-baseline-freeze/README.md":
+        "the phase log describing this very problem",
+    "docs/carlaair/README.md":
+        "provenance: where the source manual lives",
+    "docs/CONTROLS.md":
+        "provenance: where the source manual lives",
+    "docs/carlaair/07-recording-and-monitoring.md":
+        "C:/Users/you/ is already a placeholder; the pattern cannot tell",
+}
+counts, deliberate = {}, {}
 for path in markdown + python:
     hits = len(machine.findall(io.open(path, encoding="utf-8").read()))
-    if hits:
-        counts[path] = hits
+    if not hits:
+        continue
+    (deliberate if path in DELIBERATE else counts)[path] = hits
 if counts:
     total = sum(counts.values())
-    notes.append(f"machine-specific absolute paths: {total} across {len(counts)} files")
-    for path, n in sorted(counts.items(), key=lambda kv: -kv[1])[:6]:
-        notes.append(f"    {n:3d}  {path}")
+    problems.append(
+        f"machine-specific paths a reader would follow: {total} "
+        f"across {len(counts)} files")
+    for path, n in sorted(counts.items(), key=lambda kv: -kv[1]):
+        problems.append(f"    {n:3d}  {path}")
+if deliberate:
+    total = sum(deliberate.values())
+    notes.append(f"machine-specific paths kept deliberately: {total} across "
+                 f"{len(deliberate)} files")
+    for path, n in sorted(deliberate.items(), key=lambda kv: -kv[1]):
+        notes.append(f"    {n:3d}  {path}  -- {DELIBERATE[path]}")
 
 # ------------------------------------ 6b. local paths in dependency files
 #

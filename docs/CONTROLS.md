@@ -27,7 +27,7 @@ owns the multirotor.
 ## 1. Starting and stopping
 
 ```powershell
-cd D:\Research\CarlaAirSetup\CarlaAir-v0.1.7-Windows11-x86_64
+cd $env:CARLAAIR_ROOT        # set once in docs/SETUP.md
 .\CarlaAir.ps1 Town10HD
 ```
 
@@ -230,8 +230,8 @@ the point of Phase 5 onward.
 | CARLA Traffic Manager | 8000 |
 | AirSim RPC | 41451 |
 | Ollama | 11434 |
-| Simulator root | `D:\Research\CarlaAirSetup\CarlaAir-v0.1.7-Windows11-x86_64` |
-| conda environment | `D:\AllSetups\miniconda\envs\carlaAir` |
+| Simulator root | `%CARLAAIR_ROOT%` — set in [`SETUP.md`](SETUP.md) |
+| conda environment | `carlaAir` — path varies with the Miniconda install |
 | Config AirSim reads | `<Documents known folder>\AirSim\settings.json` |
 | Default cruise height | −8.0 m (NED, negative is up) |
 | Drone spawn spacing | 4.0 m |

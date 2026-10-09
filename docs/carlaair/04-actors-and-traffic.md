@@ -14,7 +14,7 @@ Spawning and controlling vehicles and pedestrians, driving a car manually, and t
 
 ```powershell
 conda activate carlaAir
-cd D:\Research\CarlaAirSetup\CarlaAir-v0.1.7-Windows11-x86_64
+cd %CARLAAIR_ROOT%
 python auto_traffic.py --vehicles 50 --walkers 80
 ```
 

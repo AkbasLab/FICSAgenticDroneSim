@@ -14,7 +14,7 @@ The manual's *LLM agent layer* section is deliberately **not** included: it docu
 
 ```powershell
 conda activate carlaAir
-cd D:\Research\CarlaAirSetup\CarlaAir-v0.1.7-Windows11-x86_64
+cd %CARLAAIR_ROOT%
 python examples\aerial_surveillance.py --help
 ```
 

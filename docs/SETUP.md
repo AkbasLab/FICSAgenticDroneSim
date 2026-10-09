@@ -61,10 +61,19 @@ Per-part hashes are in `BASELINE_ENVIRONMENT.md` §4. Verifying this one hash
 pins the Unreal build, every map and the CARLA Python wheel in a single step —
 which is most of what reproducibility requires.
 
-Extract to a path without spaces. The reference install is:
+Extract to a path without spaces, then record where you put it. The rest of
+this documentation refers to that location as **`%CARLAAIR_ROOT%`** rather than
+naming one machine's drive letter:
 
+```powershell
+setx CARLAAIR_ROOT "C:\path	o\CarlaAir-v0.1.7-Windows11-x86_64"
 ```
-D:\Research\CarlaAirSetup\CarlaAir-v0.1.7-Windows11-x86_64
+
+`setx` affects only new sessions, so open a fresh terminal before continuing.
+Check it took:
+
+```powershell
+cd $env:CARLAAIR_ROOT; Get-Location
 ```
 
 ---

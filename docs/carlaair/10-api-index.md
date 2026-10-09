@@ -674,7 +674,7 @@ class are marked in bold.
 
 ```python
 --- START ------------------------------------------------------------------
-cd D:\Research\CarlaAirSetup\CarlaAir-v0.1.7-Windows11-x86_64
+cd %CARLAAIR_ROOT%
 .\CarlaAir.ps1 Town10HD                     # start
 .\CarlaAir.ps1 Town01 --quality Low --no-traffic   # light
 .\CarlaAir.ps1 --kill                       # stop
@@ -776,7 +776,7 @@ client.replay_file("run01.log", 0, 0, 0)
 
 --- LLM AGENTS -------------------------------------------------------------
 ollama list / ollama ps / ollama pull llama3.2:3b / ollama stop <model>
-cd D:\Research\AirSimRepo
+cd %AIRSIM_REPO%
 python test_flight.py                       # no LLM -- prove the stack
 python baseline/open_loop_agent.py                # natural language
 

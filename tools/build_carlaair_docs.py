@@ -51,8 +51,18 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 
 # The manual lives outside the repository: it is a personal document that
-# compiles to a PDF, not project source. Update this path if it moves.
-TEX = r"D:/Research/CarlaAirDocs/CarlaAir-Command-Reference-v1.0.tex"
+# compiles to a PDF, not project source.
+#
+# This is the one path that cannot be made portable, because the file genuinely
+# is not in the clone. Overridable by environment variable so a second person
+# can point it at their own copy rather than editing this file -- and so the
+# failure, when the manual is absent, is a clear message rather than a traceback.
+# The generated Markdown IS committed, so a clone has the documentation; only
+# regenerating it needs the manual.
+TEX = os.environ.get(
+    "CARLAAIR_MANUAL",
+    r"D:/Research/CarlaAirDocs/CarlaAir-Command-Reference-v1.0.tex",
+)
 OUT = os.path.join(REPO, "docs", "carlaair")
 
 # Use the interpreter running this script for the child conversions, so a conda
@@ -142,6 +152,26 @@ SUBSTITUTIONS = {
     "python -u llama_airsim_agent.py": "python -u baseline/open_loop_agent.py",
 }
 
+# Machine-specific paths become documented placeholders.
+#
+# The manual is a personal document written on one machine; this repository is
+# meant to be cloned by somebody else, and an example reading `cd D:\Research\...`
+# is an instruction that cannot be followed. Phase 1's exit criterion is exactly
+# that someone else can follow the documentation unaided.
+#
+# This belongs HERE rather than in the generated files: `tools/audit_repo.py`
+# regenerates them and diffs the result, so a hand edit would be reverted and
+# then reported as drift. Fixing the generator is the only fix that survives.
+#
+# The placeholders are defined for the reader in `docs/SETUP.md`.
+PATH_PLACEHOLDERS = {
+    r"D:\Research\CarlaAirSetup\CarlaAir-v0.1.7-Windows11-x86_64": "%CARLAAIR_ROOT%",
+    r"D:\Research\AirSimRepo": "%AIRSIM_REPO%",
+    # A log destination, not an install: relative is both portable and correct,
+    # since the repository already has a runs/ directory.
+    r"D:\Research\runs": r".\runs",
+}
+
 HEADER = """# {title}
 
 {lead}
@@ -172,11 +202,28 @@ for name, (title, lead, ranges) in DOCS.items():
             # quotes, and Windows would otherwise decode the child's output
             # as cp1252 and mangle them.
             encoding="utf-8",
+            # Declaring the encoding here is not enough: it says how to DECODE
+            # the child, while the child chooses its own output encoding from the
+            # Windows console codepage and writes cp1252. The decode then fails
+            # on the first em dash (0x97), subprocess swallows the exception, and
+            # `result.stdout` arrives as None -- which surfaces as
+            # `'NoneType' object has no attribute 'strip'` several lines later,
+            # naming nothing useful. Measured 2026-10-09.
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         )
         if result.returncode != 0:
             # Fail loudly and stop. A half-converted document that still looks
             # plausible is worse than no document.
-            sys.exit("convert failed for %s: %s" % (name, result.stderr[:300]))
+            sys.exit("convert failed for %s: %s" % (name, (result.stderr or "")[:300]))
+        if result.stdout is None:
+            # Separate message because the cause is different and the symptom
+            # downstream is useless: a returncode of 0 with no captured output
+            # means the capture itself failed, almost always on decoding.
+            sys.exit(
+                "convert produced no readable output for %s (lines %s-%s). "
+                "The child's output could not be decoded as UTF-8."
+                % (name, first, last)
+            )
         body.append(result.stdout.strip())
 
     # Ranges are separated by a blank line so two sections never run together
@@ -187,6 +234,11 @@ for name, (title, lead, ranges) in DOCS.items():
     # conversion, so the rule is written in terms of the Markdown a reader will
     # see rather than the LaTeX that produced it.
     for old, new in SUBSTITUTIONS.items():
+        text = text.replace(old, new)
+
+    # Applied after conversion for the same reason as SUBSTITUTIONS: the rule is
+    # written in terms of the Markdown a reader sees, not the LaTeX behind it.
+    for old, new in PATH_PLACEHOLDERS.items():
         text = text.replace(old, new)
 
     path = os.path.join(OUT, name)

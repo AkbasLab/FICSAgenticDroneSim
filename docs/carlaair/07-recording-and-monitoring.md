@@ -190,7 +190,7 @@ you want that window blocked and `Ctrl+C` to stop the simulator.
 Open a second PowerShell already in the right place:
 
 ```powershell
-Start-Process powershell -ArgumentList '-NoExit','-Command','cd D:\Research\AirSimRepo; conda activate carlaAir'
+Start-Process powershell -ArgumentList '-NoExit','-Command','cd %AIRSIM_REPO%; conda activate carlaAir'
 ```
 
 ### Live resource monitoring
@@ -373,7 +373,7 @@ output is harder than it looks.
 #### The quick way — pipe to a file
 
 ```powershell
-python -u baseline/open_loop_agent.py 2>&1 | Tee-Object -FilePath D:\Research\runs\session-01.log
+python -u baseline/open_loop_agent.py 2>&1 | Tee-Object -FilePath .\runs\session-01.log
 ```
 
 `-u` is not optional. Without it Python buffers stdout when it is piped, and
@@ -415,7 +415,7 @@ and append the log write:
 
 ```python
         try:
-            with open(r"D:\Research\runs\agent-log.jsonl", "a", encoding="utf-8") as _f:
+            with open(r".\runs\agent-log.jsonl", "a", encoding="utf-8") as _f:
                 _f.write(json.dumps({
                     "t": time.strftime("%Y-%m-%dT%H:%M:%S"),
                     "drone": self.vehicle_name,
@@ -435,14 +435,14 @@ a logging failure must never take down a flight.
 
 ```python
 import pandas as pd
-df = pd.read_json(r"D:\Research\runs\agent-log.jsonl", lines=True)
+df = pd.read_json(r".\runs\agent-log.jsonl", lines=True)
 print(df[["t", "instruction", "plan_seconds"]])
 ```
 
 Or from PowerShell:
 
 ```powershell
-Get-Content D:\Research\runs\agent-log.jsonl | ForEach-Object { $j = $_ | ConvertFrom-Json; "{0}  {1,6:N1}s  {2}" -f $j.t, $j.plan_seconds, $j.instruction }
+Get-Content .\runs\agent-log.jsonl | ForEach-Object { $j = $_ | ConvertFrom-Json; "{0}  {1,6:N1}s  {2}" -f $j.t, $j.plan_seconds, $j.instruction }
 ```
 
 #### Cross-referencing with Ollama

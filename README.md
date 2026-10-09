@@ -73,7 +73,7 @@ credited in the phase record, not merged.
 First flight, assuming the stack is installed:
 
 ```powershell
-cd D:\Research\CarlaAirSetup\CarlaAir-v0.1.7-Windows11-x86_64
+cd $env:CARLAAIR_ROOT        # set once in docs/SETUP.md
 .\CarlaAir.ps1 Town10HD --no-traffic --quality Low
 ```
 

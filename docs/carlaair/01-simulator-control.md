@@ -49,7 +49,7 @@ foreach ($p in 2000,41451,11434) {
 ### Start
 
 ```powershell
-cd D:\Research\CarlaAirSetup\CarlaAir-v0.1.7-Windows11-x86_64
+cd %CARLAAIR_ROOT%
 .\CarlaAir.ps1 Town10HD
 ```
 

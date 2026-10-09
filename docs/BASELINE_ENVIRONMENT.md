@@ -40,6 +40,15 @@ which models can co-reside with the simulator. See §8.
 
 ## 3. Operating system and runtime
 
+> **The absolute paths in this document are deliberate and should not be
+> genericised.** This file is a *record* of the machine that produced the
+> measurements, so `D:\AllSetups\...` is the answer to "where did this actually
+> run", not an instruction to anybody. Documentation that a reader follows —
+> [`SETUP.md`](SETUP.md), [`CONTROLS.md`](CONTROLS.md), the root `README.md` —
+> uses `%CARLAAIR_ROOT%` instead, defined once in `SETUP.md`.
+> `tools/audit_repo.py` holds the same distinction, so these are reported as
+> kept deliberately rather than as work outstanding.
+
 | | |
 |---|---|
 | OS | Microsoft Windows 11 Home Single Language 10.0.26200, 64-bit |
