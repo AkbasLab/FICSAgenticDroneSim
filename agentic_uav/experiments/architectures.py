@@ -351,6 +351,22 @@ class RunResult:
     llm: Optional[Dict[str, Any]] = None
     controller: Optional[Dict[str, Any]] = None
 
+    #: Flown tracks, {vehicle_id: [(Position3D, t_s), ...]}, sampled once per
+    #: step of the run loop. Phase 15 needs these: separation violations,
+    #: restricted-zone entries and distance travelled are geometric facts about
+    #: where the vehicles actually went, and cannot be recovered from the
+    #: decision logs. Recording is passive and identical for every
+    #: architecture, so it cannot bias a comparison.
+    tracks: Dict[str, List[Any]] = field(default_factory=dict)
+    #: Raw per-subsystem statistics, carried so that `evaluation.py` can derive
+    #: the Phase 15 metrics from one object instead of being handed six logs.
+    #: Nothing here is a reported metric; these are the inputs to the metrics.
+    raw: Dict[str, Any] = field(default_factory=dict)
+    #: True when the loop hit `max_total_steps` with agents still active. A
+    #: timeout must never be reported as a completion time (see evaluation.py).
+    hit_step_cap: bool = False
+    step_cap: int = 0
+
     def as_row(self):
         d = {"architecture": self.spec.key, "name": self.spec.name,
              "condition": self.condition or "none", "seed": self.seed,
@@ -421,10 +437,45 @@ def run(built: BuiltRun, max_total_steps=600, stop_at=None) -> RunResult:
         if not agent.step():
             active.remove(agent)
 
-    return _measure(built, total, stopped=stopped)
+    return _measure(built, total, stopped=stopped, tracks=_tracks(agents),
+                    hit_step_cap=bool(active) and total >= max_total_steps,
+                    step_cap=max_total_steps)
 
 
-def _measure(built: BuiltRun, total_steps, stopped=()) -> RunResult:
+def _tracks(agents) -> Dict[str, List[Any]]:
+    """Collect each vehicle's flown track from its adapter.
+
+    The adapter records one sample per leg endpoint, which is the finest
+    resolution that is also faithful: the vehicle travels in a straight line at
+    constant speed between endpoints, so a position interpolated inside a leg
+    is a position the vehicle really occupied. An adapter that does not record
+    a track contributes nothing rather than a coarse approximation, so a metric
+    computed from these is either right or absent.
+    """
+    out: Dict[str, List[Any]] = {}
+    for a in agents:
+        track = getattr(a.adapter, "track", None)
+        if isinstance(track, dict) and track.get(a.vehicle_id):
+            out[a.vehicle_id] = list(track[a.vehicle_id])
+    return out
+
+
+def _conflicts_seen(agents):
+    """Duplicate-claim resolutions across all agents, or None if not applicable.
+
+    `None` rather than 0 for architectures with no allocator: a centralized or
+    non-coordinating architecture cannot have a claim conflict, and reporting
+    zero would invite the reading that it avoided them.
+    """
+    allocators = [a.allocator for a in agents
+                  if getattr(a, "allocator", None) is not None]
+    if not allocators:
+        return None
+    return sum(len(getattr(al, "conflicts", [])) for al in allocators)
+
+
+def _measure(built: BuiltRun, total_steps, stopped=(), tracks=None,
+             hit_step_cap=False, step_cap=0) -> RunResult:
     from ..experiments.llm_log import combined_stats
 
     scenario, truth = built.scenario, built.truth
@@ -457,6 +508,40 @@ def _measure(built: BuiltRun, total_steps, stopped=()) -> RunResult:
             llm = combined_stats(logs)
 
     survivors = [a for a in built.agents if a.vehicle_id not in set(stopped)]
+
+    # Phase 15 inputs. Collected here because this is the only place that holds
+    # every subsystem at once; computing the metrics is evaluation.py's job.
+    from .guardian_log import merge as merge_guardian
+    guardian = merge_guardian([a.guardian_log for a in built.agents]).stats()
+    role_history = [h for a in built.agents
+                    if getattr(a, "role_manager", None) is not None
+                    for h in getattr(a.role_manager, "history", [])]
+    raw = {
+        "bus": stats,
+        "guardian": guardian,
+        "role_history": role_history,
+        # Each agent resolves conflicts from its own view, so these are summed
+        # across agents rather than taken from one: a duplicate claim is seen,
+        # and must be resolved, by every agent that heard both claims.
+        "conflicts": _conflicts_seen(built.agents),
+        "tasks_completed": sum(len(getattr(a, "completed_tasks", []))
+                               for a in built.agents),
+        # Detections that reached base, captured when each report was sent.
+        # The end-of-run `reported` flag cannot be used: it is per-task and is
+        # cleared when the task is released.
+        "reported_detections": {a.vehicle_id: sorted(a.reported_detections)
+                                for a in built.agents},
+        "reports_sent": {a.vehicle_id: a.reports_sent for a in built.agents},
+        "detections_by": {a.vehicle_id: sorted(a.belief.detections)
+                          for a in built.agents},
+        "required_coverage": getattr(scenario.mission, "required_coverage", 1.0),
+        "battery_frac_end": {a.vehicle_id: reports[a.vehicle_id].battery_frac_end
+                             for a in built.agents},
+        "min_separation_m": getattr(scenario.mission, "min_separation_m", None),
+        "restricted_zones": list(getattr(scenario, "restricted_zones", [])),
+        "survivors": [a.vehicle_id for a in survivors],
+    }
+
     return RunResult(
         spec=built.spec, condition=built.condition, seed=built.seed,
         stopped=sorted(stopped),
@@ -476,7 +561,9 @@ def _measure(built: BuiltRun, total_steps, stopped=()) -> RunResult:
         guardian_interventions=sum(len(a.guardian_log.interventions())
                                    for a in built.agents),
         llm=llm,
-        controller=built.controller.stats() if built.controller else None)
+        controller=built.controller.stats() if built.controller else None,
+        tracks=dict(tracks or {}), raw=raw,
+        hit_step_cap=hit_step_cap, step_cap=step_cap)
 
 
 def run_architecture(key, scenario, adapter_factory, condition=None, seed=None,

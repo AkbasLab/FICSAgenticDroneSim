@@ -118,6 +118,10 @@ class PersistentAgent:
         # step() bookkeeping (set by start())
         self.task = None
         self.completed_tasks = []      # task ids this agent finished (Phase 8)
+        #: Detections that were included in a report actually transmitted, and
+        #: the number of reports sent. Accumulated across tasks (Phase 15).
+        self.reported_detections = set()
+        self.reports_sent = 0
         self._idle_rounds = 0
         self.steps = 0
         self.finished = False
@@ -143,6 +147,8 @@ class PersistentAgent:
         if task is not None:
             self.belief.assign_task(task)
         self.completed_tasks = []
+        self.reported_detections = set()
+        self.reports_sent = 0
         self.steps = 0
         self.finished = False
         self.decisions = []
@@ -331,6 +337,14 @@ class PersistentAgent:
     def _do_report(self, b):
         """Transmit task completion to base, and release the task to the team."""
         b.reported = True
+        # Phase 15: what was in the report when it was sent. `b.reported` is a
+        # per-task flag and is cleared when the task is released, so reading it
+        # at the end of a run says only whether the *last* task was reported -
+        # which scored a drone that reported four sectors as having reported
+        # none. A detection only counts as a mission objective once it has been
+        # transmitted, so the metric needs the detections at transmit time.
+        self.reported_detections.update(b.detections)
+        self.reports_sent += 1
         if self.allocator is not None and self.task is not None:
             self.completed_tasks.append(self.task.task_id)
             self.allocator.complete_task(self.task.task_id, b)

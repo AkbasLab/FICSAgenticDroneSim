@@ -31,6 +31,7 @@ SUITES = [
     ("12",  "LLM agent policy",          "tests/test_llm_policy.py", 60),
     ("13",  "Architecture comparison",   "tests/test_architectures.py", 23),
     ("14",  "Experiment runner + logs",  "tests/test_experiment_runner.py", 25),
+    ("15",  "Metric definitions",        "tests/test_evaluation.py", 90),
     ("3-12", "AirSim code path (fake sim)", "tests/test_airsim_path.py", 17),
 ]
 

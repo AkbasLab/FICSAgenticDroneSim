@@ -63,7 +63,7 @@ python scripts/run_persistent_agent.py --airsim
 Verify everything in one command:
 
 ```bash
-python scripts/run_all_tests.py     # 295 tests + 15 demos
+python scripts/run_all_tests.py     # 385 tests + 15 demos
 ```
 
 See **[docs/TESTING.md](docs/TESTING.md)** for how to verify each phase
@@ -102,7 +102,7 @@ configs/
   missions/      canonical scenario definitions (YAML)
   experiments/   one YAML per experiment run (Phase 14)
 scripts/           runnable demos, one per phase
-tests/             295 tests, all runnable without a simulator
+tests/             385 tests, all runnable without a simulator
 docs/
 ```
 
@@ -657,9 +657,70 @@ and also showed its limit.
 
 ---
 
+## Phase 15 — The metrics, defined before the experiments
+
+Every number the paper will report is defined in
+[`docs/METRICS.md`](docs/METRICS.md) and implemented in
+`experiments/evaluation.py`. The ordering is the whole point: a metric chosen
+after seeing the results is not a measurement, it is a decision about which
+story the results tell.
+
+**The exit criterion is machine-checked.** A registry maps each metric to its
+written definition, and a test compares it against the reported fields in both
+directions — so a number cannot enter the results without a definition, and a
+definition cannot be orphaned by a renamed field.
+
+Six primary metrics (mission score and its three components, completion time,
+continuity retention, recovery time, safety, communication overhead) and
+eighteen diagnostics. Three conventions are enforced structurally rather than
+by discipline:
+
+- **Unmeasured is `None`, never zero.** Zero collisions is exactly the number a
+  safe system reports, which makes it the most dangerous default. Gaps are
+  named in a `not_measured` field that appears in the results row.
+- **A failed mission has no completion time.** Otherwise the mean completion
+  time of a batch *improves* as more of its runs fail.
+- **Completion is a statement about the mission, not the run loop.** Defining
+  it as "the loop drained" is wrong in both directions: a stalled team drains
+  nothing having finished the work, and a team that exits mid-air drains
+  cleanly having finished none of it.
+
+**Three things the metrics caught immediately.**
+
+*Detection was scoring zero on runs that reported everything.* The `reported`
+flag is per-task and is cleared when a task is released, so reading it at the
+end of a run scored a drone that had reported four sectors as having reported
+none. Detections are now captured at the moment the report is transmitted.
+
+*Ten collisions that never happened.* Positions sampled from the agent loop
+arrive two samples 70 s apart across an area sweep, because simulated time
+advances one whole skill at a time. Interpolating across that gap drew a
+straight line through a lawnmower pattern and put two drones on the same
+invented point. The track is now recorded by the adapter at leg endpoints,
+which is faithful rather than merely finer: the vehicle flies straight at
+constant speed between endpoints, so an interpolated position is one it really
+occupied.
+
+*A real limit on the guardrail.* With the track fixed, two drones pass within
+**1.88 m** under a 3 m minimum with **zero guardian interventions**. The
+`separation` check compares the destination waypoint against *believed* peer
+positions and skips stale records, so two crossing paths with distant endpoints
+are each approved, and with no fresh positions the check returns `passed=True`
+— which means "nothing known", not "separation assured". It weakens precisely
+when communication is worst. Fleet-level separation assurance does not follow
+from per-command, per-agent checking: two commands each safe alone can be
+unsafe together. All three properties are pinned by tests rather than quietly
+patched, because this is a design finding and belongs in the write-up.
+
+```bash
+python tests/test_evaluation.py
+```
+
+---
+
 ## Testing
 
-295 tests, none of which need a simulator, GPU or API key.
+385 tests, none of which need a simulator, GPU or API key.
 
 | Suite | Tests | Covers |
 |---|---|---|
@@ -676,6 +737,7 @@ and also showed its limit.
 | `test_llm_policy.py` | 60 | tools, schema, bounded context, fallback chain, per-agent isolation |
 | `test_architectures.py` | 23 | the five architectures are comparable and differ on one axis each |
 | `test_experiment_runner.py` | 25 | configs, manifests, the event stream, and that failed runs survive |
+| `test_evaluation.py` | 90 | every metric has a written definition, and the conventions that keep it honest |
 | `test_airsim_path.py` | 17 | the AirSim code path, against a fake simulator |
 
 ---
@@ -690,6 +752,8 @@ and also showed its limit.
 - **[`docs/SIM_TESTING.md`](docs/SIM_TESTING.md)** — flying Phases 3–7 in
   CARLA-Air for real: environment setup, pinned versions, the port layout, and
   the known failure modes when the simulator is involved.
+- **[`docs/METRICS.md`](docs/METRICS.md)** — every reported metric, its written
+  definition, and the conventions that stop a metric from flattering the result.
 - **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)** — module-by-module design,
   and the two interfaces (`MissionPlanner`, `VehicleAdapter`) everything else is
   written against.

@@ -23,6 +23,7 @@ class MockVehicleAdapter:
         self._clock = {}      # vehicle_id -> simulated seconds elapsed
         self.log = []         # (vehicle_id, event, detail) for tests/inspection
         self._action_log = [] # (vehicle_id, action) for the low-level Phase 1/2 path
+        self.track = {}       # vehicle_id -> [(Position3D, t_s)] leg endpoints
 
     # --- helpers ---
 
@@ -39,6 +40,7 @@ class MockVehicleAdapter:
         self._pos[vehicle_id] = Position3D(position.x, position.y, position.z)
         self._heading.setdefault(vehicle_id, 0.0)
         self._clock.setdefault(vehicle_id, 0.0)
+        self._mark(vehicle_id)
         return self._pos[vehicle_id]
 
     def _p(self, vid) -> Position3D:
@@ -50,6 +52,32 @@ class MockVehicleAdapter:
 
     def _advance(self, vid, seconds):
         self._clock[vid] = self._clock.get(vid, 0.0) + seconds
+
+    # --- flown track (Phase 15) ---------------------------------------------
+    #
+    # The adapter is the only component that knows where a vehicle actually is
+    # and when, so it is the only honest place to record the flown track. One
+    # sample per leg endpoint is enough *and* is exactly right: the mock moves
+    # in a straight line at constant speed between endpoints, so interpolating
+    # within a leg reproduces the real position rather than inventing one.
+    #
+    # Sampling from the agent loop instead was wrong, and wrong in the
+    # dangerous direction. Simulated time advances one whole skill at a time,
+    # so a 70 s area sweep appears as two samples 70 s apart; interpolating
+    # across it drew a straight line through a lawnmower pattern and placed two
+    # drones at the same invented point. That reported ten collisions in a run
+    # that had none.
+
+    def _mark(self, vid):
+        """Record the current (position, clock) for this vehicle."""
+        p = self._pos.get(vid)
+        if p is None:
+            return
+        t = self._clock.get(vid, 0.0)
+        track = self.track.setdefault(vid, [])
+        if track and track[-1][1] == t and track[-1][0] == p:
+            return                      # nothing moved and no time passed
+        track.append((Position3D(p.x, p.y, p.z), t))
 
     def now(self, vid) -> float:
         self._p(vid)
@@ -88,6 +116,7 @@ class MockVehicleAdapter:
         self._p(vehicle_id)
         self._advance(vehicle_id, duration_s)
         self.log.append((vehicle_id, "hold", duration_s))
+        self._mark(vehicle_id)
         return NavOutcome(final_position=self.get_position(vehicle_id),
                           elapsed_s=duration_s, timed_out=False)
 
@@ -119,6 +148,7 @@ class MockVehicleAdapter:
 
     def _travel(self, vid, target: Position3D, speed, timeout_s, label) -> NavOutcome:
         start = self._p(vid)
+        self._mark(vid)                      # leg start
         dist = start.distance_to(target)
         speed = max(speed, 0.001)
         travel_time = dist / speed
@@ -126,6 +156,7 @@ class MockVehicleAdapter:
         if travel_time <= timeout_s or timeout_s <= 0:
             self._pos[vid] = Position3D(target.x, target.y, target.z)
             self._advance(vid, travel_time)
+            self._mark(vid)                  # leg end
             self.log.append((vid, label, "reached"))
             return NavOutcome(final_position=self.get_position(vid),
                               elapsed_s=travel_time, timed_out=False)
@@ -138,6 +169,7 @@ class MockVehicleAdapter:
             start.z + (target.z - start.z) * frac,
         )
         self._advance(vid, timeout_s)
+        self._mark(vid)                      # leg end (partial)
         self.log.append((vid, label, "timeout"))
         return NavOutcome(final_position=self.get_position(vid),
                           elapsed_s=timeout_s, timed_out=True)
