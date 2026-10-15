@@ -8,6 +8,14 @@ nothing else varied.
     python scripts/run_comms_study.py --seed 42
     python scripts/run_comms_study.py --estimates   # what agents *think* the link is
     python scripts/run_comms_study.py --condition severe --messages
+    python scripts/run_comms_study.py --airsim                # fly it (severe)
+    python scripts/run_comms_study.py --airsim --condition partitioned
+
+With --airsim only one condition is flown. Each condition is a full four-drone
+mission, the drones finish on their pads, and the simulator has to be reset
+between runs for the next one to start from the same state - so the four-way
+comparison stays a mock-only study, and the simulator run is for watching one
+condition play out.
 """
 
 import argparse
@@ -27,9 +35,10 @@ DEFAULT_SCENARIO = os.path.join(
     "configs", "missions", "search_relay_001.yaml")
 
 
-def run_one(scenario, profile, seed, lease_s, heartbeat_s):
+def run_one(scenario, profile, seed, lease_s, heartbeat_s, factory=None):
+    factory = factory or (lambda vid: MockVehicleAdapter(0.0))
     agents, tasks, bus, _truth = build_allocating_team(
-        scenario, lambda vid: MockVehicleAdapter(0.0),
+        scenario, factory,
         network=profile, seed=seed, lease_s=lease_s,
         heartbeat_interval_s=heartbeat_s)
     report = run_team(agents, tasks, bus)
@@ -53,9 +62,25 @@ def main():
     ap.add_argument("--estimates", action="store_true",
                     help="show each agent's ESTIMATE of link quality")
     ap.add_argument("--messages", action="store_true")
+    ap.add_argument("--airsim", action="store_true",
+                    help="fly ONE condition in CARLA-Air (default: severe)")
     args = ap.parse_args()
 
     scenario = load_scenario(args.scenario)
+
+    factory = None
+    if args.airsim:
+        from agentic_uav.simulator import scenario_manager
+        from agentic_uav.simulator.airsim_adapter import AirSimVehicleAdapter
+        if not args.condition:
+            args.condition = "severe"
+            print("\n--airsim flies one condition; using 'severe' "
+                  "(pass --condition to choose another)")
+        shared = AirSimVehicleAdapter()
+        scenario_manager.spawn_missing_drones(shared.client,
+                                              len(scenario.vehicles))
+        factory = lambda vid: shared
+
     names = [args.condition] if args.condition else cc.ORDER
 
     print(f"\n=== Communication study (seed {args.seed}) ===")
@@ -72,7 +97,8 @@ def main():
     for name in names:
         profile = cc.condition(name)
         agents, bus, report, completed = run_one(
-            scenario, profile, args.seed, args.lease, args.heartbeat)
+            scenario, profile, args.seed, args.lease, args.heartbeat,
+            factory=factory)
         s = bus.stats()
         results[name] = (agents, bus, completed, s)
 

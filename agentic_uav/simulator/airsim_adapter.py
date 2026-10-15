@@ -22,6 +22,54 @@ class AirSimVehicleAdapter:
         self._clients_lock = threading.Lock()
         self._ground_z = {}   # vehicle_id -> ground level recorded at takeoff
         self._t0 = time.monotonic()   # mission clock origin
+        # vehicle_id -> (x, y) of its spawn point in WORLD coordinates. See place().
+        self._origin = {}
+
+    # --- frames ---------------------------------------------------------------
+    #
+    # AirSim reports and accepts multirotor positions relative to each vehicle's
+    # own spawn point. Four drones spawned 4 m apart therefore all report
+    # (0, 0, 0) at the start, and a waypoint at world x = 10 sent unchanged to
+    # a drone spawned at x = 4 is flown to world x = 14.
+    #
+    # Everything above the adapter works in world coordinates - the scenario's
+    # sectors and pads, teammate positions in messages, the guardian's
+    # separation check, the bids. Passing AirSim's frame straight through meant
+    # that on the simulator every drone believed its teammates were sitting on
+    # top of it (so the guardian refused moves that were perfectly safe), every
+    # bid was computed from identical positions (so allocation silently fell
+    # through to the tie-breaker - the same defect Phase 12 found and fixed on
+    # the mock), and each drone flew its sectors offset by its own spawn point.
+    #
+    # Found while preparing the Phase 12 screen recording: the guardian rejected
+    # a return_home as "0.0 m from Drone2" on the simulator path only.
+
+    def place(self, vehicle_id: str, position: Position3D):
+        """Declare where this vehicle was spawned, in world coordinates.
+
+        The mock adapter's place() moves the vehicle there; this one records the
+        frame offset, because the vehicle is already wherever the simulator
+        spawned it. The team builders call place() with each vehicle's scenario
+        pad, which matches where `spawn_missing_drones` puts them ((i-1) *
+        SPACING along x). If a settings.json spawns them elsewhere, the pads in
+        the scenario must be changed to match, or the offsets will be wrong.
+
+        Only x and y are offset. Altitude is left in AirSim's frame because the
+        pads are at ground level and takeoff/landing already work relative to
+        the ground height recorded at takeoff.
+
+        A vehicle that is never placed keeps a zero offset, so single-drone and
+        Phase 1-3 scripts behave exactly as before.
+        """
+        self._origin[vehicle_id] = (float(position.x), float(position.y))
+
+    def _world(self, vehicle_id, p) -> Position3D:
+        ox, oy = self._origin.get(vehicle_id, (0.0, 0.0))
+        return Position3D(p.x_val + ox, p.y_val + oy, p.z_val)
+
+    def _local(self, vehicle_id, world: Position3D):
+        ox, oy = self._origin.get(vehicle_id, (0.0, 0.0))
+        return world.x - ox, world.y - oy, world.z
 
     def now(self, vehicle_id=None) -> float:
         """Seconds since this adapter was created.
@@ -49,7 +97,7 @@ class AirSimVehicleAdapter:
     def get_position(self, vehicle_id: str) -> Position3D:
         c = self._client_for(vehicle_id)
         p = c.getMultirotorState(vehicle_name=vehicle_id).kinematics_estimated.position
-        return Position3D(p.x_val, p.y_val, p.z_val)
+        return self._world(vehicle_id, p)
 
     def get_state(self, vehicle_id: str) -> VehicleState:
         c = self._client_for(vehicle_id)
@@ -58,7 +106,7 @@ class AirSimVehicleAdapter:
         _, _, yaw = airsim.to_eularian_angles(s.kinematics_estimated.orientation)
         import math
         return VehicleState(vehicle_id=vehicle_id,
-                            position=Position3D(p.x_val, p.y_val, p.z_val),
+                            position=self._world(vehicle_id, p),
                             heading_deg=math.degrees(yaw), armed=True)
 
     # --- navigation primitives ---
@@ -76,7 +124,8 @@ class AirSimVehicleAdapter:
     def go_to_waypoint(self, vehicle_id, waypoint, speed_mps, timeout_s) -> NavOutcome:
         c = self._client_for(vehicle_id)
         t0 = time.time()
-        c.moveToPositionAsync(waypoint.x, waypoint.y, waypoint.z, speed_mps,
+        x, y, z = self._local(vehicle_id, waypoint)
+        c.moveToPositionAsync(x, y, z, speed_mps,
                               timeout_sec=timeout_s, vehicle_name=vehicle_id).join()
         return self._outcome(vehicle_id, t0, timeout_s)
 

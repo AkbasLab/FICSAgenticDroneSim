@@ -223,7 +223,8 @@ def run_unsafe(scenario):
 
 
 def run_mission(scenario, backend_name, model=None, condition=None,
-                show_decisions=False, save_dir=None, timeout_s=None):
+                show_decisions=False, save_dir=None, timeout_s=None,
+                adapter_factory=None):
     print(f"\n=== Four LLM agents, one model process ===")
 
     if backend_name == "scripted":
@@ -249,7 +250,7 @@ def run_mission(scenario, backend_name, model=None, condition=None,
         return p
 
     agents, tasks, bus, truth = build_allocating_team(
-        scenario, lambda vid: MockVehicleAdapter(0.0),
+        scenario, adapter_factory or (lambda vid: MockVehicleAdapter(0.0)),
         network=comms_condition(condition) if condition else None,
         policy_factory=make_policy,
         guardian_factory=lambda vid: SafetyGuardian(limits=limits))
@@ -314,9 +315,26 @@ def main():
     ap.add_argument("--decisions", action="store_true",
                     help="print the per-decision trace")
     ap.add_argument("--save", default=None, help="directory for prompts/outputs")
+    ap.add_argument("--airsim", action="store_true",
+                    help="fly the four-agent team mission in CARLA-Air")
     args = ap.parse_args()
 
     scenario = load_scenario(args.scenario)
+
+    factory = None
+    if args.airsim:
+        if args.failures or args.unsafe:
+            # Those catalogues exercise the policy directly and never fly, so
+            # there is nothing for the simulator to show.
+            print("\nnote: --failures and --unsafe do not fly anything; "
+                  "--airsim is ignored for them")
+        else:
+            from agentic_uav.simulator import scenario_manager
+            from agentic_uav.simulator.airsim_adapter import AirSimVehicleAdapter
+            shared = AirSimVehicleAdapter()
+            scenario_manager.spawn_missing_drones(shared.client,
+                                                  len(scenario.vehicles))
+            factory = lambda vid: shared
 
     if args.failures or args.unsafe:
         ok = True
@@ -328,7 +346,7 @@ def main():
         ok = run_mission(scenario, args.backend, model=args.model,
                          condition=args.condition,
                          show_decisions=args.decisions, save_dir=args.save,
-                         timeout_s=args.timeout)
+                         timeout_s=args.timeout, adapter_factory=factory)
 
     print(f"\nPHASE 12 {'OK' if ok else 'FAILED'}\n")
     return 0 if ok else 1

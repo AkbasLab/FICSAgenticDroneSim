@@ -41,6 +41,15 @@ AIRSIM_SCRIPTS = [
     ("scripts/run_comms_study.py", "--condition nominal --estimates"),
     ("scripts/run_guardian_demo.py", "--live"),
     ("scripts/run_llm_agents.py", ""),
+    # Phases 10-12 in the simulator, added for the screen recordings: these
+    # are the commands someone will run with a recorder going, so they are
+    # exactly the ones that must not fail for the first time on camera.
+    ("scripts/run_comms_study.py", "--airsim"),
+    ("scripts/run_comms_study.py", "--airsim --condition partitioned --estimates"),
+    ("scripts/run_guardian_demo.py", "--airsim"),
+    ("scripts/run_guardian_demo.py", "--airsim --repeat"),
+    ("scripts/run_llm_agents.py", "--airsim"),
+    ("scripts/run_llm_agents.py", "--airsim --failures --unsafe"),
 ]
 
 # runs a script with the fake airsim installed first
@@ -426,6 +435,42 @@ def test_guardian_blocks_unsafe_commands_on_the_airsim_adapter():
                 assert abs(wp[0]) < 200, f"unsafe waypoint approved: {wp}"
 
 
+def test_positions_are_reported_and_commanded_in_world_coordinates():
+    """AirSim works in each vehicle's own spawn frame; everything above the
+    adapter works in world coordinates. The adapter must translate both ways.
+
+    Without this, four drones spawned 4 m apart all reported (0, 0, 0): the
+    guardian refused safe moves as "0.0 m from Drone2", bids were computed from
+    identical positions, and each drone flew its sectors offset by its own
+    spawn point.
+    """
+    world = fake_airsim.install(move_duration_s=0.0)
+    from agentic_uav.core.models import Position3D
+    from agentic_uav.simulator.airsim_adapter import AirSimVehicleAdapter
+
+    ad = AirSimVehicleAdapter()
+    ad.place("Drone1", Position3D(0.0, 0.0, 0.0))
+    ad.place("Drone2", Position3D(4.0, 0.0, 0.0))
+
+    p1, p2 = ad.get_position("Drone1"), ad.get_position("Drone2")
+    assert p1.horizontal_distance_to(p2) == 4.0, (p1, p2)
+
+    # A world-frame waypoint is sent to AirSim in the vehicle's own frame...
+    ad.takeoff("Drone2", -8.0, 30.0)
+    ad.go_to_waypoint("Drone2", Position3D(10.0, 0.0, -8.0), 5.0, 30.0)
+    local = world.positions["Drone2"]
+    assert (local[0], local[1]) == (6.0, 0.0), local
+    # ...and reported back in the world frame.
+    back = ad.get_position("Drone2")
+    assert (back.x, back.y) == (10.0, 0.0), back
+
+    # A vehicle that is never placed keeps AirSim's frame unchanged, so the
+    # single-drone and Phase 1-3 scripts behave exactly as they did before.
+    ad.takeoff("Drone3", -8.0, 30.0)
+    ad.go_to_waypoint("Drone3", Position3D(5.0, 5.0, -8.0), 5.0, 30.0)
+    assert world.positions["Drone3"][:2] == [5.0, 5.0]
+
+
 def test_each_vehicle_gets_its_own_client():
     """The concurrency fix: one MultirotorClient per vehicle, never shared."""
     fake_airsim.install()
@@ -470,6 +515,8 @@ if __name__ == "__main__":
         ("guardian blocks unsafe commands on AirSim adapter",
          test_guardian_blocks_unsafe_commands_on_the_airsim_adapter),
         ("each vehicle gets its own client", test_each_vehicle_gets_its_own_client),
+        ("positions reported and commanded in world coordinates",
+         test_positions_are_reported_and_commanded_in_world_coordinates),
     ]
     passed = failed = 0
     for name, fn in tests:

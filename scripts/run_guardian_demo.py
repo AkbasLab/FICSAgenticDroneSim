@@ -15,6 +15,14 @@ Exit code 0 means every unsafe command was blocked.
     python scripts/run_guardian_demo.py --live          # also fly the mission
     python scripts/run_guardian_demo.py --case nan_waypoint
     python scripts/run_guardian_demo.py --live --repeat # policy stays broken
+    python scripts/run_guardian_demo.py --airsim        # live mission in CARLA-Air
+    python scripts/run_guardian_demo.py --airsim --repeat
+
+--airsim implies --live: the catalogue never flies, so the simulator only has
+something to show during the live mission. Nothing unsafe reaches the
+simulator - that is the point of the demo. A NaN waypoint or an out-of-geofence
+target is refused before any command is sent, and an excessive speed is clamped
+to the limit first.
 """
 
 import argparse
@@ -87,7 +95,7 @@ def run_catalogue(scenario, only=None):
     return blocked == len(cases)
 
 
-def run_live(scenario, repeat=False, cases=None):
+def run_live(scenario, repeat=False, cases=None, adapter=None):
     print("\n=== Live mission with a compromised policy ===")
     print("The policy substitutes unsafe commands mid-mission. The agent does")
     print("not know. Only the guardian stands between them and the vehicle.\n")
@@ -103,7 +111,7 @@ def run_live(scenario, repeat=False, cases=None):
         repeat=repeat)
 
     agent = PersistentAgent(
-        vehicle.vehicle_id, MockVehicleAdapter(0.0), policy=policy,
+        vehicle.vehicle_id, adapter or MockVehicleAdapter(0.0), policy=policy,
         home=vehicle.start, battery_total_s=vehicle.battery_s,
         cruise_altitude=sector.altitude, sensor=SensorModel(truth),
         roster=truth.roster(), sector_ids=truth.sector_ids(),
@@ -150,12 +158,23 @@ def main():
                     help="also fly a mission with a compromised policy")
     ap.add_argument("--repeat", action="store_true",
                     help="the policy stays broken for the whole mission")
+    ap.add_argument("--airsim", action="store_true",
+                    help="fly the live mission in CARLA-Air (implies --live)")
     args = ap.parse_args()
 
     scenario = load_scenario(args.scenario)
+
+    adapter = None
+    if args.airsim:
+        from agentic_uav.simulator import scenario_manager
+        from agentic_uav.simulator.airsim_adapter import AirSimVehicleAdapter
+        args.live = True
+        adapter = AirSimVehicleAdapter()
+        scenario_manager.spawn_missing_drones(adapter.client, 1)
+
     ok = run_catalogue(scenario, only=args.case)
     if args.live:
-        ok = run_live(scenario, repeat=args.repeat) and ok
+        ok = run_live(scenario, repeat=args.repeat, adapter=adapter) and ok
 
     print(f"\nGUARDIAN {'HELD' if ok else 'FAILED TO CONTAIN'}\n")
     return 0 if ok else 1
