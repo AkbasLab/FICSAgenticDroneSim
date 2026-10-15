@@ -97,9 +97,11 @@ class MessageLog:
         sent and the recipient next waking up to read it.
         """
         delivered = [e for e in self.entries if e.delivered]
-        link_drops = [e for e in self.entries if e.drop_reason == "link_loss"]
         expired = [e for e in self.entries
                    if e.drop_reason == "expired_before_delivery"]
+        # anything the *network* refused: loss, range, partition, rate, bandwidth
+        link_drops = [e for e in self.entries
+                      if e.dropped and e.drop_reason != "expired_before_delivery"]
         delays = [e.latency_s for e in delivered if e.latency_s is not None]
         return {
             "sent": len(self.entries),
@@ -111,7 +113,15 @@ class MessageLog:
             "mean_delivery_delay_s": (sum(delays) / len(delays)) if delays else 0.0,
             "bytes": sum(e.size_bytes for e in self.entries),
             "influential": sum(1 for e in self.entries if e.influenced_decision),
+            "drop_reasons": self.drop_reasons(),
         }
+
+    def drop_reasons(self):
+        out = {}
+        for e in self.entries:
+            if e.dropped:
+                out[e.drop_reason] = out.get(e.drop_reason, 0) + 1
+        return out
 
     def by_type(self):
         out = {}
@@ -149,7 +159,11 @@ class MessageLog:
 class MessageBus:
     """Central delivery infrastructure. Simulation-side only - never given to an agent."""
 
-    def __init__(self, latency_s=0.0, loss_rate=0.0, rng=None, log=None):
+    def __init__(self, latency_s=0.0, loss_rate=0.0, rng=None, log=None,
+                 network=None):
+        # Phase 10: a NetworkModel supersedes the simple latency/loss knobs.
+        # The old parameters still work so Phase 7-9 experiments are unchanged.
+        self.network = network
         self.latency_s = latency_s          # 0 = perfect comms (Phase 7)
         self.loss_rate = loss_rate
         self._rng = rng
@@ -177,18 +191,27 @@ class MessageBus:
       with self._lock:
         recipients = [v for v in self._registered if message.addressed_to(v)]
         for r in recipients:
+            if self.network is not None:
+                verdict = self.network.evaluate(message, message.sender_id, r,
+                                                message.timestamp)
+                delivered, delay, reason = (verdict.delivered, verdict.delay_s,
+                                            verdict.reason)
+            else:
+                delivered, delay, reason = (not self._drop()), self.latency_s, \
+                    "link_loss"
+
             entry = MessageLogEntry(
                 message_id=message.message_id,
                 message_type=message.message_type.value,
                 sender_id=message.sender_id, recipient_id=r,
                 created_at=message.timestamp,
-                scheduled_delivery_at=message.timestamp + self.latency_s,
+                scheduled_delivery_at=message.timestamp + delay,
                 size_bytes=message.size_bytes(),
                 expires_at=message.expires_at)
 
-            if self._drop():
+            if not delivered:
                 entry.dropped = True
-                entry.drop_reason = "link_loss"
+                entry.drop_reason = reason or "link_loss"
                 self.log.add(entry)
                 continue
 
@@ -253,7 +276,11 @@ class AgentLink:
         self._seq = 0
 
     def send(self, message_type, payload=None, recipients=None, now=0.0,
-             mission_id="", ttl_s=30.0, confidence=None) -> AgentMessage:
+             mission_id="", ttl_s=None, confidence=None) -> AgentMessage:
+        """Send a message. `ttl_s=None` uses the per-type lifetime (Phase 10.4)."""
+        if ttl_s is None:
+            from .comms_conditions import ttl_for
+            ttl_s = ttl_for(message_type)
         self._seq += 1
         msg = AgentMessage(
             message_type=message_type, sender_id=self._vehicle_id,

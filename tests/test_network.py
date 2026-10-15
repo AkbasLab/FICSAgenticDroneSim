@@ -355,8 +355,8 @@ def test_degradation_does_not_break_the_mission():
 if __name__ == "__main__":
     tests = [
         ("zero-loss profile drops nothing", test_zero_loss_profile_drops_nothing),
-        ("empirical loss ≈ 10%", test_empirical_loss_matches_configured_10_percent),
-        ("empirical loss ≈ 30%", test_empirical_loss_matches_configured_30_percent),
+        ("empirical loss ~ 10%", test_empirical_loss_matches_configured_10_percent),
+        ("empirical loss ~ 30%", test_empirical_loss_matches_configured_30_percent),
         ("loss scales monotonically", test_loss_scales_monotonically),
         ("empirical latency matches distribution",
          test_empirical_latency_matches_the_distribution),

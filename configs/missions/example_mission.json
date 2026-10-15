@@ -1,0 +1,6 @@
+{
+  "drones": {
+    "Drone1": "fly forward 5 seconds then land",
+    "Drone2": "go up 15 meters, hover 3 seconds, then come back and land"
+  }
+}

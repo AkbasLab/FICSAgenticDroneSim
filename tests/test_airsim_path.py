@@ -68,7 +68,9 @@ def _run_script(script, flags):
     code = _HARNESS.format(root=ROOT, script=os.path.join(ROOT, script),
                            flags=flags.split())
     return subprocess.run([sys.executable, "-c", code], cwd=ROOT,
-                          capture_output=True, text=True, timeout=180)
+                          capture_output=True, text=True, timeout=180,
+                          env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                          encoding="utf-8", errors="replace")
 
 
 # --- the adapter itself ---

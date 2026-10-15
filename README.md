@@ -63,7 +63,7 @@ python scripts/run_persistent_agent.py --airsim
 Verify everything in one command:
 
 ```bash
-python scripts/run_all_tests.py     # 385 tests + 15 demos
+python scripts/run_all_tests.py     # 461 tests + 15 demos
 ```
 
 See **[docs/TESTING.md](docs/TESTING.md)** for how to verify each phase
@@ -102,7 +102,7 @@ configs/
   missions/      canonical scenario definitions (YAML)
   experiments/   one YAML per experiment run (Phase 14)
 scripts/           runnable demos, one per phase
-tests/             385 tests, all runnable without a simulator
+tests/             461 tests, all runnable without a simulator
 docs/
 ```
 
@@ -718,9 +718,62 @@ python tests/test_evaluation.py
 
 ---
 
+## Phase 16 — Verification, and measuring whether the tests work
+
+461 tests and 15 demos, none needing CARLA-Air, AirSim, a GPU or an API key,
+plus continuous integration on every pull request.
+
+**The exit criterion is measured rather than asserted.** The criterion is that
+most coordination and communication defects can be found without launching the
+simulator, and a suite cannot establish that by passing: 461 passing assertions
+prove only that nothing they check is broken right now.
+
+`scripts/run_defect_injection.py` breaks a real invariant - one line at a time,
+on a throwaway copy of the repository - and checks that a suite notices.
+
+```bash
+python scripts/run_defect_injection.py        # 11/11 caught
+python scripts/run_defect_injection.py --list
+```
+
+Eleven defects across allocation, communication, roles, belief and safety: ties
+breaking the wrong way, leases that never expire, messages that never go stale,
+partitions that block nothing, a drone declared dead on one missed heartbeat, a
+geofence that passes everything. All eleven are caught without the simulator. A
+mutation that no longer matches its source is reported as broken rather than as
+caught, so the catalogue cannot rot into always-passing.
+
+**Determinism is checked structurally, not just by running twice.** The whole
+package contains exactly one random number generator, it is a seeded instance
+rather than the process-wide one, and nothing on the simulator-free path reads
+the wall clock. Those are parsed out of the source, so they hold for every path
+including the ones no test exercises — which is what makes reproducibility a
+property of the system rather than an observation about a few runs.
+
+**Two gaps this phase found.**
+
+*The relay role could not be triggered by losing communication.* Base
+reachability was computed from distance alone, so a partitioned drone sitting
+well within range still believed base was reachable — and `RELAY` is selected on
+exactly that flag. `NetworkModel.base_reachable_for` had been written for this
+and was called by nothing but its own unit test, which meant the `partitioned`
+condition never exercised relay behaviour at all. Found by asking, end to end,
+who takes the relay role when the team is split, and getting the answer
+"nobody".
+
+*Task boards do not reconcile after a partition lifts.* There is no anti-entropy
+step, so each half keeps what it last believed: sectors left `UNASSIGNED` that
+the other half completed, one attributed to a drone that did not fly it, one
+left `CLAIMED` by a drone that never flew it. The flying is sound and no
+reported metric is affected, since coverage counts only sectors actually flown.
+Pinned by a test rather than patched, because eventual consistency after a
+partition is a design decision, not a bug to fix quietly.
+
+---
+
 ## Testing
 
-385 tests, none of which need a simulator, GPU or API key.
+461 tests, none of which need a simulator, GPU or API key.
 
 | Suite | Tests | Covers |
 |---|---|---|
@@ -738,6 +791,8 @@ python tests/test_evaluation.py
 | `test_architectures.py` | 23 | the five architectures are comparable and differ on one axis each |
 | `test_experiment_runner.py` | 25 | configs, manifests, the event stream, and that failed runs survive |
 | `test_evaluation.py` | 90 | every metric has a written definition, and the conventions that keep it honest |
+| `test_integration.py` | 48 | the seven assembled-system scenarios: 2 and 4 agent allocation, loss, partition, conflict, relay, LLM fallback |
+| `test_determinism.py` | 28 | same seed, same run - and only one seeded RNG exists in the package |
 | `test_airsim_path.py` | 17 | the AirSim code path, against a fake simulator |
 
 ---

@@ -367,3 +367,91 @@ adapter — not the agent logic.
 | 5 | `python scripts/run_persistent_agent.py --battery 8` | TASK ABORTED SAFELY |
 | 6 | `python scripts/run_persistent_agent.py --log` | KNEW / DID NOT KNOW per decision |
 | 7 | `python scripts/run_team_mission.py` | 4× COMPLETE, 0 link drops |
+
+---
+
+# Phase 16 — Verification and software testing
+
+461 tests, 15 demos, none needing CARLA-Air, AirSim, a GPU or an API key.
+
+```bash
+python scripts/run_all_tests.py          # everything
+python tests/test_integration.py         # 16.2, assembled-system scenarios
+python tests/test_determinism.py         # 16.4, reproducibility
+python scripts/run_defect_injection.py   # the exit criterion, measured
+```
+
+## The exit criterion is measured, not asserted
+
+The criterion is that *most coordination and communication defects can be
+discovered without launching CARLA-Air*. A suite cannot establish that by
+passing: 461 passing assertions prove only that nothing they check is broken
+right now, and say nothing about whether they would notice if something broke.
+
+`scripts/run_defect_injection.py` measures it. Each defect is a one-line change
+to a real invariant, applied to a throwaway copy of the repository; the
+simulator-free suites run against the damaged copy, and the defect counts as
+caught only if a suite fails.
+
+**11 of 11 caught**, across allocation, communication, roles, belief and safety:
+
+| Defect | Breaks |
+|---|---|
+| `tie_break` | ties break on the highest vehicle ID, so agents disagree on winners |
+| `bid_ignores_distance` | a drone no longer prefers the sector it is closest to |
+| `lease_never_expires` | work held by a silent agent is lost permanently |
+| `conflict_rule_order` | two agents can both believe they hold one task |
+| `message_never_expires` | an agent acts on a position report minutes old |
+| `no_packet_loss` | every degraded condition silently runs as a perfect one |
+| `partitions_ignored` | the partitioned condition equals the nominal one |
+| `base_reachability_range_only` | a partitioned drone thinks base is reachable |
+| `failure_on_first_miss` | a briefly quiet drone is declared dead |
+| `beliefs_never_stale` | a stale peer position is treated as current |
+| `geofence_always_passes` | a command outside the operating area reaches the vehicle |
+
+A mutation that no longer matches its source is reported as `BROKEN` rather
+than as caught, so the catalogue cannot rot into always-passing. One early
+mutation was invalid Python and was "caught" by a `TypeError`; it was replaced,
+because a defect caught by a crash measures nothing about the assertions.
+
+## Two gaps this phase found
+
+**1. The relay role could not be triggered by losing communication.** Base
+reachability was computed from distance alone, so a partitioned drone sitting
+well within range still believed base was reachable — and `RELAY` is selected on
+exactly that flag. `NetworkModel.base_reachable_for` had been written for this
+and was called by nothing except its own unit test. The role that exists to keep
+the team connected could therefore only be triggered by flying too far away,
+which means the `partitioned` condition never exercised relay behaviour at all.
+
+Found by asking, end to end, who takes the relay role when the team is
+partitioned, and getting the answer "nobody". The sensor now consults the
+network model, and `base_reachability_range_only` in the defect catalogue
+guards it.
+
+**2. Task boards do not reconcile after a partition lifts.** There is no
+anti-entropy step, so each half keeps whatever it last believed. Observed: one
+half has sectors still `UNASSIGNED` that the other half completed, one sector is
+attributed to a drone that did not fly it, and one is left `CLAIMED` by a drone
+that never flew it — so a longer mission would fly that sector again. The flying
+itself is sound (every sector is covered), and the Phase 15 metrics count only
+sectors actually flown, so no reported number is affected.
+
+This is pinned by a test rather than fixed, because eventual consistency after
+a partition is a design decision rather than a bug to patch quietly. If
+reconciliation is implemented, that test fails and should be replaced with a
+convergence assertion.
+
+Separately, `RESERVE` is a role no agent holds while airborne for long: a drone
+with no task concludes there is no work remaining and lands, so by the time a
+relay is declared failed the only drone that could cover it is on the ground.
+Relay takeover is therefore reachable at component level but not in an
+assembled run. Both halves are pinned by tests.
+
+## What is still manual
+
+The AirSim regression set runs against `fake_airsim`, a model of the API
+contract, so it runs in CI. Flying the same scenarios against a real CARLA-Air
+build stays manual and is documented in `docs/SIM_TESTING.md`. The five
+regression missions 16.3 asks for are covered there and by
+`tests/test_airsim_path.py`.

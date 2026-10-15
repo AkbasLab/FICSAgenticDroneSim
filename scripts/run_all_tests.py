@@ -58,8 +58,13 @@ DEMOS = [
 
 def run(cmd):
     started = time.time()
+    # On Windows a piped child prints in the console's legacy encoding (cp1252)
+    # and crashes on any character outside it, so the child is told to use
+    # UTF-8 and the parent decodes it the same way.
     proc = subprocess.run([sys.executable] + cmd.split(), cwd=ROOT,
-                          capture_output=True, text=True)
+                          capture_output=True, text=True,
+                          env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                          encoding="utf-8", errors="replace")
     return proc.returncode, proc.stdout, proc.stderr, time.time() - started
 
 

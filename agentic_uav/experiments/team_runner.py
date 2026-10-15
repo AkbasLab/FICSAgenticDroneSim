@@ -54,7 +54,7 @@ def build_team(scenario, adapter_factory, latency_s=0.0, loss_rate=0.0,
                rng=None, battery_s=None):
     """Create one agent per vehicle, all sharing one bus and one ground truth."""
     truth = GroundTruth(scenario)
-    sensor = SensorModel(truth)
+    sensor = SensorModel(truth)          # no NetworkModel on this path
     bus = MessageBus(latency_s=latency_s, loss_rate=loss_rate, rng=rng)
 
     agents, tasks = [], {}
@@ -108,7 +108,6 @@ def build_allocating_team(scenario, adapter_factory, latency_s=0.0, loss_rate=0.
     from ..coordination.tasks import TaskBoard, tasks_from_scenario
 
     truth = GroundTruth(scenario)
-    sensor = SensorModel(truth)
 
     # Phase 10: a seeded NetworkModel, if a profile was given. The model can see
     # true positions (range and interference need them) because it is simulator
@@ -120,6 +119,9 @@ def build_allocating_team(scenario, adapter_factory, latency_s=0.0, loss_rate=0.
                            position_of=truth.true_position)
     bus = MessageBus(latency_s=latency_s, loss_rate=loss_rate, rng=rng,
                      network=net)
+    # Built after the network: base reachability depends on range *and* on any
+    # active partition, and the role manager selects RELAY on that flag.
+    sensor = SensorModel(truth, network=net)
     mission_tasks = tasks_from_scenario(scenario, include_relay=False)
 
     agents = []

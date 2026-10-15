@@ -95,10 +95,17 @@ class SensorModel:
     "what is out there?".
     """
 
-    def __init__(self, ground_truth: GroundTruth, comm_range_m: float = None):
+    def __init__(self, ground_truth: GroundTruth, comm_range_m: float = None,
+                 network=None):
         self._truth = ground_truth
         self._comm_range = (comm_range_m if comm_range_m is not None
                             else ground_truth.scenario.base.comm_range_m)
+        # Phase 16.2: the network model, when one is in play. Both this and the
+        # sensor live on the simulator side of the boundary, so consulting it
+        # here keeps the agent's single bridge to the world a single bridge -
+        # the agent still only asks "can I reach base?" and never sees the
+        # network object.
+        self._network = network
 
     def sense_targets(self, vehicle_id, path, speed_mps, now) -> List[Observation]:
         """Targets this drone genuinely observed along `path`.
@@ -140,9 +147,26 @@ class SensorModel:
                                        confidence=1.0))
         return out
 
-    def base_reachable(self, vehicle_id) -> bool:
+    def base_reachable(self, vehicle_id, now: float = None) -> bool:
+        """Whether this vehicle can currently reach the base station.
+
+        Two things can break contact and both must count: flying out of range,
+        and the network itself cutting the link (a partition).
+
+        Range alone was the original implementation, and it meant a partitioned
+        drone sitting on its pad still believed base was reachable. The RELAY
+        role is selected on exactly this flag, so the role that exists to keep
+        the team connected could never be triggered by a loss of
+        communication - only by distance. `NetworkModel.base_reachable_for`
+        had been written for this and was called by nothing but its own unit
+        test. Phase 16.2 found it by asking, end to end, who takes the relay
+        role when the team is partitioned, and getting the answer "nobody".
+        """
         me = self._truth.true_position(vehicle_id)
         if me is None:
             return False
         base = self._truth.scenario.base.position
-        return me.horizontal_distance_to(base) <= self._comm_range
+        in_range = me.horizontal_distance_to(base) <= self._comm_range
+        if not in_range or self._network is None or now is None:
+            return in_range
+        return bool(self._network.base_reachable_for(vehicle_id, now))

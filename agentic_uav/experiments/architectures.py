@@ -200,7 +200,6 @@ def build(spec_or_key, scenario, adapter_factory, condition=None, seed=None,
 
     # --- held constant across every architecture --------------------------
     truth = GroundTruth(scenario)
-    sensor = SensorModel(truth)
     limits = SafetyLimits.from_scenario(scenario)
     run_seed = scenario.random_seed if seed is None else seed
 
@@ -209,6 +208,9 @@ def build(spec_or_key, scenario, adapter_factory, condition=None, seed=None,
     net = NetworkModel(profile=profile, seed=run_seed,
                        position_of=truth.true_position) if profile else None
     bus = MessageBus(network=net)
+    # The sensor is built after the network because base reachability depends on
+    # both range and any active partition (Phase 16.2).
+    sensor = SensorModel(truth, network=net)
 
     mission_tasks = tasks_from_scenario(scenario, include_relay=False)
     weights = BidWeights() if sp.comms_health_in_bids \

@@ -552,7 +552,8 @@ class PersistentAgent:
         """
         if self.sensor is None:
             return
-        b.communication.base_reachable = self.sensor.base_reachable(self.vehicle_id)
+        b.communication.base_reachable = self.sensor.base_reachable(
+            self.vehicle_id, b.now)
 
     # --- communication (Phase 7) ---
 
