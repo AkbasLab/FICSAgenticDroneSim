@@ -69,6 +69,18 @@ class AgentRunReport:
     guardian_log: object = None         # GuardianLog: what the guardian blocked
 
 
+#: Optional live narration: a callable taking one line of text. When set,
+#: every decision, guardian verdict and skill result is reported as it happens.
+#:
+#: Off by default, so tests and mock runs print exactly what they always did.
+#: `scenario_manager.for_simulator` switches it on for --airsim runs. In the
+#: simulator a skill can take a minute of real time, and an agent that only
+#: prints its report at the end leaves the terminal silent for the whole
+#: flight - which makes a stuck drone and a drone flying out of the camera's
+#: view look identical, and makes a screen recording unreadable.
+NARRATE = None
+
+
 class PersistentAgent:
     def __init__(self, vehicle_id, adapter, policy=None, guardian=None,
                  home=None, cruise_altitude=-8.0, battery_total_s=900.0,
@@ -257,6 +269,8 @@ class PersistentAgent:
         # REPORT is an internal action (transmit completion), not a flight.
         if objective is Objective.REPORT:
             self._do_report(b)
+            found = ", ".join(sorted(b.detections)) if b.detections else "no targets"
+            self._say(f"{'REPORT':<16} -> sector done; {found}")
             self.log.finish(rec, objective=objective.value, outcome="reported")
             return True
 
@@ -275,6 +289,8 @@ class PersistentAgent:
 
         if guard.outcome is GuardianOutcome.REJECT_AND_REPLAN:
             # the command never executes; the agent is asked to think again
+            self._say(f"{'GUARDIAN':<16} -> REJECTED "
+                      f"{command.skill_type.value}: {guard.reason}")
             b.push(AgentEvent.SAFETY_REJECTED, guard.reason)
             self._guardian_effect(grec, "command blocked; agent asked to replan")
             self.log.finish(rec, objective=objective.value,
@@ -284,18 +300,25 @@ class PersistentAgent:
 
         if guard.outcome is not GuardianOutcome.APPROVE:
             b.push(AgentEvent.SAFETY_REJECTED, guard.reason)
+            proposed = command.skill_type.value
             command = guard.command
             objective = self._objective_for(command)
             override = guard.reason
+            self._say(f"{'GUARDIAN':<16} -> {guard.outcome.value}: {guard.reason}"
+                      f" (proposed {proposed}, flying {command.skill_type.value})")
 
         # tell the team what we are about to do, then do it
         self._announce(MessageType.INTENT_UPDATE,
                        {"objective": objective.value,
                         "skill": command.skill_type.value}, ttl_s=90.0)
 
+        self._say(f"{objective.value.upper():<16} -> {command.skill_type.value}"
+                  f"{self._target_text(command)}")
         self.guardian.begin(command)
         result = self.executor.execute(self.vehicle_id, command)
         self.guardian.end(command)
+        took = ((result.ended_at or 0.0) - (result.started_at or 0.0))
+        self._say(f"{'':<16}    {result.status.value} ({took:.1f}s)")
 
         b.record(result)                 # emits SKILL_SUCCEEDED/FAILED/TIMEOUT
         if hasattr(self.policy, "observe_result"):
@@ -311,6 +334,25 @@ class PersistentAgent:
         # heartbeat + status after acting, so peers learn where we ended up
         self._heartbeat()
         return True
+
+    # --- live narration (see NARRATE) ---
+
+    def _say(self, text):
+        if NARRATE is not None:
+            NARRATE(f"[{self.vehicle_id}] {text}")
+
+    @staticmethod
+    def _target_text(command):
+        for name in ("waypoint", "home", "point", "position"):
+            p = getattr(command, name, None)
+            if p is not None and hasattr(p, "x"):
+                return f" to ({p.x:.0f}, {p.y:.0f}, {-p.z:.0f} m up)"
+        if hasattr(command, "min_x"):
+            return (f" over ({command.min_x:.0f},{command.min_y:.0f})-"
+                    f"({command.max_x:.0f},{command.max_y:.0f})")
+        if hasattr(command, "target_altitude"):
+            return f" to {-command.target_altitude:.0f} m up"
+        return ""
 
     def run(self, task) -> AgentRunReport:
         """Fly the whole task to completion (single-agent convenience wrapper)."""

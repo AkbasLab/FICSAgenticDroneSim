@@ -130,7 +130,7 @@ def spawn_missing_drones(client, num_drones: int):
 
 
 def for_simulator(path, airsim):
-    """Swap a scenario for its `_sim` variant when flying in the simulator.
+    """Prepare a run for the simulator: pick the `_sim` scenario, narrate live.
 
     `search_relay_001.yaml` flies at 8 m, which is below the rooftops around the
     CARLA-Air Town10HD spawn point; drones flying it in the simulator run into
@@ -142,6 +142,13 @@ def for_simulator(path, airsim):
     """
     if not airsim:
         return path
+
+    # In the simulator every agent narrates its decisions and skill results as
+    # they happen; see persistent_agent.NARRATE. Imported here rather than at
+    # module level to keep the simulator package free of an agents dependency.
+    from ..agents import persistent_agent
+    persistent_agent.NARRATE = lambda line: print(line, flush=True)
+
     root, ext = os.path.splitext(path)
     if root.endswith("_sim"):
         return path
