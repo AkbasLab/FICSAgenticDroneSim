@@ -14,6 +14,22 @@ from . import navigation as nav
 from . import skills as sk
 
 
+#: Optional per-waypoint progress for multi-leg skills: a callable taking
+#: (vehicle_id, text). Off by default; `scenario_manager.for_simulator` turns it
+#: on for --airsim runs. An area sweep is one skill but twelve legs and around
+#: two minutes of real flight, and reporting only when the whole sweep ends left
+#: the terminal silent for all of it - indistinguishable from a stuck drone.
+PROGRESS = None
+
+#: A leg is declared stalled once it has taken this many times its expected
+#: flight time, plus a fixed allowance for acceleration and settling. Generous
+#: enough never to trigger on a leg that is actually flying (the mock reaches
+#: every leg in exactly its expected time), tight enough that a drone pinned
+#: against an obstacle fails in seconds rather than minutes.
+STALL_FACTOR = 3.0
+STALL_ALLOWANCE_S = 20.0
+
+
 class SkillExecutor:
     def __init__(self, adapter):
         self.adapter = adapter
@@ -95,12 +111,41 @@ class SkillExecutor:
     # --- composed skills ---
 
     def _follow(self, vehicle_id, command, started):
+        """Fly a list of waypoints under ONE time budget for the whole skill.
+
+        The command's timeout is the skill's contract: the whole sweep must
+        finish within it. The original loop handed the full timeout to *every*
+        leg, so a twelve-leg sweep with a 600 s timeout could take two hours,
+        and a drone pinned against an obstacle waited ten minutes per leg
+        before anything noticed. Each leg now gets the smaller of the budget
+        that remains and a stall limit derived from its own length.
+        """
         last = None
-        for wp in command.waypoints:
+        n = len(command.waypoints)
+        for i, wp in enumerate(command.waypoints, 1):
+            remaining = command.timeout_s - (self._now(vehicle_id) - started)
+            if remaining <= 0 and last is not None:
+                return self._result(vehicle_id, SkillType.FOLLOW_WAYPOINTS,
+                                    started, NavOutcome(
+                                        final_position=last.final_position,
+                                        elapsed_s=0.0, timed_out=True),
+                                    wp, command.tolerance_m)
+            here = self.adapter.get_position(vehicle_id)
+            expected = here.distance_to(wp) / max(command.speed_mps, 0.1)
+            leg_timeout = min(max(remaining, 1.0),
+                              STALL_FACTOR * expected + STALL_ALLOWANCE_S)
+            leg_started = self._now(vehicle_id)
             out = self.adapter.go_to_waypoint(vehicle_id, wp, command.speed_mps,
-                                              command.timeout_s)
+                                              leg_timeout)
             last = out
             reached = out.final_position.distance_to(wp) <= command.tolerance_m
+            if PROGRESS is not None:
+                took = self._now(vehicle_id) - leg_started
+                state = "reached" if reached else (
+                    "STALLED - giving up on this leg" if out.timed_out
+                    else "missed")
+                PROGRESS(vehicle_id, f"leg {i}/{n} -> ({wp.x:.0f}, {wp.y:.0f}) "
+                                     f"{state} ({took:.1f}s)")
             if not reached:
                 return self._result(vehicle_id, SkillType.FOLLOW_WAYPOINTS,
                                     started, out, wp, command.tolerance_m)

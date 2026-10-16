@@ -18,7 +18,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # (phase, label, path, expected test count or None for demos)
 SUITES = [
-    ("3",   "Skills + contracts",        "tests/test_skills.py", 12),
+    ("3",   "Skills + contracts",        "tests/test_skills.py", 18),
     ("1-2", "Behavior preservation",     "tests/test_behavior_preservation.py", 4),
     ("4",   "Mission scoring",           "tests/test_mission.py", 6),
     ("5",   "Persistent agent loop",     "tests/test_persistent_agent.py", 5),

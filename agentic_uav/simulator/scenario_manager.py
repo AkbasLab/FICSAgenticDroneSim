@@ -147,7 +147,10 @@ def for_simulator(path, airsim):
     # they happen; see persistent_agent.NARRATE. Imported here rather than at
     # module level to keep the simulator package free of an agents dependency.
     from ..agents import persistent_agent
+    from ..control import skill_executor
     persistent_agent.NARRATE = lambda line: print(line, flush=True)
+    skill_executor.PROGRESS = (
+        lambda vid, text: print(f"[{vid}] {'':<16}    {text}", flush=True))
 
     root, ext = os.path.splitext(path)
     if root.endswith("_sim"):

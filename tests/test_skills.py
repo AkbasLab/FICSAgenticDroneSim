@@ -93,5 +93,66 @@ for vid, wp in targets.items():
         all_ok = all_ok and res.status is SkillStatus.SUCCESS
 check("four-drone takeoff/waypoint/hold/return/land all succeed", all_ok)
 
+# 7) a multi-leg skill runs under ONE budget, and a stalled leg fails fast.
+#    The timeout used to be handed to every leg, so a twelve-leg sweep could
+#    take twelve times its timeout and a pinned drone waited the full timeout
+#    on each leg. Found when a CARLA-Air run went silent mid-sweep.
+
+
+class StuckOnLeg(MockVehicleAdapter):
+    """A vehicle that cannot make progress towards one particular waypoint:
+    it burns whatever time it is given and stays where it is."""
+
+    def __init__(self, stuck_x):
+        super().__init__(0.0)
+        self.stuck_x = stuck_x
+        self.leg_timeouts = []
+
+    def go_to_waypoint(self, vehicle_id, waypoint, speed_mps, timeout_s):
+        self.leg_timeouts.append(timeout_s)
+        if waypoint.x == self.stuck_x:
+            self._advance(vehicle_id, timeout_s)          # pinned in place
+            from agentic_uav.core.models import NavOutcome
+            return NavOutcome(final_position=self.get_position(vehicle_id),
+                              elapsed_s=timeout_s, timed_out=True)
+        return super().go_to_waypoint(vehicle_id, waypoint, speed_mps, timeout_s)
+
+
+a = StuckOnLeg(stuck_x=50.0)
+ex = SkillExecutor(a)
+ex.execute("D", sk.TakeOffCommand())
+t0 = a.now("D")
+r = ex.execute("D", sk.SearchRegionCommand(
+    min_x=10, min_y=10, max_x=50, max_y=50, altitude=-8.0,
+    lane_spacing_m=8.0, speed_mps=4.0, tolerance_m=1.5, timeout_s=600.0))
+spent = a.now("D") - t0
+check("a sweep with a stalled leg fails rather than reporting success",
+      r.status is not SkillStatus.SUCCESS)
+check("the stalled leg gives up in well under the 600 s skill timeout",
+      spent < 120.0)
+check("no leg is ever handed the whole skill timeout",
+      max(a.leg_timeouts) < 600.0)
+
+# A healthy sweep is unaffected: every leg is reached in its expected time.
+a, ex = fresh()
+ex.execute("D", sk.TakeOffCommand())
+r = ex.execute("D", sk.SearchRegionCommand(
+    min_x=10, min_y=10, max_x=50, max_y=50, altitude=-8.0,
+    lane_spacing_m=8.0, speed_mps=4.0, tolerance_m=1.5, timeout_s=600.0))
+check("a healthy sweep still succeeds", r.status is SkillStatus.SUCCESS)
+
+# And the budget is for the whole skill: a timeout shorter than the sweep
+# stops the sweep part-way instead of letting each leg run to it.
+a, ex = fresh()
+ex.execute("D", sk.TakeOffCommand())
+t0 = a.now("D")
+r = ex.execute("D", sk.SearchRegionCommand(
+    min_x=10, min_y=10, max_x=50, max_y=50, altitude=-8.0,
+    lane_spacing_m=8.0, speed_mps=4.0, tolerance_m=1.5, timeout_s=30.0))
+check("a 30 s budget stops a ~70 s sweep part-way",
+      r.status is not SkillStatus.SUCCESS)
+check("and the whole skill stays within roughly its budget",
+      a.now("D") - t0 <= 30.0 + 20.0)
+
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)
