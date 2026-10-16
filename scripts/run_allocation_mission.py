@@ -36,6 +36,8 @@ def main():
     ap.add_argument("--lease", type=float, default=None,
                     help="lease seconds (short values force re-allocation)")
     args = ap.parse_args()
+    from agentic_uav.simulator.scenario_manager import for_simulator
+    args.scenario = for_simulator(args.scenario, getattr(args, "airsim", False))
 
     scenario = load_scenario(args.scenario)
 

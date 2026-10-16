@@ -45,6 +45,8 @@ def main():
     ap.add_argument("--health", action="store_true", help="show health transitions")
     ap.add_argument("--airsim", action="store_true")
     args = ap.parse_args()
+    from agentic_uav.simulator.scenario_manager import for_simulator
+    args.scenario = for_simulator(args.scenario, getattr(args, "airsim", False))
 
     scenario = load_scenario(args.scenario)
 

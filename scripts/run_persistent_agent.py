@@ -39,6 +39,8 @@ def main():
     ap.add_argument("--log-json", default=None,
                     help="write full belief snapshots to a JSON file")
     args = ap.parse_args()
+    from agentic_uav.simulator.scenario_manager import for_simulator
+    args.scenario = for_simulator(args.scenario, getattr(args, "airsim", False))
 
     scenario = load_scenario(args.scenario)
     sector = next((s for s in scenario.sectors if s.sector_id == args.sector),

@@ -318,6 +318,8 @@ def main():
     ap.add_argument("--airsim", action="store_true",
                     help="fly the four-agent team mission in CARLA-Air")
     args = ap.parse_args()
+    from agentic_uav.simulator.scenario_manager import for_simulator
+    args.scenario = for_simulator(args.scenario, getattr(args, "airsim", False))
 
     scenario = load_scenario(args.scenario)
 

@@ -30,6 +30,8 @@ def main():
     ap.add_argument("--airsim", action="store_true",
                     help="fly on AirSim instead of the mock simulator")
     args = ap.parse_args()
+    from agentic_uav.simulator.scenario_manager import for_simulator
+    args.scenario = for_simulator(args.scenario, getattr(args, "airsim", False))
 
     scenario = load_scenario(args.scenario)
 
@@ -43,7 +45,19 @@ def main():
     else:
         adapter = MockVehicleAdapter(ground_z=0.0)
 
-    report = run_scripted_mission(scenario, adapter)
+    if args.airsim:
+        # Fly all four at once and narrate each skill as it finishes. A stuck
+        # leg gives up after four minutes rather than the default ten, so a
+        # drone pinned against an obstacle cannot stall a recording.
+        print(f"\n=== Canonical mission: {scenario.scenario_id} "
+              f"({len(scenario.vehicles)} drones, flying concurrently) ===\n",
+              flush=True)
+        report = run_scripted_mission(
+            scenario, adapter, concurrent=True, leg_timeout_s=240.0,
+            log=lambda line: print(line, flush=True))
+    else:
+        report = run_scripted_mission(scenario, adapter,
+                                      log=lambda line: print(line))
     _print_report(scenario, report)
     return 0 if report.success else 1
 

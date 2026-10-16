@@ -35,6 +35,8 @@ def main():
                     help="print each agent's team belief at the end")
     ap.add_argument("--log-json", default=None)
     args = ap.parse_args()
+    from agentic_uav.simulator.scenario_manager import for_simulator
+    args.scenario = for_simulator(args.scenario, getattr(args, "airsim", False))
 
     scenario = load_scenario(args.scenario)
 

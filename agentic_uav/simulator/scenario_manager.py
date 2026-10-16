@@ -127,3 +127,28 @@ def spawn_missing_drones(client, num_drones: int):
                 airsim.Quaternionr(0.0, 0.0, 0.0, 1.0),
             ),
         )
+
+
+def for_simulator(path, airsim):
+    """Swap a scenario for its `_sim` variant when flying in the simulator.
+
+    `search_relay_001.yaml` flies at 8 m, which is below the rooftops around the
+    CARLA-Air Town10HD spawn point; drones flying it in the simulator run into
+    buildings. `search_relay_001_sim.yaml` is the same mission at 30 m. Nothing
+    scored depends on altitude, so the two give comparable results.
+
+    Only switches when a `_sim` sibling exists, and says so on the terminal, so
+    a recording never silently flies a different file from the one named.
+    """
+    if not airsim:
+        return path
+    root, ext = os.path.splitext(path)
+    if root.endswith("_sim"):
+        return path
+    sim = root + "_sim" + ext
+    if os.path.exists(sim):
+        print(f"simulator: flying {os.path.basename(sim)} "
+              f"(same mission as {os.path.basename(path)}, at a height that "
+              f"clears the buildings)", flush=True)
+        return sim
+    return path
