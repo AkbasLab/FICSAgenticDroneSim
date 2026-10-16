@@ -473,6 +473,48 @@ def test_positions_are_reported_and_commanded_in_world_coordinates():
     assert world.positions["Drone3"][:2] == [5.0, 5.0]
 
 
+def test_dropped_moves_are_resent_and_the_sweep_completes():
+    """CARLA-Air intermittently returns from a move at once without moving the
+    drone. Each drop used to count as a navigation failure; three of them made
+    the agent abandon its sector and fly home with the search unfinished.
+
+    A dropped move (the drone did not go anywhere) is resent. A move that flew
+    and fell short is a real failure and must still be reported as one.
+    """
+    world = fake_airsim.install(drop_every=3)     # far worse than observed
+    from agentic_uav.agents.objectives import SearchTask
+    from agentic_uav.agents.persistent_agent import PersistentAgent
+    from agentic_uav.simulator.airsim_adapter import AirSimVehicleAdapter
+    from agentic_uav.simulator.ground_truth import GroundTruth, SensorModel
+    from agentic_uav.simulator.scenario_manager import load_scenario
+
+    sc = load_scenario(os.path.join(ROOT, "configs/missions/search_relay_001_sim.yaml"))
+    sector, v = sc.sectors[0], sc.vehicles[0]
+    truth = GroundTruth(sc)
+    adapter = AirSimVehicleAdapter()
+    agent = PersistentAgent(v.vehicle_id, adapter, home=v.start,
+                            battery_total_s=900, cruise_altitude=sector.altitude,
+                            sensor=SensorModel(truth), roster=truth.roster(),
+                            sector_ids=truth.sector_ids())
+    agent.belief.brief(sc)
+    report = agent.run(SearchTask("search_S1", sector, sc.base.position))
+
+    dropped = [c for c in world.calls if c[0] == "moveToPositionAsync:dropped"]
+    assert dropped, "the fake should have dropped some moves"
+    assert report.sector_searched, "dropped moves should not cost the sector"
+    assert report.completed and report.landed, report
+
+    # ...but a move that flies and falls short is still a failure, not resent.
+    fake_airsim.uninstall()
+    fake_airsim.install(arrival_error_m=5.0)
+    from agentic_uav.core.models import Position3D
+    ad = AirSimVehicleAdapter()
+    ad.takeoff("Drone1", -8.0, 30.0)
+    out = ad.go_to_waypoint("Drone1", Position3D(20.0, 0.0, -8.0), 5.0, 30.0)
+    assert out.final_position.distance_to(Position3D(20.0, 0.0, -8.0)) > 1.5
+    assert getattr(ad, "dropped_moves", 0) == 0, "a short arrival is not a drop"
+
+
 def test_each_vehicle_gets_its_own_client():
     """The concurrency fix: one MultirotorClient per vehicle, never shared."""
     fake_airsim.install()
@@ -519,6 +561,8 @@ if __name__ == "__main__":
         ("each vehicle gets its own client", test_each_vehicle_gets_its_own_client),
         ("positions reported and commanded in world coordinates",
          test_positions_are_reported_and_commanded_in_world_coordinates),
+        ("dropped moves are resent and the sweep completes",
+         test_dropped_moves_are_resent_and_the_sweep_completes),
     ]
     passed = failed = 0
     for name, fn in tests:

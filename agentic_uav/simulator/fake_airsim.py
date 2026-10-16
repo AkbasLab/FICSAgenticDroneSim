@@ -13,6 +13,9 @@ end to end on any machine. It models AirSim's *contract*, not its physics:
   - vehicles must be registered (or spawned) before they can be commanded;
   - `moveToPositionAsync` may leave the drone slightly off target (`arrival_error_m`);
   - a move can fail to complete at all (`fail_first_move`), as a real one can;
+  - moves can be dropped intermittently (`drop_every`): the call returns at
+    once and the drone never moves. CARLA-Air did exactly this on random legs
+    of an area sweep, returning in 0.0 s from a short leg and a long leg alike;
   - API control must be enabled and the vehicle armed before it will move.
 
 **This is not a substitute for flying it.** It cannot tell you whether a real
@@ -47,7 +50,7 @@ class FakeWorld:
     """Shared state for every client, mirroring one running simulator."""
 
     def __init__(self, arrival_error_m=0.0, fail_first_move=False,
-                 move_duration_s=0.0,
+                 move_duration_s=0.0, drop_every=0,
                  known_vehicles=("Drone1", "Drone2", "Drone3", "Drone4")):
         self.lock = threading.RLock()
         self.positions = {v: [0.0, 0.0, 0.0] for v in known_vehicles}
@@ -56,6 +59,7 @@ class FakeWorld:
         self.armed = set()
         self.arrival_error_m = arrival_error_m
         self.fail_first_move = fail_first_move
+        self.drop_every = drop_every
         # Real moves take real time. Setting this makes the fake burn wall clock
         # per move, so battery depletion and information ageing are exercised
         # the way they will be in the simulator.
@@ -152,6 +156,9 @@ class MultirotorClient:
                 if self._w.fail_first_move and self._w._moves == 1:
                     self._w.log("moveToPositionAsync:failed", vehicle_name)
                     return                      # drone simply doesn't get there
+                if self._w.drop_every and self._w._moves % self._w.drop_every == 0:
+                    self._w.log("moveToPositionAsync:dropped", vehicle_name)
+                    return                      # returns at once, never moves
                 e = self._w.arrival_error_m
                 off = e / math.sqrt(2.0) if e else 0.0
                 self._w.positions[vehicle_name] = [x + off, y + off, z]
@@ -174,7 +181,7 @@ DEFAULT_VEHICLES = ("Drone1", "Drone2", "Drone3", "Drone4")
 
 
 def install(arrival_error_m=0.0, fail_first_move=False, move_duration_s=0.0,
-            known_vehicles=None):
+            known_vehicles=None, drop_every=0):
     """Put a fake `airsim` into sys.modules. Returns the FakeWorld.
 
     `known_vehicles=None` means "a normally configured sim" (Drone1-4 declared in
@@ -186,7 +193,7 @@ def install(arrival_error_m=0.0, fail_first_move=False, move_duration_s=0.0,
     _world = FakeWorld(arrival_error_m=arrival_error_m,
                        fail_first_move=fail_first_move,
                        move_duration_s=move_duration_s,
-                       known_vehicles=vehicles)
+                       known_vehicles=vehicles, drop_every=drop_every)
 
     m = types.ModuleType("airsim")
     m.MultirotorClient = MultirotorClient

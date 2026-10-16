@@ -121,12 +121,43 @@ class AirSimVehicleAdapter:
         c.moveToZAsync(target_altitude, nav.CLIMB_SPEED, vehicle_name=vehicle_id).join()
         return self._outcome(vehicle_id, t0, timeout_s)
 
+    #: A move that leaves the drone within this distance of where it started
+    #: did not happen. See go_to_waypoint.
+    DROPPED_MOVE_M = 0.5
+    #: How many times a dropped move is sent again before giving up.
+    MAX_RESENDS = 3
+
     def go_to_waypoint(self, vehicle_id, waypoint, speed_mps, timeout_s) -> NavOutcome:
+        """Fly to a world-frame waypoint, resending any move AirSim drops.
+
+        CARLA-Air intermittently returns from `moveToPositionAsync(...).join()`
+        at once without moving the drone at all. Seen on random legs of an area
+        sweep - short and long, and a leg that was dropped once flew fine on
+        the next attempt. Each drop was reported to the agent as a navigation
+        failure, three of them used up its retry allowance, and it abandoned
+        the sector and flew home with the search unfinished.
+
+        A move that ends with the drone essentially where it started, and not
+        already at the target, is therefore sent again, within the same overall
+        time budget. A move that went somewhere and fell short is NOT resent -
+        that is a genuine navigation failure and the agent should hear about it.
+        """
         c = self._client_for(vehicle_id)
         t0 = time.time()
         x, y, z = self._local(vehicle_id, waypoint)
-        c.moveToPositionAsync(x, y, z, speed_mps,
-                              timeout_sec=timeout_s, vehicle_name=vehicle_id).join()
+        for attempt in range(self.MAX_RESENDS + 1):
+            budget = timeout_s - (time.time() - t0)
+            if budget <= 0:
+                break
+            before = self.get_position(vehicle_id)
+            c.moveToPositionAsync(x, y, z, speed_mps,
+                                  timeout_sec=budget, vehicle_name=vehicle_id).join()
+            after = self.get_position(vehicle_id)
+            moved = after.distance_to(before)
+            if moved > self.DROPPED_MOVE_M or after.distance_to(waypoint) <= 1.0:
+                break                       # it flew, or it was already there
+            self.dropped_moves = getattr(self, "dropped_moves", 0) + 1
+            time.sleep(0.2)                 # let the simulator settle, then resend
         return self._outcome(vehicle_id, t0, timeout_s)
 
     def turn_to_heading(self, vehicle_id, heading_deg, timeout_s) -> NavOutcome:
