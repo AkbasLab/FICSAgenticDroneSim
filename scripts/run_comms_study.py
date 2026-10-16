@@ -26,7 +26,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agentic_uav.coordination import comms_conditions as cc
 from agentic_uav.coordination.tasks import TaskStatus
-from agentic_uav.experiments.team_runner import build_allocating_team, run_team
+from agentic_uav.experiments.team_runner import (
+    build_allocating_team, run_team, run_team_threaded)
 from agentic_uav.simulator.mock_adapter import MockVehicleAdapter
 from agentic_uav.simulator.scenario_manager import load_scenario
 
@@ -36,12 +37,16 @@ DEFAULT_SCENARIO = os.path.join(
 
 
 def run_one(scenario, profile, seed, lease_s, heartbeat_s, factory=None):
+    threaded = factory is not None          # a simulator adapter was supplied
     factory = factory or (lambda vid: MockVehicleAdapter(0.0))
     agents, tasks, bus, _truth = build_allocating_team(
         scenario, factory,
         network=profile, seed=seed, lease_s=lease_s,
         heartbeat_interval_s=heartbeat_s)
-    report = run_team(agents, tasks, bus)
+    # In the simulator all four fly at once; on the mock they are interleaved
+    # on simulated time, which is exact and reproducible.
+    report = (run_team_threaded(agents, tasks, bus) if threaded
+              else run_team(agents, tasks, bus))
 
     completed = {}
     for a in agents:
@@ -58,7 +63,8 @@ def main():
     ap.add_argument("--condition", default=None,
                     help="run just one: nominal | moderate | severe | partitioned")
     ap.add_argument("--lease", type=float, default=150.0)
-    ap.add_argument("--heartbeat", type=float, default=15.0)
+    ap.add_argument("--heartbeat", type=float, default=None,
+                    help="default 15 on the mock, 30 in the simulator")
     ap.add_argument("--estimates", action="store_true",
                     help="show each agent's ESTIMATE of link quality")
     ap.add_argument("--messages", action="store_true")
@@ -84,6 +90,9 @@ def main():
         factory = lambda vid: shared
 
     names = [args.condition] if args.condition else cc.ORDER
+    if args.heartbeat is None:
+        from agentic_uav.simulator.scenario_manager import SIM_HEARTBEAT_S
+        args.heartbeat = SIM_HEARTBEAT_S if args.airsim else 15.0
 
     print(f"\n=== Communication study (seed {args.seed}) ===")
     print("conditions are experimental parameters, not a model of a real radio:\n")

@@ -163,6 +163,11 @@ class LLMAgentPolicy:
         if getattr(belief, "no_work_remaining", False):
             return self._fallback_objective(belief, cause="no_work_remaining")
 
+        # Standing by for a teammate is the same kind of fact: there is nothing
+        # to choose until that teammate finishes or is declared lost.
+        if getattr(belief, "standing_by", False):
+            return self._fallback_objective(belief, cause="standing_by")
+
         if belief.critical_battery or belief.low_battery:
             return self._fallback_objective(
                 belief, cause="battery_reserved_for_safety")

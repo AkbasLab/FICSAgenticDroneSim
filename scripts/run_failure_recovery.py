@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agentic_uav.coordination.tasks import TaskStatus
 from agentic_uav.experiments.team_runner import (
-    build_allocating_team, run_team_with_faults)
+    build_allocating_team, run_team_threaded, run_team_with_faults)
 from agentic_uav.simulator.mock_adapter import MockVehicleAdapter
 from agentic_uav.simulator.scenario_manager import load_scenario
 
@@ -32,15 +32,17 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--scenario", default=DEFAULT_SCENARIO)
     ap.add_argument("--kill", default="Drone2", help="which drone to stop")
-    ap.add_argument("--at", type=float, default=5.0,
-                    help="sim time (s) at which to stop it")
+    ap.add_argument("--at", type=float, default=None,
+                    help="time (s) at which to stop it (default 5 on the mock, "
+                         "25 in the simulator)")
     ap.add_argument("--lease", type=float, default=150.0,
                     help="task lease seconds. Must exceed the longest skill "
                          "(~70s sweep) or a busy drone gets its sector stolen; "
                          "failure detection, not the lease, is what frees a "
                          "dead drone's work quickly.")
-    ap.add_argument("--heartbeat", type=float, default=15.0,
-                    help="expected heartbeat interval, drives failure detection")
+    ap.add_argument("--heartbeat", type=float, default=None,
+                    help="expected heartbeat interval, drives failure detection "
+                         "(default 15 on the mock, 30 in the simulator)")
     ap.add_argument("--roles", action="store_true", help="show role changes")
     ap.add_argument("--health", action="store_true", help="show health transitions")
     ap.add_argument("--airsim", action="store_true")
@@ -62,10 +64,21 @@ def main():
 
     agents, tasks, bus, _truth = build_allocating_team(
         scenario, factory, lease_s=args.lease,
-        heartbeat_interval_s=args.heartbeat)
+        heartbeat_interval_s=_heartbeat(args))
 
-    report = run_team_with_faults(agents, tasks, bus,
-                                  stop_at={args.kill: args.at})
+    if args.airsim:
+        # All four fly at once on the shared real clock. Take-off alone is about
+        # 20 s in CARLA-Air, so the default kill lands after the target drone
+        # has claimed its sector and set off, but before it starts sweeping -
+        # which leaves real work for the team to notice and reclaim.
+        at = 25.0 if args.at is None else args.at
+        print(f"\n!! {args.kill} will be switched off at t={at:.0f}s "
+              f"(its teammates will not be told)\n", flush=True)
+        report = run_team_threaded(agents, tasks, bus, stop_at={args.kill: at})
+    else:
+        at = 5.0 if args.at is None else args.at
+        report = run_team_with_faults(agents, tasks, bus,
+                                      stop_at={args.kill: at})
 
     ok = _print(report, agents, scenario, args.kill)
     if args.roles:
@@ -73,6 +86,15 @@ def main():
     if args.health:
         _print_health(agents, args.kill)
     return 0 if ok else 1
+
+
+def _heartbeat(args):
+    if args.heartbeat is not None:
+        return args.heartbeat
+    if args.airsim:
+        from agentic_uav.simulator.scenario_manager import SIM_HEARTBEAT_S
+        return SIM_HEARTBEAT_S
+    return 15.0
 
 
 def _print(report, agents, scenario, killed):

@@ -37,7 +37,11 @@ AIRSIM_SCRIPTS = [
     ("scripts/run_team_mission.py", "--airsim --messages --beliefs"),
     ("scripts/run_allocation_mission.py", "--airsim"),
     ("scripts/run_allocation_mission.py", "--airsim --bids --conflicts"),
-    ("scripts/run_failure_recovery.py", "--airsim --roles --health"),
+    # Timings scaled to the 50 ms fake moves, keeping the real proportions:
+    # sweep 0.6 s < presumed-lost 2 s (4 x 0.5) < lease 3 s, and the kill lands
+    # after take-off and transit but before the sweep.
+    ("scripts/run_failure_recovery.py",
+     "--airsim --roles --health --at 0.12 --heartbeat 0.5 --lease 3"),
     ("scripts/run_comms_study.py", "--condition nominal --estimates"),
     ("scripts/run_guardian_demo.py", "--live"),
     ("scripts/run_llm_agents.py", ""),
@@ -45,7 +49,10 @@ AIRSIM_SCRIPTS = [
     # are the commands someone will run with a recorder going, so they are
     # exactly the ones that must not fail for the first time on camera.
     ("scripts/run_comms_study.py", "--airsim"),
-    ("scripts/run_comms_study.py", "--airsim --condition partitioned --estimates"),
+    # moderate rather than partitioned: the partition window is defined in
+    # seconds and in the simulator those are real seconds, so a partitioned
+    # run takes minutes. Partitions are covered on the mock.
+    ("scripts/run_comms_study.py", "--airsim --condition moderate --estimates"),
     ("scripts/run_guardian_demo.py", "--airsim"),
     ("scripts/run_guardian_demo.py", "--airsim --repeat"),
     ("scripts/run_llm_agents.py", "--airsim"),
@@ -57,7 +64,11 @@ _HARNESS = """
 import sys
 sys.path.insert(0, {root!r})
 from agentic_uav.simulator import fake_airsim
-fake_airsim.install()
+# Moves take a little real time, so drones flying concurrently interleave the
+# way they do in CARLA-Air. With instant moves, one thread could finish its
+# whole mission - and take another drone's sector - before the next thread had
+# started, which no real flight can do.
+fake_airsim.install(move_duration_s=0.05)
 sys.argv = ['{script}'] + {flags!r}
 import runpy
 runpy.run_path({script!r}, run_name='__main__')
@@ -515,6 +526,64 @@ def test_dropped_moves_are_resent_and_the_sweep_completes():
     assert getattr(ad, "dropped_moves", 0) == 0, "a short arrival is not a drop"
 
 
+def test_recovery_works_with_the_fleet_flying_in_parallel():
+    """Phase 9 as it runs in CARLA-Air: four drones in parallel on one clock.
+
+    Three defects hid here because the fault-injecting runner was the serial
+    one and the fake simulator's moves were instant:
+      - flown one at a time on a shared clock, waiting drones sent no
+        heartbeats and could be written off mid-mission;
+      - survivors whose own work was done landed before the lost drone was
+        declared failed, so its sector was never searched;
+      - a drone waiting out the bid window for that sector ran through its
+        idle allowance in milliseconds, decided there was no work, and landed
+        having just won it.
+    Thread timing varies run to run, so this repeats the trial.
+    """
+    import time as _time
+    from agentic_uav.agents import persistent_agent as pa, search_policy as sp
+    from agentic_uav.coordination.tasks import TaskStatus
+    from agentic_uav.experiments import team_runner as tr
+    from agentic_uav.simulator.scenario_manager import (
+        load_scenario, spawn_missing_drones)
+
+    saved = (pa.STAND_BY_FOR_TEAMMATES, pa.GOSSIP_COMPLETIONS, sp.STAND_BY_HOLD_S)
+    # the same simulator behaviours scenario_manager.for_simulator switches on
+    pa.STAND_BY_FOR_TEAMMATES, pa.GOSSIP_COMPLETIONS, sp.STAND_BY_HOLD_S = True, True, 0.5
+    try:
+        for attempt in range(3):
+            fake_airsim.install(move_duration_s=0.5)
+            from agentic_uav.simulator.airsim_adapter import AirSimVehicleAdapter
+            sc = load_scenario(os.path.join(
+                ROOT, "configs/missions/search_relay_001_sim.yaml"))
+            ad = AirSimVehicleAdapter()
+            spawn_missing_drones(ad.client, 4)
+            # real proportions: sweep 6 s < presumed lost 8.8 s < lease 10 s
+            agents, tasks, bus, _ = tr.build_allocating_team(
+                sc, lambda v: ad, lease_s=10.0, heartbeat_interval_s=2.2,
+                bid_window_s=0.5)
+            report = tr.run_team_threaded(agents, tasks, bus,
+                                          stop_at={"Drone2": 1.2})
+            flown = {}
+            for a in agents:
+                for r in a.belief.local_map.searched_regions:
+                    if r.by_vehicle == a.vehicle_id:
+                        flown.setdefault(r.region_id, []).append(a.vehicle_id)
+            survivors = [a for a in agents if a.vehicle_id != "Drone2"]
+            fake_airsim.uninstall()
+
+            assert "Drone2" in report.stopped, report.stopped
+            assert "Drone2" not in flown.get("S2", []), \
+                f"Drone2 should be switched off before it sweeps: {flown}"
+            assert sorted(flown) == ["S1", "S2", "S3", "S4"], \
+                f"attempt {attempt + 1}: every sector must be searched: {flown}"
+            assert all(len(v) == 1 for v in flown.values()), \
+                f"attempt {attempt + 1}: no sector flown twice: {flown}"
+            assert all(a.report().landed for a in survivors)
+    finally:
+        pa.STAND_BY_FOR_TEAMMATES, pa.GOSSIP_COMPLETIONS, sp.STAND_BY_HOLD_S = saved
+
+
 def test_each_vehicle_gets_its_own_client():
     """The concurrency fix: one MultirotorClient per vehicle, never shared."""
     fake_airsim.install()
@@ -563,6 +632,8 @@ if __name__ == "__main__":
          test_positions_are_reported_and_commanded_in_world_coordinates),
         ("dropped moves are resent and the sweep completes",
          test_dropped_moves_are_resent_and_the_sweep_completes),
+        ("recovery works with the fleet flying in parallel",
+         test_recovery_works_with_the_fleet_flying_in_parallel),
     ]
     passed = failed = 0
     for name, fn in tests:

@@ -241,7 +241,7 @@ def run_team_with_faults(agents, tasks, bus, stop_at=None,
     return report
 
 
-def run_team_threaded(agents, tasks, bus) -> TeamRunReport:
+def run_team_threaded(agents, tasks, bus, stop_at=None) -> TeamRunReport:
     """Fly all agents at the same time, one thread each - for AirSim.
 
     `run_team` interleaves agents on a *simulated* clock, which is exact and
@@ -251,16 +251,44 @@ def run_team_threaded(agents, tasks, bus) -> TeamRunReport:
     flies concurrently and messages cross mid-flight. Thread ordering makes the
     run non-deterministic, so use this for the simulator and `run_team` for
     reproducible experiments.
+
+    `stop_at` is {vehicle_id: seconds}, as in `run_team_with_faults`. Before each
+    step a drone checks the shared clock; once it passes its time the drone is
+    switched off - no more flight, sensing, messages or heartbeats - and nobody
+    is told. As on the mock, a fault lands on a skill boundary: a drone inside a
+    sweep finishes that sweep first. Physically the simulator leaves it
+    hovering where it was, silent.
+
+    This exists because the fault-injecting runner was the serial one. In the
+    simulator that flew one drone at a time on a clock all four share, so while
+    one drone flew an 80 s sweep the other three sent no heartbeats and renewed
+    no leases - the very signals Phase 9 detects failure from. A recovery run
+    there ended with a sector nobody completed.
     """
     import threading
 
-    errors = {}
+    stop_at = dict(stop_at or {})
+    errors, stopped_at = {}, {}
+    lock = threading.Lock()
 
     def fly(agent):
         try:
-            agent.start(tasks[agent.vehicle_id])
-            while agent.step():
-                pass
+            agent.start(tasks.get(agent.vehicle_id))
+            deadline = stop_at.get(agent.vehicle_id)
+            while True:
+                # The adapter's clock, not the belief's: the belief is only
+                # updated at the start of a step, so after an 80 s sweep it
+                # still reads the time the sweep began. Checking it let a drone
+                # due to be stopped before its sweep fly the whole sweep first.
+                clock = (agent.adapter.now(agent.vehicle_id)
+                         if hasattr(agent.adapter, "now") else agent.belief.now)
+                if deadline is not None and clock >= deadline:
+                    agent.stopped = True
+                    with lock:
+                        stopped_at[agent.vehicle_id] = clock
+                    break
+                if not agent.step():
+                    break
         except Exception as e:                      # keep one drone's failure local
             errors[agent.vehicle_id] = repr(e)
 
@@ -275,6 +303,7 @@ def run_team_threaded(agents, tasks, bus) -> TeamRunReport:
         agents={a.vehicle_id: a.report() for a in agents},
         message_stats=bus.stats(), message_log=bus.log, bus=bus,
         total_steps=sum(a.steps for a in agents))
+    report.stopped = stopped_at
     if errors:
         report.errors = errors
     return report

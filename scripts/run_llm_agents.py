@@ -29,7 +29,8 @@ from agentic_uav.agents.llm_policy import LLMAgentPolicy
 from agentic_uav.agents.safety_guardian import SafetyGuardian, SafetyLimits
 from agentic_uav.coordination.comms_conditions import condition as comms_condition
 from agentic_uav.experiments.llm_log import combined_stats
-from agentic_uav.experiments.team_runner import build_allocating_team, run_team
+from agentic_uav.experiments.team_runner import (
+    build_allocating_team, run_team, run_team_threaded)
 from agentic_uav.simulator.mock_adapter import MockVehicleAdapter
 from agentic_uav.simulator.scenario_manager import load_scenario
 
@@ -222,6 +223,15 @@ def run_unsafe(scenario):
 # --- the team mission ---
 
 
+def _sim_heartbeat(adapter_factory):
+    """In the simulator, a heartbeat slow enough that a drone mid-sweep is not
+    written off as lost (see scenario_manager.SIM_HEARTBEAT_S)."""
+    if adapter_factory is None:
+        return {}
+    from agentic_uav.simulator.scenario_manager import SIM_HEARTBEAT_S
+    return {"heartbeat_interval_s": SIM_HEARTBEAT_S}
+
+
 def run_mission(scenario, backend_name, model=None, condition=None,
                 show_decisions=False, save_dir=None, timeout_s=None,
                 adapter_factory=None):
@@ -253,7 +263,8 @@ def run_mission(scenario, backend_name, model=None, condition=None,
         scenario, adapter_factory or (lambda vid: MockVehicleAdapter(0.0)),
         network=comms_condition(condition) if condition else None,
         policy_factory=make_policy,
-        guardian_factory=lambda vid: SafetyGuardian(limits=limits))
+        guardian_factory=lambda vid: SafetyGuardian(limits=limits),
+        **_sim_heartbeat(adapter_factory))
 
     print(f"  agents    : {len(agents)} "
           f"({len({id(p) for p in policies.values()})} distinct policy objects, "
@@ -261,7 +272,10 @@ def run_mission(scenario, backend_name, model=None, condition=None,
     if condition:
         print(f"  comms     : {condition}")
 
-    report = run_team(agents, tasks, bus)
+    # In the simulator all four fly at once (adapter_factory is only passed
+    # with --airsim); on the mock they are interleaved on simulated time.
+    report = (run_team_threaded(agents, tasks, bus) if adapter_factory
+              else run_team(agents, tasks, bus))
 
     searched = report.sectors_searched
     landed = all(r.landed for r in report.agents.values())

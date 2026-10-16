@@ -21,6 +21,7 @@ from ..control import skills as sk
 from ..control.skill_executor import SkillExecutor, _lawnmower
 from ..coordination.protocols import MessageType
 from ..coordination.role_manager import RoleManager
+from ..coordination.tasks import TaskStatus
 from ..coordination.roles import HealthState, Role
 from ..core.enums import SkillStatus
 from ..core.models import Position3D
@@ -79,6 +80,33 @@ class AgentRunReport:
 #: flight - which makes a stuck drone and a drone flying out of the camera's
 #: view look identical, and makes a screen recording unreadable.
 NARRATE = None
+
+#: Phase 9 in the simulator: an agent with no task of its own stays airborne
+#: while a teammate still holds unfinished work, instead of landing.
+#:
+#: Without it, recovery only worked by luck of timing. An agent whose own work
+#: was done concluded "no work remaining" as soon as nothing was *open* - even
+#: though a silent teammate still held a sector - and landed. On the mock the
+#: serial runner made everything slow enough that failure detection usually
+#: fired first. With the fleet flying in parallel, as it does in CARLA-Air, the
+#: survivors were back on their pads before the lost drone was declared failed,
+#: and its sector was never searched.
+#: Off by default for now, so mock runs and every reported result are exactly
+#: as before; `scenario_manager.for_simulator` switches it on for --airsim runs.
+#: Whether it should become the default everywhere is pending review.
+STAND_BY_FOR_TEAMMATES = False
+#: Every status update also carries the tasks this agent knows are complete, so
+#: a "task complete" message lost to the network is corrected by the next
+#: heartbeat instead of never. Without it, under 10% loss in the simulator,
+#: drones stood by for minutes waiting on sectors a teammate had already
+#: finished - and a lapsed lease could send a drone to re-fly one. Off on the
+#: mock for now; `scenario_manager.for_simulator` switches it on.
+GOSSIP_COMPLETIONS = False
+
+#: How long a standing-by agent waits before giving up and landing anyway,
+#: as a multiple of the task lease. A holder that goes silent loses its lease
+#: within one lease period, so two of them is ample.
+STAND_BY_LEASES = 2.0
 
 
 class PersistentAgent:
@@ -219,7 +247,14 @@ class PersistentAgent:
             # chances for work to appear, then bring it home rather than
             # leaving it hovering. Quitting the loop airborne would strand it.
             self._idle_rounds += 1
-            if self._idle_rounds > MAX_IDLE_ROUNDS:
+            # Not while work is being bid on, or while standing by for a
+            # teammate. In real time an agent waiting out a 5 s bid window has
+            # nothing to execute, so it ran through these rounds in
+            # milliseconds, concluded there was no work, and landed - having
+            # just won the lost teammate's sector it was waiting for.
+            still_wanted = STAND_BY_FOR_TEAMMATES and (
+                self._waiting_for_work(b) or getattr(b, "standing_by", False))
+            if self._idle_rounds > MAX_IDLE_ROUNDS and not still_wanted:
                 b.no_work_remaining = True
             b.push(AgentEvent.COMMS_CHANGED,
                    f"idle with no task ({self._idle_rounds})")
@@ -257,6 +292,11 @@ class PersistentAgent:
             self.log.finish(rec, objective=objective.value,
                             outcome="bidding" if waiting else "no_work")
             if waiting:
+                if STAND_BY_FOR_TEAMMATES:
+                    # real time: let the bid window actually pass instead of
+                    # re-deciding thousands of times while it does
+                    import time as _time
+                    _time.sleep(0.1)
                 return True
             # Nothing left to win. That is NOT a reason to stop stepping: an
             # airborne drone still has to come home. Returning False here ended
@@ -547,8 +587,28 @@ class PersistentAgent:
         if self.task is None and mine:
             self._adopt_task(b, mine[0])
 
-        # nothing left for anyone: head home
-        b.no_work_remaining = not mine and not alloc.open_for_me(b.now)
+        # nothing left for anyone: head home - unless a teammate is still
+        # holding unfinished work, in which case stand by for it (see
+        # STAND_BY_FOR_TEAMMATES)
+        nothing_for_me = not mine and not alloc.open_for_me(b.now)
+        outstanding = []
+        if nothing_for_me and STAND_BY_FOR_TEAMMATES and hasattr(
+                alloc, "outstanding_elsewhere"):
+            outstanding = alloc.outstanding_elsewhere(b.now)
+        if outstanding:
+            if b.standing_by_since is None:
+                b.standing_by_since = b.now
+                self._say(f"{'STAND_BY':<16} -> own work done; staying up while "
+                          f"{', '.join(sorted(t.task_id.replace('SEARCH_SECTOR_', '') for t in outstanding))}"
+                          f" is still in progress")
+            waited = b.now - b.standing_by_since
+            gave_up = waited > STAND_BY_LEASES * alloc.lease_s
+            b.standing_by = not gave_up
+            b.no_work_remaining = gave_up
+        else:
+            b.standing_by = False
+            b.standing_by_since = None
+            b.no_work_remaining = nothing_for_me
 
     def _adopt_task(self, b, mission_task):
         """Turn a won MissionTask into the SearchTask the flight policy executes."""
@@ -674,12 +734,18 @@ class PersistentAgent:
         """Cheap liveness + state share, sent after each action."""
         b = self.belief
         self._announce(MessageType.HEARTBEAT, {"status": "ok"}, ttl_s=90.0)
-        self._announce(MessageType.STATUS_UPDATE, {
+        status = {
             "status": "ok",
             "task": b.self_.current_task,
             "skill": b.self_.current_skill,
             "searched": list(b.local_map.searched_ids),
-        }, ttl_s=180.0)
+        }
+        if GOSSIP_COMPLETIONS and self.allocator is not None \
+                and hasattr(self.allocator, "board"):
+            status["completed"] = sorted(
+                t.task_id for t in self.allocator.board.all()
+                if t.status is TaskStatus.COMPLETE)
+        self._announce(MessageType.STATUS_UPDATE, status, ttl_s=180.0)
 
     # --- helpers ---
 

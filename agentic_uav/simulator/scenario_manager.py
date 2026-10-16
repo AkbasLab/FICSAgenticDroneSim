@@ -129,6 +129,15 @@ def spawn_missing_drones(client, num_drones: int):
         )
 
 
+#: Heartbeat interval for simulator runs. A teammate is presumed lost (and its
+#: sector taken over) after 4 missed intervals, and a drone sends no heartbeat
+#: while it is inside a skill. With the 15-20 s used on the mock, a drone was
+#: written off after 60-80 s of silence - shorter than one 81-84 s area sweep in
+#: CARLA-Air, so a healthy drone mid-sweep could have its sector taken from it.
+#: 30 s puts the threshold at 120 s, clear of the longest skill.
+SIM_HEARTBEAT_S = 30.0
+
+
 def for_simulator(path, airsim):
     """Prepare a run for the simulator: pick the `_sim` scenario, narrate live.
 
@@ -149,6 +158,8 @@ def for_simulator(path, airsim):
     from ..agents import persistent_agent
     from ..control import skill_executor
     persistent_agent.NARRATE = lambda line: print(line, flush=True)
+    persistent_agent.STAND_BY_FOR_TEAMMATES = True
+    persistent_agent.GOSSIP_COMPLETIONS = True
     skill_executor.PROGRESS = (
         lambda vid, text: print(f"[{vid}] {'':<16}    {text}", flush=True))
 

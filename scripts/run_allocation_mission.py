@@ -51,8 +51,14 @@ def main():
     else:
         factory = lambda vid: MockVehicleAdapter(ground_z=0.0)
 
+    extra = {}
+    if args.airsim:
+        # see scenario_manager.SIM_HEARTBEAT_S: a drone mid-sweep must not be
+        # written off as lost for being silent
+        from agentic_uav.simulator.scenario_manager import SIM_HEARTBEAT_S
+        extra["heartbeat_interval_s"] = SIM_HEARTBEAT_S
     agents, tasks, bus, _truth = build_allocating_team(
-        scenario, factory, lease_s=args.lease)
+        scenario, factory, lease_s=args.lease, **extra)
     report = (run_team_threaded(agents, tasks, bus) if args.airsim
               else run_team(agents, tasks, bus))
     if report.errors:

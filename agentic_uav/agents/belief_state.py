@@ -64,6 +64,8 @@ class BeliefState:
         # workload term in its bids), and whether any work is left at all.
         self.held_task_ids = []
         self.no_work_remaining = False
+        self.standing_by = False          # airborne with no task, waiting on a teammate
+        self.standing_by_since = None
 
         # --- bookkeeping ---
         self.last_result = None

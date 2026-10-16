@@ -129,6 +129,19 @@ class TaskAllocator:
                 out.append(t)
         return sorted(out, key=lambda t: (-t.priority, t.task_id))
 
+    def outstanding_elsewhere(self, now):
+        """Unfinished tasks currently held by a teammate.
+
+        Not work this agent can take - the holder may be busy with it - but work
+        the team has not finished. If the holder is lost, these are exactly the
+        tasks someone will have to pick up, so an agent with nothing of its own
+        should still be airborne when that happens.
+        """
+        return [t for t in self.board.all()
+                if t.status not in (TaskStatus.COMPLETE, TaskStatus.FAILED)
+                and t.assigned_agent not in (None, self.vehicle_id)
+                and not t.is_open(now)]
+
     def has_capacity(self, now):
         return len(self.my_tasks(now)) < self.max_concurrent
 
@@ -212,6 +225,16 @@ class TaskAllocator:
             if local is not None and local.status is not TaskStatus.COMPLETE:
                 local.complete()
                 changed = True
+
+        elif t is MessageType.STATUS_UPDATE and p.get("completed"):
+            # Completion gossip (see persistent_agent.GOSSIP_COMPLETIONS): a
+            # teammate's view of what is done. Repairs a lost TASK_COMPLETE.
+            for tid in p["completed"]:
+                local = self.board.get(tid)
+                if local is not None and local.status is not TaskStatus.COMPLETE:
+                    local.complete()
+                    self.bids.pop(tid, None)
+                    changed = True
 
         return changed
 

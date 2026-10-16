@@ -23,6 +23,7 @@ DEFAULT_SPEED = 4.0
 DEFAULT_TOLERANCE = 1.5
 LANE_SPACING = 8.0
 LEG_TIMEOUT = 600.0
+STAND_BY_HOLD_S = 5.0     # one hover while standing by for a teammate
 
 
 class SearchAgentPolicy:
@@ -38,6 +39,13 @@ class SearchAgentPolicy:
         if belief.task is None:
             if getattr(belief, "no_work_remaining", False):
                 return Objective.LAND if belief.near_home else Objective.RETURN_HOME
+            if getattr(belief, "standing_by", False) and belief.airborne:
+                # Waiting on a teammate's unfinished work: hover over our own pad
+                # so we are ready to take it over, but never at the expense of
+                # the battery we need to land.
+                if belief.low_battery or belief.critical_battery:
+                    return Objective.LAND if belief.near_home else Objective.RETURN_HOME
+                return Objective.HOLD if belief.near_home else Objective.RETURN_HOME
             return Objective.CLAIM_TASK
 
         # safety reaction: too many nav failures -> abandon task, come home.
@@ -100,6 +108,11 @@ class SearchAgentPolicy:
 
         if objective is Objective.LAND:
             return sk.LandCommand(timeout_s=LEG_TIMEOUT)
+
+        if objective is Objective.HOLD:
+            # A short hover, then re-decide. Short enough that a teammate's
+            # failure is acted on promptly; long enough not to flood the bus.
+            return sk.HoldPositionCommand(duration_s=STAND_BY_HOLD_S)
 
         # REPORT and DONE have no flight skill
         return None
