@@ -49,7 +49,11 @@ WALL_CLOCK_ALLOWED = {"airsim_adapter.py", "fake_airsim.py", "clock.py",
                       "experiment_config.py", "experiment_runner.py",
                       "llm_backends.py", "llm_log.py", "llm_policy.py",
                       "guardian_log.py", "decision_log.py", "events.py",
-                      "logger.py"}
+                      "logger.py",
+                      # measures latency (MVL, model response time), which is
+                      # wall-clock by definition; the timings are reported,
+                      # never used to make a decision
+                      "guardrail_benchmark.py"}
 
 #: The one module allowed to hold a random number generator.
 RNG_ALLOWED = {"network_model.py"}

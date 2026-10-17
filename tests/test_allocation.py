@@ -271,6 +271,32 @@ def test_every_agent_ends_up_home_and_landed():
         assert a.belief.near_home, f"{a.vehicle_id} did not return"
 
 
+def test_completion_gossip_repairs_a_lost_task_complete():
+    """A status update that lists completed tasks marks them complete locally.
+
+    Under message loss a TASK_COMPLETE can be dropped; without a repair the
+    receiving board keeps the task open forever, and in the simulator that
+    left standing-by drones hovering for minutes over finished work.
+    """
+    from agentic_uav.coordination.protocols import AgentMessage, MessageType
+    board = TaskBoard(tasks_from_scenario(_scenario()))
+    al = TaskAllocator("Drone3", board)
+    task = board.get("SEARCH_SECTOR_S1")
+    task.claim("Drone1", 0.1, now=0.0, lease_s=150.0)
+    msg = AgentMessage(message_type=MessageType.STATUS_UPDATE, sender_id="Drone1",
+                       recipient_ids=["*"], mission_id="", timestamp=5.0,
+                       sequence_number=1, time_to_live_s=60.0,
+                       payload={"status": "ok", "completed": ["SEARCH_SECTOR_S1"]})
+    al.on_message(msg, _belief("Drone3"))
+    assert board.get("SEARCH_SECTOR_S1").status is TaskStatus.COMPLETE
+    # and a status update without the field changes nothing
+    other = board.get("SEARCH_SECTOR_S2")
+    before = other.status
+    msg.payload = {"status": "ok"}
+    al.on_message(msg, _belief("Drone3"))
+    assert board.get("SEARCH_SECTOR_S2").status is before
+
+
 if __name__ == "__main__":
     tests = [
         ("MissionTask has the required fields", test_mission_task_has_required_fields),
@@ -298,6 +324,8 @@ if __name__ == "__main__":
         ("allocation is deterministic", test_allocation_is_deterministic),
         ("every agent returns home and lands",
          test_every_agent_ends_up_home_and_landed),
+        ("completion gossip repairs a lost TASK_COMPLETE",
+         test_completion_gossip_repairs_a_lost_task_complete),
     ]
     passed = failed = 0
     for name, fn in tests:

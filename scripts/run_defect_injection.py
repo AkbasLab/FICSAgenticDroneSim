@@ -141,13 +141,80 @@ DEFECTS = [
      "    def _check_separation(self, target, belief) -> SafetyCheck:",
      "the geofence check passes everything, so a command outside the "
      "operating area reaches the vehicle"),
+
+    # --- defects first found in real CARLA-Air runs ----------------------
+    # Each was invisible to the suite when it was found, and seen only by
+    # flying. They are here so the exit criterion covers what the simulator
+    # taught us, not just what we thought to test for. Each is now caught by
+    # the fake simulator, without launching CARLA-Air.
+    ("airsim_frame_offset", "simulator",
+     "agentic_uav/simulator/airsim_adapter.py",
+     "        return Position3D(p.x_val + ox, p.y_val + oy, p.z_val)",
+     "        return Position3D(p.x_val, p.y_val, p.z_val)",
+     "positions are passed through in each drone's own spawn frame, so four "
+     "drones spawned 4 m apart all report (0, 0, 0) and every bid is identical",
+     ["tests/test_airsim_path.py::"
+      "test_positions_are_reported_and_commanded_in_world_coordinates"]),
+
+    ("dropped_moves_not_resent", "simulator",
+     "agentic_uav/simulator/airsim_adapter.py",
+     "    MAX_RESENDS = 3",
+     "    MAX_RESENDS = 0",
+     "a move the simulator returns from without moving counts as a navigation "
+     "failure, and three of them make a drone abandon its sector",
+     ["tests/test_airsim_path.py::"
+      "test_dropped_moves_are_resent_and_the_sweep_completes"]),
+
+    ("sweep_timeout_per_leg", "skills",
+     "agentic_uav/control/skill_executor.py",
+     "            leg_timeout = min(max(remaining, 1.0),\n"
+     "                              STALL_FACTOR * expected + STALL_ALLOWANCE_S)",
+     "            leg_timeout = command.timeout_s",
+     "every leg of a sweep gets the whole skill's timeout, so a pinned drone "
+     "waits ten minutes per leg",
+     ["tests/test_skills.py"]),
+
+    ("no_stand_by_for_teammates", "recovery",
+     "agentic_uav/agents/persistent_agent.py",
+     "        if outstanding:",
+     "        if False and outstanding:",
+     "survivors land as soon as their own work is done, before a lost "
+     "teammate is noticed, and its sector is never searched",
+     ["tests/test_airsim_regression.py::test_4_task_reassignment_during_flight"]),
+
+    ("completion_gossip_ignored", "communication",
+     "agentic_uav/coordination/task_allocator.py",
+     '        elif t is MessageType.STATUS_UPDATE and p.get("completed"):',
+     "        elif False:",
+     "a lost TASK_COMPLETE is never repaired, so standing-by drones wait on "
+     "finished work and a lapsed lease sends a drone to re-fly it",
+     ["tests/test_allocation.py"]),
 ]
 
 
 def _suite_fails(workdir, suite, timeout_s=300):
-    """True if the suite reports failure in the damaged copy."""
+    """True if the suite reports failure in the damaged copy.
+
+    `suite` is a test file, or `file::function` to run one test - used for the
+    AirSim-path defects, whose test files are too slow to run whole for every
+    injected defect.
+    """
+    cmd = [sys.executable, suite]
+    if "::" in suite:
+        path, func = suite.split("::", 1)
+        mod = os.path.splitext(os.path.basename(path))[0]
+        cmd = [sys.executable, "-c", (
+            "import sys; sys.path.insert(0, 'tests'); sys.path.insert(0, '.')\n"
+            f"import {mod} as m\n"
+            "from agentic_uav.simulator import fake_airsim\n"
+            "try:\n"
+            f"    m.{func}()\n"
+            "except AssertionError as e:\n"
+            "    print('FAIL', e); sys.exit(1)\n"
+            "finally:\n"
+            "    fake_airsim.uninstall()\n")]
     try:
-        p = subprocess.run([sys.executable, suite], cwd=workdir,
+        p = subprocess.run(cmd, cwd=workdir,
                            capture_output=True, text=True, timeout=timeout_s,
                            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
                            encoding="utf-8", errors="replace")
@@ -174,7 +241,8 @@ def _copy_repo(dst):
 
 
 def run_defect(defect, verbose=False):
-    name, area, path, find, replace, _why = defect
+    name, area, path, find, replace, _why = defect[:6]
+    suites = defect[6] if len(defect) > 6 else SUITES
     with tempfile.TemporaryDirectory(prefix=f"defect_{name}_") as tmp:
         work = os.path.join(tmp, "repo")
         _copy_repo(work)
@@ -190,7 +258,7 @@ def run_defect(defect, verbose=False):
             f.write(src.replace(find, replace))
 
         caught_by = []
-        for suite in SUITES:
+        for suite in suites:
             failed, detail = _suite_fails(work, suite)
             if failed:
                 caught_by.append((os.path.basename(suite), detail))
@@ -219,7 +287,7 @@ def main():
             return 2
 
     if args.list:
-        for name, area, path, _f, _r, why in DEFECTS:
+        for name, area, path, _f, _r, why, *_ in DEFECTS:
             print(f"{name:32s} [{area}]  {path}\n    {why}")
         return 0
 

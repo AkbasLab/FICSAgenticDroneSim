@@ -24,7 +24,7 @@ SUITES = [
     ("5",   "Persistent agent loop",     "tests/test_persistent_agent.py", 5),
     ("6",   "Belief state + truth split", "tests/test_belief_state.py", 11),
     ("7",   "Message protocol",          "tests/test_messaging.py", 14),
-    ("8",   "Decentralized allocation",  "tests/test_allocation.py", 21),
+    ("8",   "Decentralized allocation",  "tests/test_allocation.py", 22),
     ("9",   "Roles + failure recovery",  "tests/test_roles_recovery.py", 22),
     ("10",  "Degraded comms model",      "tests/test_network.py", 30),
     ("11",  "Runtime-safety guardian",   "tests/test_guardian.py", 45),
@@ -36,6 +36,7 @@ SUITES = [
     ("16",  "Determinism",               "tests/test_determinism.py", 28),
     ("B",   "Guardrail benchmark",       "tests/test_guardrail_benchmark.py", 59),
     ("3-12", "AirSim code path (fake sim)", "tests/test_airsim_path.py", 20),
+    ("16",  "AirSim regression missions", "tests/test_airsim_regression.py", 5),
 ]
 
 DEMOS = [

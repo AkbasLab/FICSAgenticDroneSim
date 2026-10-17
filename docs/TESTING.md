@@ -393,7 +393,7 @@ to a real invariant, applied to a throwaway copy of the repository; the
 simulator-free suites run against the damaged copy, and the defect counts as
 caught only if a suite fails.
 
-**11 of 11 caught**, across allocation, communication, roles, belief and safety:
+**16 of 16 caught**: eleven written up front, across allocation, communication, roles, belief and safety, plus five first found by flying in CARLA-Air:
 
 | Defect | Breaks |
 |---|---|
@@ -408,6 +408,24 @@ caught only if a suite fails.
 | `failure_on_first_miss` | a briefly quiet drone is declared dead |
 | `beliefs_never_stale` | a stale peer position is treated as current |
 | `geofence_always_passes` | a command outside the operating area reaches the vehicle |
+| `airsim_frame_offset` | every drone reports (0, 0, 0) in its own spawn frame; all bids identical |
+| `dropped_moves_not_resent` | a move AirSim silently drops counts as a failure; three abandon a sector |
+| `sweep_timeout_per_leg` | each sweep leg gets the whole timeout; a pinned drone waits 10 min per leg |
+| `no_stand_by_for_teammates` | survivors land before a lost teammate is noticed; its sector is never searched |
+| `completion_gossip_ignored` | a lost "task complete" is never repaired; drones wait on finished work |
+
+The last five were each invisible to the suite when they were found - they
+appeared only in real simulator runs - and each is now caught by the fake
+simulator without launching CARLA-Air. That is the exit criterion working as
+intended: the simulator is where a new class of defect is discovered, and the
+suite is where it is kept from coming back.
+
+One defect found in the simulator is deliberately **not** in the catalogue: a
+drone waiting out a bid window in real time ran through its idle allowance and
+landed having just won a task. It depends on thread timing and appeared in
+about one run in five, so no single test run catches it reliably. It is fixed,
+and `test_recovery_works_with_the_fleet_flying_in_parallel` repeats its trial
+three times to raise the odds, but it is the honest exception to the claim.
 
 A mutation that no longer matches its source is reported as `BROKEN` rather
 than as caught, so the catalogue cannot rot into always-passing. One early
@@ -447,6 +465,22 @@ with no task concludes there is no work remaining and lands, so by the time a
 relay is declared failed the only drone that could cover it is on the ground.
 Relay takeover is therefore reachable at component level but not in an
 assembled run. Both halves are pinned by tests.
+
+## 16.3 AirSim regression missions
+
+`tests/test_airsim_regression.py` holds the five missions 16.3 names, one test
+each: single-drone waypoint, two-drone non-conflicting, four-drone search, task
+reassignment during flight, and return-home fallback.
+
+```bash
+python tests/test_airsim_regression.py           # fake AirSim - runs in CI
+python tests/test_airsim_regression.py --real    # live CARLA-Air
+```
+
+On the fake, moves take real time and the timings are scaled while keeping the
+proportions that matter (sweep < presumed-lost threshold < lease). With
+`--real` the same five assertions run against the simulator at real timings -
+the "designated machine" half of 16.5.
 
 ## What is still manual
 
