@@ -156,6 +156,12 @@ MIN_ALTITUDE = -2.0      # metres NED; below this is effectively ground level
 # as airborne and land it first. Disarming while airborne cuts the motors.
 AIRBORNE_MARGIN = 1.0    # metres
 
+# How close to the end of a flight a polled ground contact must be to count as
+# evidence of landing. Generous enough to cover the teardown descent and the
+# offset between the monitor's clock and one drone's flight, far enough from the
+# start to exclude the reset drop, which also touches the ground.
+LANDING_CONTACT_WINDOW = 8.0   # seconds
+
 # Bounds on `land`, because an unbounded one does not merely fail -- it strands an
 # armed aircraft in mid air and never returns. Seen three times on 2026-10-06.
 # A descent from 60 m at 2 m/s is 30 s, so 90 s cannot cut a legitimate one short.
@@ -457,6 +463,26 @@ def is_ground(object_name: str) -> bool:
 # 0.14 m of penetration against it mid-mission. A simulator artifact, counted
 # separately so it cannot inflate an obstacle count.
 CAMERA_OBJECTS = ("spectatorpawn", "cameraactor", "defaultpawn")
+
+
+def landing_contact(drone: str, flight_seconds: float,
+                    polled: Iterable[dict]) -> dict | None:
+    """The polled ground contact that shows `drone` finished on the ground.
+
+    Returns the contact, or None if there isn't one. Pure: no simulator, no
+    clock, so it can be tested.
+
+    A flight touches the ground twice. Once near the START, when `reset_world`
+    drops the aircraft at the map origin and it falls -- that proves nothing
+    about how the flight ended. And once at the END, on landing. Only the
+    second counts, which is what the window is for.
+    """
+    cutoff = flight_seconds - LANDING_CONTACT_WINDOW
+    late = [c for c in polled
+            if c.get("drone") == drone
+            and c.get("is_ground")
+            and c.get("last_at_s", -1) >= cutoff]
+    return late[-1] if late else None
 
 
 def classify_contact(object_name: str, drones: Iterable[str] = ()) -> str:
@@ -1806,6 +1832,40 @@ def fly_plans(client, records: list[PlanRecord], host: str = "127.0.0.1",
         thread.join()
 
     separation = monitor.stop()
+
+    # ---------------------------------------------------- landing, re-decided
+    #
+    # `landed_on_ground` is computed inside fly() from ONE post-teardown read of
+    # simGetCollisionInfo, and that read is timing-dependent: AirSim clears
+    # has_collided once contact ends, so whether the flag is still set when
+    # fly() looks is luck.
+    #
+    # It matters for exactly one mission. M05 flies 25 m out, where the terrain
+    # is about 0.8 m higher than where it armed, so it comes to rest 2.01 m
+    # above its arming ground_z and fails the 1.5 m height test. Its landing
+    # therefore rests entirely on contact evidence.
+    #
+    # Measured: identical flights, 22.2 s and a final height of 27.24 in both,
+    # reported landed on 2026-10-09 and NOT landed on 2026-10-19. The 9 October
+    # block's "24/24 landed" was true by coincidence rather than by measurement.
+    #
+    # The 10 Hz poll does not have the problem -- it caught the terrain contact
+    # at t+21.94 of a 22.2 s flight -- so the landing check now uses it. The
+    # single read is kept as the first test, because when it fires it is
+    # correct; the poll only ever adds evidence, never removes it.
+    polled = separation.get("collisions_polled") or []
+    for outcome in outcomes:
+        outcome["landed_evidence"] = "height or contact at teardown"
+        if outcome["landed_on_ground"]:
+            continue
+        contact = landing_contact(outcome["drone"], outcome["flight_seconds"],
+                                  polled)
+        if contact:
+            outcome["landed_on_ground"] = True
+            outcome["landed_evidence"] = (
+                "polled ground contact with %s at t+%.2fs"
+                % (contact["object"], contact["last_at_s"]))
+
     # A separation figure only exists when there were two drones to measure
     # between. The monitor runs for a single drone as well, because collisions
     # need polling and proximity simply does not apply -- so `measured` being

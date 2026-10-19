@@ -269,3 +269,69 @@ class GroundBarrierTests(unittest.TestCase):
         with self.assertRaises(agent.GroundReferenceError):
             agent.validate_grounds("Drone3")
         self.assertNotIn("Drone3", agent._GROUND_REFERENCE)
+
+
+class LandingContactTests(unittest.TestCase):
+    """Deciding a landing from polled contacts rather than one lucky read.
+
+    `landed_on_ground` is computed in fly() from a single post-teardown
+    simGetCollisionInfo, and that read is timing-dependent: AirSim clears
+    has_collided once contact ends. M05 is the mission it matters for -- it
+    flies 25 m out onto higher terrain and rests 2.01 m above its arming
+    ground_z, failing the 1.5 m height test, so its landing rests entirely on
+    contact evidence.
+
+    Measured: identical flights, 22.2 s and a final height of 27.24 both times,
+    reported LANDED on 2026-10-09 and NOT LANDED on 2026-10-19. The earlier
+    block's 24/24 was true by coincidence. The 10 Hz poll saw the contact in
+    both cases.
+    """
+
+    GROUND = "Town10HD_Terrain_GroundNode_1088"
+
+    def contact(self, drone="Drone1", obj=None, at=21.94, is_ground=True):
+        return {"drone": drone, "object": obj or self.GROUND,
+                "is_ground": is_ground, "last_at_s": at}
+
+    def test_the_real_m05_case(self):
+        """The reset drop at t+2.20 and the landing at t+21.94, as recorded."""
+        polled = [self.contact(obj="SM_seaM", at=2.20),
+                  self.contact(at=21.94)]
+        found = agent.landing_contact("Drone1", 22.2, polled)
+        self.assertIsNotNone(found)
+        self.assertEqual(found["object"], self.GROUND)
+
+    def test_the_reset_drop_alone_is_not_a_landing(self):
+        """Touching the ground at the START proves nothing about the end."""
+        polled = [self.contact(obj="SM_seaM", at=2.20)]
+        self.assertIsNone(agent.landing_contact("Drone1", 22.2, polled))
+
+    def test_no_contacts_at_all(self):
+        self.assertIsNone(agent.landing_contact("Drone1", 22.2, []))
+
+    def test_a_non_ground_contact_does_not_count(self):
+        """Hitting a building at the end is not landing."""
+        polled = [self.contact(obj="BP_Hotel", at=21.9, is_ground=False)]
+        self.assertIsNone(agent.landing_contact("Drone1", 22.2, polled))
+
+    def test_another_drone_s_contact_does_not_count(self):
+        polled = [self.contact(drone="Drone2", at=21.9)]
+        self.assertIsNone(agent.landing_contact("Drone1", 22.2, polled))
+
+    def test_the_window_boundary(self):
+        inside = 22.2 - agent.LANDING_CONTACT_WINDOW
+        self.assertIsNotNone(
+            agent.landing_contact("Drone1", 22.2, [self.contact(at=inside)]))
+        self.assertIsNone(
+            agent.landing_contact("Drone1", 22.2, [self.contact(at=inside - 0.1)]))
+
+    def test_the_latest_contact_is_the_one_reported(self):
+        polled = [self.contact(obj="first", at=16.0),
+                  self.contact(obj="last", at=21.9)]
+        self.assertEqual(agent.landing_contact("Drone1", 22.2, polled)["object"],
+                         "last")
+
+    def test_a_short_flight_still_works(self):
+        """A 5 s flight has a negative cutoff; everything of its own counts."""
+        self.assertIsNotNone(
+            agent.landing_contact("Drone1", 5.0, [self.contact(at=4.8)]))
