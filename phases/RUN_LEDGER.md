@@ -274,36 +274,48 @@ against the mock adapter, roughly 1,920 runs, requiring no simulator and no GPU.
 
 ---
 
-## 4b. Two context lengths, on purpose
+## 4b. Context length, and why it is 98,304
 
-From 2026-10-19 the protocol runs `llama3.3:70b` at its **full 131,072-token
-context** on **two H100s**. It previously ran at 4,096 on one.
+From 2026-10-19 the protocol declares **`num_ctx = 98304`** -- 96K, the largest
+context that fits entirely in one H100 alongside the weights.
 
-**The old value was a hardware compromise, not a modelling choice.** A 70B at
-full context needs about 43 GB of KV cache on top of 42 GB of weights -- roughly
-85 GB -- and an 80 GB card answers that by moving 67% of the model onto CPU
-cores. Pinning 4,096 was how the model was kept entirely on the GPU. That is a
-defensible engineering decision and an awkward thing to have to explain in a
-paper, because a reviewer is entitled to ask whether the cap affected the
-results.
+### The arithmetic
 
-**So the 4,096 runs are kept, and the question gets an answer instead of an
-argument.** At `temperature 0` with prompts of a few hundred tokens, context
-length pre-allocates cache and does not change the computation, so the plans
-should be **identical**. Comparing the two sets tests that rather than asserting
-it.
+| | MiB |
+|---|---|
+| H100 PCIe | 81,559 |
+| weights, `llama3.3:70b` Q4_K_M *(measured)* | 42,007 |
+| KV cache at 0.3125 MiB/token, 98,304 tokens | 30,720 |
+| **total** | **72,727**, leaving 8.8 GB |
 
-| | 4,096 | 131,072 |
-|---|---|---|
-| Hardware | one H100, 80 GB | **two** H100s, 160 GB |
-| Request | `ppn=48:gpus=1,mem=64gb` | `ppn=96:gpus=2,mem=128gb` |
-| Server | `OLLAMA_CONTEXT_LENGTH=4096` | **no cap set** |
-| Placement | 100% GPU | 100% GPU |
-| Expected plans | — | identical to the 4,096 set |
+The model's own maximum of 131,072 needs 40,960 MiB of cache and totals
+**82,967** -- over the card by **1,408 MiB**. Ollama does not refuse; it moves
+about 67% of the model onto CPU cores and carries on, far slower, which is no
+longer the measurement intended. **Missing by 1.4 GB is the whole reason a
+second GPU appeared to be necessary**, and a two-GPU job estimated a 12-hour
+wait.
 
-If the plans differ, that is a finding and belongs in the phase log. If they do
-not, the cap is shown to have been irrelevant to what was measured, and the
-earlier runs lose nothing by having used it.
+### Why this is sizing, not capping
+
+Ollama reserves the cache for the context **declared**, not the context used.
+So `num_ctx` is a memory reservation, not a limit on anything the model may do.
+
+Measured from the real prompt: the longest request in the mission set is
+**1,302 characters, about 326 tokens**, plus a 512-token reply cap -- roughly
+**838 tokens**. 98,304 is therefore **117x** what the task can consume.
+
+That matters for the write-up. "Did capping the context affect your results?"
+can be answered by re-running the whole experiment on more hardware, or by
+observing that the prompt is 326 tokens against a 98,304 window. The second is
+stronger: it shows the limit could never be **reached**, not merely that it
+happened not to be -- and it costs no queue time and no card somebody else could
+use.
+
+### What this means for earlier runs
+
+The runs of 6 and 9 October used `num_ctx = 4096`. By the same argument their
+plans cannot have been affected either: 4,096 was already 4.9x the 838 tokens
+needed. They remain valid, and no comparison run is required to establish it.
 
 ---
 
