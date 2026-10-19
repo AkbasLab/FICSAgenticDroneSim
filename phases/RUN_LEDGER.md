@@ -274,6 +274,39 @@ against the mock adapter, roughly 1,920 runs, requiring no simulator and no GPU.
 
 ---
 
+## 4b. Two context lengths, on purpose
+
+From 2026-10-19 the protocol runs `llama3.3:70b` at its **full 131,072-token
+context** on **two H100s**. It previously ran at 4,096 on one.
+
+**The old value was a hardware compromise, not a modelling choice.** A 70B at
+full context needs about 43 GB of KV cache on top of 42 GB of weights -- roughly
+85 GB -- and an 80 GB card answers that by moving 67% of the model onto CPU
+cores. Pinning 4,096 was how the model was kept entirely on the GPU. That is a
+defensible engineering decision and an awkward thing to have to explain in a
+paper, because a reviewer is entitled to ask whether the cap affected the
+results.
+
+**So the 4,096 runs are kept, and the question gets an answer instead of an
+argument.** At `temperature 0` with prompts of a few hundred tokens, context
+length pre-allocates cache and does not change the computation, so the plans
+should be **identical**. Comparing the two sets tests that rather than asserting
+it.
+
+| | 4,096 | 131,072 |
+|---|---|---|
+| Hardware | one H100, 80 GB | **two** H100s, 160 GB |
+| Request | `ppn=48:gpus=1,mem=64gb` | `ppn=96:gpus=2,mem=128gb` |
+| Server | `OLLAMA_CONTEXT_LENGTH=4096` | **no cap set** |
+| Placement | 100% GPU | 100% GPU |
+| Expected plans | — | identical to the 4,096 set |
+
+If the plans differ, that is a finding and belongs in the phase log. If they do
+not, the cap is shown to have been irrelevant to what was measured, and the
+earlier runs lose nothing by having used it.
+
+---
+
 ## 5. Conditions of the valid data
 
 Recorded here because a run's conditions are part of the result.

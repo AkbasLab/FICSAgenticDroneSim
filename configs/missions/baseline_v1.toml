@@ -94,11 +94,29 @@ num_gpu     = 999    # layers offloaded to the GPU; 999 means all of them.
                      # It is per request, so sending 0 to a GPU server makes
                      # that server reload the model onto CPU cores -- measured
                      # 2026-10-06, it would throw a 70B off an H100.
-num_ctx     = 4096   # pinned deliberately. Unset, Ollama uses the model's own
-                     # maximum (131072 for llama3.3), whose KV cache for a 70B
-                     # is ~43 GB on top of 42 GB of weights -- too big for an
-                     # 80 GB card, so it splits 67%/33% CPU/GPU. Pinning also
-                     # stops the value depending on each Ollama version.
+num_ctx     = 131072 # the model's own maximum, declared explicitly rather than
+                     # left unset, because unset makes the value depend on the
+                     # Ollama version rather than on this file.
+                     #
+                     # CHANGED 2026-10-19, from 4096. The old value was chosen
+                     # to fit ONE H100: a 70B at 131072 needs ~43 GB of KV cache
+                     # on top of 42 GB of weights, about 85 GB, and an 80 GB
+                     # card answers that by moving 67% of the model to the CPU.
+                     # 4096 was therefore a hardware compromise, not a
+                     # modelling choice -- and a reviewer is entitled to ask
+                     # whether it affected the results.
+                     #
+                     # It now runs at the model's full context on TWO H100s
+                     # (160 GB), which needs ppn=96:gpus=2 on this cluster. The
+                     # server must also be started WITHOUT
+                     # OLLAMA_CONTEXT_LENGTH, which caps what it will allocate
+                     # regardless of what a request asks for.
+                     #
+                     # EXPECTED RESULT: identical plans. At temperature 0 with
+                     # prompts of a few hundred tokens, context length
+                     # pre-allocates cache and does not change the computation.
+                     # The 4096 runs are kept precisely so that can be checked
+                     # rather than asserted -- see the run ledger.
 temperature = 0      # what makes repeated runs comparable
 num_predict = 512
 num_thread  = 12

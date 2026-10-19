@@ -129,6 +129,10 @@ def normalise_endpoint(endpoint: str) -> str:
 # whole model on the GPU and makes the number comparable between machines
 # instead of depending on each Ollama version's default.
 OLLAMA_OPTIONS = {
+    # The LAPTOP's defaults, not the study's. The runner always sends the
+    # protocol block from the mission config, which since 2026-10-19 asks for
+    # the model's full 131072 context on two H100s. These values are what a
+    # bare import gets on a machine whose VRAM belongs to the simulator.
     "num_gpu": 0,
     "num_ctx": 4096,
     "temperature": 0,
