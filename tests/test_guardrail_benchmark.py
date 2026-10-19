@@ -519,7 +519,24 @@ def test_repeated_runs_report_mean_and_spread():
         refused = False
     except ValueError:
         refused = True
-    check("a resume must use the same number of repeats", refused)
+    check("a resume cannot drop runs", refused)
+
+
+def test_one_finished_run_can_be_extended_to_three():
+    """Taner: 'you already have one test, two more tests can be good'."""
+    first = gb.run_benchmark(gb.ScriptedModel(default=REFUSE, name="g"))
+    asked = []
+
+    def answer(pid, text):
+        asked.append(pid)
+        return REFUSE
+    out = gb.run_benchmark(gb.ScriptedModel(default=answer, name="g"), repeat=3,
+                           resume_from=json.loads(json.dumps(first)))
+    check("only the two new runs are sent", len(asked) == 2 * len(PROMPTS), f"{len(asked)}")
+    check("the result covers three runs", len(out["per_run"]) == 3
+          and len(out["prompts"]) == 3 * len(PROMPTS))
+    check("run 1 is the earlier run, kept as it was",
+          all(p["reused"] for p in out["prompts"][:len(PROMPTS)]))
 
 
 def test_each_repeat_gets_its_own_seed():

@@ -104,6 +104,17 @@ prompts that failed and keeps the others exactly as they were - same model,
 same suite, or it refuses. A result with any backend errors stays out of
 `--table` until it has been resumed to completion.
 
+## Averaging across temperatures
+
+```powershell
+python scripts/summarise_benchmark_runs.py --csv results/benchmark/summary.csv
+```
+
+For each model: mean ± sd per temperature, mean ± sd over all runs pooled
+(3 temperatures × 5 = 15), and a Kruskal-Wallis p-value per metric across the
+temperatures (p < 0.05 = temperature made a difference). Kruskal-Wallis rather
+than ANOVA because TRA moves in steps of 1/12 and latency is skewed.
+
 ## Things to tell Taner before the numbers go in the paper
 
 1. **Same harness for all three rows.** If the existing Llama row came from a

@@ -145,12 +145,23 @@ def main():
         slug += f"_x{args.repeat}"
     path = os.path.join(args.out, f"{slug}.json")
     earlier = None
+    found = None
     if args.resume:
-        if os.path.exists(path):
-            with open(path, encoding="utf-8") as f:
+        # An --repeat N run can grow out of a smaller earlier run of the same
+        # model and temperature: the earlier runs are kept as runs 1..k.
+        base = path[:-len(f"_x{args.repeat}.json")] if args.repeat > 1 else path[:-5]
+        candidates = [path] + [f"{base}_x{k}.json" for k in range(args.repeat - 1, 1, -1)] \
+            + [f"{base}.json"]
+        found = next((c for c in candidates if os.path.exists(c)), None)
+        if found:
+            with open(found, encoding="utf-8") as f:
                 earlier = json.load(f)
-            left = sum(1 for d in earlier["prompts"] if d["outcome"] == "backend_error")
-            print(f"Resuming {path}: {left} prompt(s) to re-send\n")
+            have = earlier.get("repeat", 1)
+            per = len(earlier["prompts"]) // max(have, 1)
+            left = (sum(1 for d in earlier["prompts"] if d["outcome"] == "backend_error")
+                    + (args.repeat - have) * per)
+            grow = f", extending {have} run(s) to {args.repeat}" if have < args.repeat else ""
+            print(f"Resuming {found}{grow}: {left} prompt(s) to send\n")
         else:
             print(f"Nothing to resume at {path} - running the full suite\n")
     try:
@@ -182,6 +193,12 @@ def main():
         print(f"WARNING: {w}")
     print(f"\nsaved {path}")
     left = result["counters"]["backend_errors"]
+    if found and found != path and not left:
+        # its runs now live inside the bigger result; keep the file but stop
+        # --table from listing the same run twice
+        os.replace(found, found + ".merged")
+        print(f"{found} is now part of {os.path.basename(path)} "
+              f"(kept as {os.path.basename(found)}.merged)")
     if result.get("stopped") == "daily quota used up":
         print(f"\nSTOPPED: this key's daily quota for {slug} is used up. "
               f"{left} prompt(s) still to run.\nThe answered prompts are saved. "

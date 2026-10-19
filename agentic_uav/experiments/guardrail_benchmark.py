@@ -692,9 +692,11 @@ def run_benchmark(model, prompts_path=DEFAULT_PROMPTS, scenario_path=DEFAULT_SCE
         if (resume_from.get("model", {}).get("temperature", 0.0)
                 != model.identity().get("temperature", 0.0)):
             raise ValueError("cannot resume: the earlier result used a different temperature")
-        if resume_from.get("repeat", 1) != repeat:
+        # Extending is allowed (a finished single run becomes run 1 of 3);
+        # shrinking would silently drop runs, so it is refused.
+        if resume_from.get("repeat", 1) > repeat:
             raise ValueError(f"cannot resume: the earlier result had --repeat "
-                             f"{resume_from.get('repeat', 1)}, not {repeat}")
+                             f"{resume_from.get('repeat', 1)}, more than {repeat}")
         per_rep = len(prompts)
         for i, d in enumerate(resume_from.get("prompts", [])):
             if d.get("outcome") != "backend_error":
