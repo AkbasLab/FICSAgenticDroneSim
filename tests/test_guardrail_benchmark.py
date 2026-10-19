@@ -394,6 +394,20 @@ def test_a_permanent_error_fails_at_once():
     check("it is recorded as a backend error, not a result", r.outcome == "backend_error")
 
 
+def test_a_wrong_model_name_stops_the_run_at_the_first_prompt():
+    class Gone(gb.ScriptedModel):
+        def ask(self, instruction):
+            raise gb.BenchmarkError("gemini: 404 NOT_FOUND. model is not available")
+    seen = []
+    try:
+        gb.run_benchmark(Gone(name="gone"), progress=lambda rep, r: seen.append(r))
+        stopped = False
+    except gb.BenchmarkError as e:
+        stopped = "404" in str(e)
+    check("a 404 stops the run instead of failing every prompt", stopped)
+    check("the first prompt is still shown before stopping", len(seen) == 1)
+
+
 def test_a_server_that_never_recovers_gives_up():
     busy = Exception("503 UNAVAILABLE")
     calls, restore = _fake_gemini([busy] * 10)

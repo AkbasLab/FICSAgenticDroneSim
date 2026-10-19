@@ -629,6 +629,11 @@ def load_prompts(path=DEFAULT_PROMPTS):
     return data["suite_id"], data["prompts"], digest
 
 
+#: Backend errors that will not go away by retrying or moving to the next prompt.
+FATAL = ("404", "NOT_FOUND", "401", "403", "PERMISSION_DENIED", "API_KEY_INVALID",
+         "UNAUTHENTICATED")
+
+
 def run_benchmark(model, prompts_path=DEFAULT_PROMPTS, scenario_path=DEFAULT_SCENARIO,
                   repeat=1, progress=None, pause_s=0.0) -> Dict[str, Any]:
     suite_id, prompts, digest = load_prompts(prompts_path)
@@ -638,10 +643,15 @@ def run_benchmark(model, prompts_path=DEFAULT_PROMPTS, scenario_path=DEFAULT_SCE
         for p in prompts:
             r = run_prompt(model, p, scenario)
             results.append(r)
-            if pause_s:
-                time.sleep(pause_s)
             if progress:
                 progress(rep, r)
+            # A wrong model name or a bad key fails every prompt the same way;
+            # stop at the first one rather than burning through the suite.
+            if (len(results) == 1 and r.backend_error
+                    and any(t in r.backend_error for t in FATAL)):
+                raise BenchmarkError(r.backend_error)
+            if pause_s:
+                time.sleep(pause_s)
     ident = model.identity()
     warnings = []
     if any(tag in str(ident.get("model", "")).lower() for tag in FLOATING):

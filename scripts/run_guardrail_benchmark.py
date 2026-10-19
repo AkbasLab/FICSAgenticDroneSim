@@ -106,8 +106,17 @@ def main():
             print(f"        (answered after {r.attempts} attempts - server was busy)",
                   flush=True)
 
-    result = gb.run_benchmark(model, args.prompts, repeat=args.repeat,
-                              progress=progress, pause_s=args.pause)
+    try:
+        result = gb.run_benchmark(model, args.prompts, repeat=args.repeat,
+                                  progress=progress, pause_s=args.pause)
+    except gb.BenchmarkError as e:
+        print(f"\nStopped: the backend refused the first prompt and will refuse "
+              f"the rest the same way.\n  {str(e)[:300]}")
+        if "404" in str(e) or "NOT_FOUND" in str(e):
+            print("\nThat model name is not available to your key. List the ones "
+                  "that are:\n  python scripts/run_guardrail_benchmark.py "
+                  "--list-gemini-models")
+        return 1
     os.makedirs(args.out, exist_ok=True)
     slug = re.sub(r"[^A-Za-z0-9._-]+", "_", str(result["model"]["model"]))
     path = os.path.join(args.out, f"{slug}.json")
