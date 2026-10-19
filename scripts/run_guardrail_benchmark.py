@@ -2,7 +2,8 @@
 
     python scripts/run_guardrail_benchmark.py --backend llama
     python scripts/run_guardrail_benchmark.py --backend mistral
-    python scripts/run_guardrail_benchmark.py --backend gemini --model gemini-2.5-flash
+    python scripts/run_guardrail_benchmark.py --backend gemini --model gemini-3.5-flash --pause 4
+    python scripts/run_guardrail_benchmark.py --backend gemini --model gemini-3.5-flash --resume
     python scripts/run_guardrail_benchmark.py --table          # all results -> table
 
 Each run writes results/benchmark/<model>.json: the three paper metrics (TRA,
@@ -43,6 +44,9 @@ def main():
                     help="Gemini: retries per prompt on 503/429, with backoff")
     ap.add_argument("--pause", type=float, default=0.0,
                     help="seconds between prompts (Gemini's free tier rate-limits)")
+    ap.add_argument("--resume", action="store_true",
+                    help="keep the prompts an earlier run of this model answered "
+                         "and only re-send the ones that failed")
     ap.add_argument("--list-gemini-models", action="store_true",
                     help="print the Gemini model names your key can use")
     args = ap.parse_args()
@@ -80,8 +84,10 @@ def main():
     print(f"\n=== Guardrail benchmark: {model.identity().get('model')} ===\n")
     if hasattr(model, "on_retry"):
         def on_retry(attempt, total, delay, err):
-            code = "503 busy" if "503" in str(err) else (
-                "429 rate-limited" if "429" in str(err) else "server error")
+            e = str(err)
+            code = "503 busy" if "503" in e else (
+                ("429 per-minute limit" if "PerMinute" in e else "429 rate-limited")
+                if "429" in e else "server error")
             print(f"        {code} - waiting {delay:.0f}s, then retrying "
                   f"(attempt {attempt + 1} of {total})", flush=True)
         model.on_retry = on_retry
@@ -98,6 +104,10 @@ def main():
         else:
             right = (r.expected == "invalid") == (r.outcome in ("model_rejected", "blocked"))
             mark = "ok " if right else "-- "
+        if r.reused:
+            print(f"  {mark}{r.prompt_id} [{r.expected:7s}] {tag:22s} (kept from earlier run)",
+                  flush=True)
+            return
         print(f"  {mark}{r.prompt_id} [{r.expected:7s}] {tag:22s} {r.text[:52]}",
               flush=True)
         if r.backend_error:
@@ -106,9 +116,21 @@ def main():
             print(f"        (answered after {r.attempts} attempts - server was busy)",
                   flush=True)
 
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "_", str(model.identity().get("model")))
+    path = os.path.join(args.out, f"{slug}.json")
+    earlier = None
+    if args.resume:
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                earlier = json.load(f)
+            left = sum(1 for d in earlier["prompts"] if d["outcome"] == "backend_error")
+            print(f"Resuming {path}: {left} prompt(s) to re-send\n")
+        else:
+            print(f"Nothing to resume at {path} - running the full suite\n")
     try:
         result = gb.run_benchmark(model, args.prompts, repeat=args.repeat,
-                                  progress=progress, pause_s=args.pause)
+                                  progress=progress, pause_s=args.pause,
+                                  resume_from=earlier)
     except gb.BenchmarkError as e:
         print(f"\nStopped: the backend refused the first prompt and will refuse "
               f"the rest the same way.\n  {str(e)[:300]}")
@@ -118,8 +140,6 @@ def main():
                   "--list-gemini-models")
         return 1
     os.makedirs(args.out, exist_ok=True)
-    slug = re.sub(r"[^A-Za-z0-9._-]+", "_", str(result["model"]["model"]))
-    path = os.path.join(args.out, f"{slug}.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=1)
 
@@ -129,7 +149,18 @@ def main():
     for w in result["warnings"]:
         print(f"WARNING: {w}")
     print(f"\nsaved {path}")
-    return 1 if result["counters"]["backend_errors"] else 0
+    left = result["counters"]["backend_errors"]
+    if result.get("stopped") == "daily quota used up":
+        print(f"\nSTOPPED: this key's daily quota for {slug} is used up. "
+              f"{left} prompt(s) still to run.\nThe answered prompts are saved. "
+              f"When it resets (usually midnight Pacific time) run the same command with --resume.")
+    elif result.get("stopped") == "interrupted":
+        print(f"\nInterrupted - answered prompts saved. Re-run with --resume to "
+              f"finish the other {left}.")
+    elif left:
+        print(f"\n{left} prompt(s) failed at the backend. Re-run with --resume to "
+              f"re-send only those; this result is not used in --table until then.")
+    return 1 if left else 0
 
 
 if __name__ == "__main__":

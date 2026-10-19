@@ -408,6 +408,84 @@ def test_a_wrong_model_name_stops_the_run_at_the_first_prompt():
     check("the first prompt is still shown before stopping", len(seen) == 1)
 
 
+def test_the_servers_retry_delay_is_honoured():
+    slow = Exception("429 RESOURCE_EXHAUSTED. {'quotaId': "
+                     "'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', "
+                     "'retryDelay': '37s'}")
+    calls, restore = _fake_gemini([slow, REFUSE])
+    slept = []
+    try:
+        m = gb.make_model("gemini", "gemini-test-001")
+        m._sleep = slept.append
+        r = gb.run_prompt(m, {"id": "S01", "expected": "invalid",
+                              "text": "Fly me to the moon."}, SC)
+    finally:
+        restore()
+    check("a 429 waits as long as the server asks", slept == [38.0], f"{slept}")
+    check("and then the prompt is answered", r.outcome == "model_rejected")
+
+
+def test_a_spent_daily_quota_stops_the_run_and_keeps_what_was_answered():
+    daily = Exception("429 RESOURCE_EXHAUSTED. {'quotaId': "
+                      "'GenerateRequestsPerDayPerProjectPerModel-FreeTier'}")
+    _, prompts, _ = gb.load_prompts()
+    answers = [REFUSE] * 3 + [daily]
+    calls, restore = _fake_gemini(answers)
+    try:
+        m = gb.make_model("gemini", "gemini-test-001")
+        m._sleep = lambda s: None
+        out = gb.run_benchmark(m)
+    finally:
+        restore()
+    ps = out["prompts"]
+    check("a daily quota is not retried", len(calls) == 4, f"{len(calls)}")
+    check("the run says why it stopped", out["stopped"] == "daily quota used up")
+    check("the answered prompts are kept", sum(p["outcome"] == "model_rejected"
+                                               for p in ps) == 3)
+    check("every prompt is still listed", len(ps) == len(prompts))
+    check("the rest are marked not run",
+          all(p["backend_error"].startswith("not run") for p in ps[4:]))
+
+
+def test_resume_only_resends_what_failed():
+    first = gb.run_benchmark(gb.ScriptedModel(
+        replies={"V01": None, "G01": None}, default=REFUSE, name="m"))
+    check("the first run has two failures", first["counters"]["backend_errors"] == 2)
+    asked = []
+
+    def answer(pid, text):
+        asked.append(pid)
+        return REFUSE
+    second = gb.run_benchmark(gb.ScriptedModel(default=answer, name="m"),
+                              resume_from=gb.json.loads(gb.json.dumps(first)))
+    check("only the failed prompts are sent again", sorted(asked) == ["G01", "V01"],
+          f"{asked}")
+    check("the resumed result is complete", second["counters"]["backend_errors"] == 0)
+    check("and in suite order", [p["prompt_id"] for p in second["prompts"]]
+          == [p["prompt_id"] for p in first["prompts"]])
+    try:
+        gb.run_benchmark(gb.ScriptedModel(default=REFUSE, name="other"),
+                         resume_from=first)
+        refused = False
+    except ValueError:
+        refused = True
+    check("a result for another model cannot be resumed", refused)
+
+
+def test_ctrl_c_keeps_the_answered_prompts():
+    n = []
+
+    def answer(pid, text):
+        n.append(pid)
+        if len(n) == 5:
+            raise KeyboardInterrupt
+        return REFUSE
+    out = gb.run_benchmark(gb.ScriptedModel(default=answer, name="m"))
+    check("an interrupted run is returned, not lost", out["stopped"] == "interrupted")
+    check("with the four answered prompts",
+          sum(p["outcome"] == "model_rejected" for p in out["prompts"]) == 4)
+
+
 def test_a_server_that_never_recovers_gives_up():
     busy = Exception("503 UNAVAILABLE")
     calls, restore = _fake_gemini([busy] * 10)

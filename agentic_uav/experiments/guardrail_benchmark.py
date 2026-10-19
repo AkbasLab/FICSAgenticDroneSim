@@ -37,6 +37,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
@@ -147,6 +148,17 @@ class BenchmarkError(Exception):
     """The model could not be reached at all (not the same as a bad reply)."""
 
 
+class QuotaExhausted(BenchmarkError):
+    """The key's per-day request quota is spent; nothing more until it resets."""
+
+
+#: Gemini's 429 body names the quota that ran out and how long to wait, e.g.
+#: "quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier" and
+#: "retryDelay": "37s". Matched loosely: the body is a repr'd dict.
+DAILY_QUOTA_RE = re.compile(r"PerDay", re.IGNORECASE)
+RETRY_DELAY_RE = re.compile(r"retryDelay['\"]?\s*[:=]\s*['\"]?(\d+(?:\.\d+)?)s")
+
+
 class OllamaModel:
     """Llama, Mistral or any other model served by a local Ollama."""
 
@@ -244,14 +256,22 @@ class GeminiModel:
                 self.last_latency_ms = (time.perf_counter() - t0) * 1000.0
                 return r.text
             except Exception as e:                      # noqa: BLE001
-                transient = any(tag in str(e) for tag in self.TRANSIENT)
+                text = str(e)
+                transient = any(tag in text for tag in self.TRANSIENT)
+                # A per-day quota will not come back by waiting minutes.
+                if transient and DAILY_QUOTA_RE.search(text):
+                    raise QuotaExhausted(f"gemini: daily quota used up - {text}")
                 if not transient or attempt > self.retries:
                     raise BenchmarkError(
                         f"gemini: {e}" + (f" (after {attempt} attempts)"
                                           if transient else ""))
+                # The server says how long to wait on a 429; trust it over
+                # our own backoff when it asks for longer.
+                asked = RETRY_DELAY_RE.search(text)
+                wait = max(delay, float(asked.group(1)) + 1.0) if asked else delay
                 if self.on_retry is not None:
-                    self.on_retry(attempt, self.retries + 1, delay, e)
-                self._sleep(delay)
+                    self.on_retry(attempt, self.retries + 1, wait, e)
+                self._sleep(wait)
                 delay = min(delay * 2, 120.0)
 
 
@@ -459,6 +479,7 @@ class PromptResult:
     steps: List[Dict[str, Any]] = field(default_factory=list)   # per-step record
     outcome: str = ""      # model_rejected | blocked | modified | executed | unparseable | backend_error
     attempts: int = 1      # >1 when the backend was retried after a transient error
+    reused: bool = False   # carried over from an earlier run by --resume
 
 
 def _fresh_world(scenario):
@@ -635,23 +656,69 @@ FATAL = ("404", "NOT_FOUND", "401", "403", "PERMISSION_DENIED", "API_KEY_INVALID
 
 
 def run_benchmark(model, prompts_path=DEFAULT_PROMPTS, scenario_path=DEFAULT_SCENARIO,
-                  repeat=1, progress=None, pause_s=0.0) -> Dict[str, Any]:
+                  repeat=1, progress=None, pause_s=0.0, resume_from=None,
+                  ) -> Dict[str, Any]:
+    """Run the suite. `resume_from` is an earlier result for the same model and
+    suite: prompts it answered are kept as they were and only the ones that
+    ended in a backend error (or were never reached) are sent again.
+
+    If the key's daily quota runs out, or the run is interrupted with Ctrl+C,
+    the prompts not yet run are recorded as backend errors and the partial
+    result is returned, so it can be saved and resumed later.
+    """
     suite_id, prompts, digest = load_prompts(prompts_path)
     scenario = load_scenario(scenario_path)
+    done = {}
+    if resume_from is not None:
+        if resume_from.get("suite_sha256") != digest:
+            raise ValueError("cannot resume: the earlier result came from a "
+                             "different prompt suite")
+        if resume_from.get("model", {}).get("model") != model.identity().get("model"):
+            raise ValueError("cannot resume: the earlier result is for a different model")
+        per_rep = len(prompts)
+        for i, d in enumerate(resume_from.get("prompts", [])):
+            if d.get("outcome") != "backend_error":
+                done[(i // per_rep, d["prompt_id"])] = PromptResult(**d)
     results = []
+    stop_reason = None
+    sent = 0
     for rep in range(repeat):
         for p in prompts:
-            r = run_prompt(model, p, scenario)
+            if stop_reason:
+                results.append(PromptResult(
+                    prompt_id=p["id"], expected=p["expected"],
+                    boundary=p.get("boundary"), text=p["text"],
+                    backend_error=f"not run: {stop_reason}", outcome="backend_error"))
+                continue
+            if (rep, p["id"]) in done:
+                r = done[(rep, p["id"])]
+                r.reused = True
+                results.append(r)
+                if progress:
+                    progress(rep, r)
+                continue
+            try:
+                if sent and pause_s:
+                    time.sleep(pause_s)
+                r = run_prompt(model, p, scenario)
+            except KeyboardInterrupt:
+                stop_reason = "interrupted"
+                results.append(PromptResult(
+                    prompt_id=p["id"], expected=p["expected"],
+                    boundary=p.get("boundary"), text=p["text"],
+                    backend_error="not run: interrupted", outcome="backend_error"))
+                continue
+            sent += 1
             results.append(r)
             if progress:
                 progress(rep, r)
             # A wrong model name or a bad key fails every prompt the same way;
             # stop at the first one rather than burning through the suite.
-            if (len(results) == 1 and r.backend_error
+            if (sent == 1 and r.backend_error
                     and any(t in r.backend_error for t in FATAL)):
                 raise BenchmarkError(r.backend_error)
-            if pause_s:
-                time.sleep(pause_s)
+            if r.backend_error and "daily quota used up" in r.backend_error:
+                stop_reason = "daily quota used up"
     ident = model.identity()
     warnings = []
     if any(tag in str(ident.get("model", "")).lower() for tag in FLOATING):
@@ -666,6 +733,7 @@ def run_benchmark(model, prompts_path=DEFAULT_PROMPTS, scenario_path=DEFAULT_SCE
         "scenario": os.path.basename(scenario_path),
         "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "warnings": warnings,
+        "stopped": stop_reason,
     }
     out.update(summarise(results))
     out["prompts"] = [asdict(r) for r in results]

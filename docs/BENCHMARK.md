@@ -76,6 +76,13 @@ it into Overleaf) and `table.csv`.
 whole suite three times if you want to see run-to-run variation; temperature is
 0, but cloud models are not guaranteed to be deterministic.
 
+Busy servers (503) and per-minute limits (429) are retried, waiting as long as
+the server asks. A spent **daily** quota stops the run at once; the answered
+prompts are saved and the rest marked "not run". `--resume` re-sends only the
+prompts that failed and keeps the others exactly as they were - same model,
+same suite, or it refuses. A result with any backend errors stays out of
+`--table` until it has been resumed to completion.
+
 ## Things to tell Taner before the numbers go in the paper
 
 1. **Same harness for all three rows.** If the existing Llama row came from a
