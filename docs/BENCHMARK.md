@@ -72,9 +72,30 @@ including every raw model reply, so any number in the table can be traced to the
 replies that produced it. `--table` writes `results/benchmark/table.tex` (paste
 it into Overleaf) and `table.csv`.
 
-`--pause 4` keeps Gemini's free tier under its rate limit. `--repeat 3` runs the
-whole suite three times if you want to see run-to-run variation; temperature is
-0, but cloud models are not guaranteed to be deterministic.
+`--pause 4` keeps Gemini's free tier under its rate limit.
+
+## Repeated runs (mean ± sd)
+
+```powershell
+python scripts/run_guardrail_benchmark.py --backend llama   --repeat 20 --temperature 0.7
+python scripts/run_guardrail_benchmark.py --backend mistral --repeat 20 --temperature 0.7
+```
+
+Each run is summarised on its own, and the result file holds `per_run` metrics
+plus a `spread` block (mean, sample sd, min, max). The table then shows
+`mean ± sd` and labels the row `(T=0.7, n=20)`. Run k is sampled with seed k,
+so a repeated experiment is still reproducible.
+
+**Temperature matters here.** At temperature 0 with a fixed seed, Llama and
+Mistral give the same answers every run: twenty runs give one result twenty
+times, and only the timings (MVL, model latency) vary. To measure how
+consistently a model refuses, sample at a non-zero temperature and report it.
+
+**Gemini's free tier allows 20 requests per model per day.** One run of the
+suite is 22 requests, so 20 runs (440 requests) need a paid key; on the free
+tier it would take about three weeks. Each repeat set is saved as
+`<model>_T<temp>_x<n>.json`, and `--resume` works on it as long as the same
+`--repeat` and `--temperature` are given.
 
 Busy servers (503) and per-minute limits (429) are retried, waiting as long as
 the server asks. A spent **daily** quota stops the run at once; the answered

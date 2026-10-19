@@ -486,6 +486,69 @@ def test_ctrl_c_keeps_the_answered_prompts():
           sum(p["outcome"] == "model_rejected" for p in out["prompts"]) == 4)
 
 
+def test_repeated_runs_report_mean_and_spread():
+    """Taner: 'run the tests 15-20 times ... get average based on multiple
+    tests'. A model that refuses the invalid prompts on alternate runs only."""
+    run_no = [0]
+
+    class Flaky(gb.ScriptedModel):
+        def set_run(self, i):
+            run_no[0] = i
+
+    def answer(pid, text):
+        if pid in INVALID and run_no[0] % 2 == 0:
+            return REFUSE
+        return json.dumps(gb._literal_planner(pid, text))
+    out = gb.run_benchmark(Flaky(default=answer, name="flaky"), repeat=4)
+    per = [m["TRA model-only (%)"] for m in out["per_run"]]
+    sp = out["spread"]["TRA model-only (%)"]
+    check("each run gets its own metrics", per == [100.0, 0.0, 100.0, 0.0], f"{per}")
+    check("the mean is across runs", sp["mean"] == 50.0)
+    check("the sd is the sample sd across runs", abs(sp["sd"] - 57.735) < 0.01, f"{sp}")
+    check("min and max are reported", sp["min"] == 0.0 and sp["max"] == 100.0)
+    check("every prompt of every run is kept", len(out["prompts"]) == 4 * len(PROMPTS))
+
+    d = tempfile.mkdtemp()
+    json.dump(out, open(os.path.join(d, "flaky.json"), "w"))
+    gb.write_table(gb.load_results(d), d)
+    tex = open(os.path.join(d, "table.tex")).read()
+    check("the table shows mean +/- sd for repeated runs", "50.0 $\\pm$ 57.7" in tex)
+    check("and says how many runs", "n=4" in tex)
+    try:
+        gb.run_benchmark(Flaky(default=answer, name="flaky"), repeat=2, resume_from=out)
+        refused = False
+    except ValueError:
+        refused = True
+    check("a resume must use the same number of repeats", refused)
+
+
+def test_each_repeat_gets_its_own_seed():
+    import types
+    seeds = []
+
+    def chat(model, messages, format, options):
+        seeds.append((options["seed"], options["temperature"]))
+        return {"message": {"content": REFUSE}}
+    fake = types.ModuleType("ollama")
+    fake.chat = chat
+    fake.show = lambda model: {}
+    saved = sys.modules.get("ollama")
+    sys.modules["ollama"] = fake
+    try:
+        m = gb.make_model("mistral", temperature=0.7)
+        out = gb.run_benchmark(m, repeat=3)
+    finally:
+        if saved is None:
+            sys.modules.pop("ollama", None)
+        else:
+            sys.modules["ollama"] = saved
+    n = len(PROMPTS)
+    check("run k is sampled with seed k", [s for s, _ in seeds[::n]] == [0, 1, 2], f"{seeds[::n]}")
+    check("at the requested temperature", all(t == 0.7 for _, t in seeds))
+    check("the temperature is recorded with the result",
+          out["model"]["temperature"] == 0.7)
+
+
 def test_a_server_that_never_recovers_gives_up():
     busy = Exception("503 UNAVAILABLE")
     calls, restore = _fake_gemini([busy] * 10)

@@ -162,17 +162,24 @@ RETRY_DELAY_RE = re.compile(r"retryDelay['\"]?\s*[:=]\s*['\"]?(\d+(?:\.\d+)?)s")
 class OllamaModel:
     """Llama, Mistral or any other model served by a local Ollama."""
 
-    def __init__(self, model, cpu_only=False):
+    def __init__(self, model, cpu_only=False, temperature=0.0):
         import ollama                                   # lazy: only if used
         self._ollama = ollama
         self.model = model
         self.provider = "ollama"
-        self._options = {"temperature": 0, "seed": 0}
+        self.temperature = float(temperature)
+        self._options = {"temperature": self.temperature, "seed": 0}
         if cpu_only:
             self._options["num_gpu"] = 0
 
+    def set_run(self, index):
+        """Each repetition gets its own seed, so repeated runs at a non-zero
+        temperature are different samples - and still reproducible."""
+        self._options["seed"] = int(index)
+
     def identity(self):
-        info = {"provider": "ollama", "model": self.model}
+        info = {"provider": "ollama", "model": self.model,
+                "temperature": self.temperature}
         try:
             shown = self._ollama.show(self.model)
             shown = shown if isinstance(shown, dict) else getattr(shown, "__dict__", {})
@@ -210,7 +217,7 @@ class GeminiModel:
     TRANSIENT = ("503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED", "overloaded",
                  "high demand", "DEADLINE_EXCEEDED", "500", "INTERNAL")
 
-    def __init__(self, model, retries=6, backoff_s=5.0):
+    def __init__(self, model, retries=6, backoff_s=5.0, temperature=0.0):
         from dotenv import load_dotenv
         from google import genai                        # lazy: only if used
         load_dotenv()
@@ -220,6 +227,8 @@ class GeminiModel:
         self._client = genai.Client(api_key=key)
         self.model = model
         self.provider = "gemini"
+        self.temperature = float(temperature)
+        self.seed = 0
         self.retries = retries
         self.backoff_s = backoff_s
         self.last_attempts = 0
@@ -229,8 +238,12 @@ class GeminiModel:
         #: wait, so a long backoff is visible instead of looking like a hang
         self.on_retry = None
 
+    def set_run(self, index):
+        self.seed = int(index)
+
     def identity(self):
-        return {"provider": "gemini", "model": self.model}
+        return {"provider": "gemini", "model": self.model,
+                "temperature": self.temperature}
 
     def ask(self, instruction):
         """Send one prompt, waiting out transient server errors.
@@ -252,7 +265,7 @@ class GeminiModel:
                     config=types.GenerateContentConfig(
                         system_instruction=SYSTEM_PROMPT,
                         response_mime_type="application/json",
-                        temperature=0))
+                        temperature=self.temperature, seed=self.seed))
                 self.last_latency_ms = (time.perf_counter() - t0) * 1000.0
                 return r.text
             except Exception as e:                      # noqa: BLE001
@@ -298,19 +311,20 @@ class ScriptedModel:
         return reply if isinstance(reply, str) else json.dumps(reply)
 
 
-def make_model(backend, model=None, cpu_only=False, retries=6):
+def make_model(backend, model=None, cpu_only=False, retries=6, temperature=0.0):
     """Build a backend by name, with the defaults this project has used."""
     backend = backend.lower()
+    t = dict(temperature=temperature)
     if backend == "llama":
-        return OllamaModel(model or "llama3.1:8b", cpu_only=cpu_only)
+        return OllamaModel(model or "llama3.1:8b", cpu_only=cpu_only, **t)
     if backend == "mistral":
-        return OllamaModel(model or "mistral-nemo", cpu_only=cpu_only)
+        return OllamaModel(model or "mistral-nemo", cpu_only=cpu_only, **t)
     if backend == "ollama":
         if not model:
             raise ValueError("--backend ollama needs --model")
-        return OllamaModel(model, cpu_only=cpu_only)
+        return OllamaModel(model, cpu_only=cpu_only, **t)
     if backend == "gemini":
-        return GeminiModel(model or "gemini-flash-latest", retries=retries)
+        return GeminiModel(model or "gemini-flash-latest", retries=retries, **t)
     if backend == "scripted":
         return ScriptedModel(default=_literal_planner)
     raise ValueError(f"unknown backend {backend!r}: llama, mistral, gemini, "
@@ -675,6 +689,12 @@ def run_benchmark(model, prompts_path=DEFAULT_PROMPTS, scenario_path=DEFAULT_SCE
                              "different prompt suite")
         if resume_from.get("model", {}).get("model") != model.identity().get("model"):
             raise ValueError("cannot resume: the earlier result is for a different model")
+        if (resume_from.get("model", {}).get("temperature", 0.0)
+                != model.identity().get("temperature", 0.0)):
+            raise ValueError("cannot resume: the earlier result used a different temperature")
+        if resume_from.get("repeat", 1) != repeat:
+            raise ValueError(f"cannot resume: the earlier result had --repeat "
+                             f"{resume_from.get('repeat', 1)}, not {repeat}")
         per_rep = len(prompts)
         for i, d in enumerate(resume_from.get("prompts", [])):
             if d.get("outcome") != "backend_error":
@@ -683,6 +703,8 @@ def run_benchmark(model, prompts_path=DEFAULT_PROMPTS, scenario_path=DEFAULT_SCE
     stop_reason = None
     sent = 0
     for rep in range(repeat):
+        if hasattr(model, "set_run"):
+            model.set_run(rep)
         for p in prompts:
             if stop_reason:
                 results.append(PromptResult(
@@ -736,7 +758,31 @@ def run_benchmark(model, prompts_path=DEFAULT_PROMPTS, scenario_path=DEFAULT_SCE
         "stopped": stop_reason,
     }
     out.update(summarise(results))
+    if repeat > 1:
+        n = len(prompts)
+        per_run = [summarise(results[i * n:(i + 1) * n])["metrics"]
+                   for i in range(repeat)]
+        out["per_run"] = per_run
+        out["spread"] = spread(per_run)
     out["prompts"] = [asdict(r) for r in results]
+    return out
+
+
+def spread(per_run):
+    """Mean, sample standard deviation, min and max of each metric across runs.
+    Runs where a metric is undefined (e.g. GBR with nothing executed) are left
+    out of that metric, and `n` says how many runs it was computed over."""
+    out = {}
+    for key in per_run[0]:
+        vals = [m[key] for m in per_run if m.get(key) is not None]
+        if not vals:
+            out[key] = None
+            continue
+        mean = sum(vals) / len(vals)
+        sd = (math.sqrt(sum((v - mean) ** 2 for v in vals) / (len(vals) - 1))
+              if len(vals) > 1 else 0.0)
+        out[key] = {"mean": round(mean, 4), "sd": round(sd, 4),
+                    "min": min(vals), "max": max(vals), "n": len(vals)}
     return out
 
 
@@ -776,13 +822,22 @@ def write_table(rows, directory):
             ("False rejection (%)", "False rejection rate (%)")]
 
     def cell(r, key):
+        fmt = (lambda v: f"{v:.3f}") if key == "MVL (ms)" else (lambda v: f"{v:.1f}")
+        sp = (r.get("spread") or {}).get(key)
+        if sp:                                   # repeated runs: mean +/- sd
+            return f"{fmt(sp['mean'])} $\\pm$ {fmt(sp['sd'])}"
         v = r["metrics"].get(key)
-        return "--" if v is None else (f"{v:.3f}" if key == "MVL (ms)" else f"{v:.1f}")
+        return "--" if v is None else fmt(v)
 
     def label(r):
         m = r["model"]
         name = m.get("model", "?")
-        return f"{name} (scripted)" if m.get("provider") == "scripted" else name
+        extra = ["scripted"] if m.get("provider") == "scripted" else []
+        if m.get("temperature"):
+            extra.append(f"T={m['temperature']:g}")
+        if r.get("repeat", 1) > 1:
+            extra.append(f"n={r['repeat']}")
+        return f"{name} ({', '.join(extra)})" if extra else name
 
     os.makedirs(directory, exist_ok=True)
     import csv
@@ -790,7 +845,8 @@ def write_table(rows, directory):
         w = csv.writer(f)
         w.writerow([c for c, _ in cols])
         for r in rows:
-            w.writerow([label(r)] + [cell(r, k) for _, k in cols[1:]])
+            w.writerow([label(r)] + [cell(r, k).replace("$\\pm$", "+/-")
+                                     for _, k in cols[1:]])
 
     lines = [
         "\\begin{table}[t]",

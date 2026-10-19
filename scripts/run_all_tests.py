@@ -34,7 +34,7 @@ SUITES = [
     ("15",  "Metric definitions",        "tests/test_evaluation.py", 90),
     ("16",  "Integration (mock adapter)", "tests/test_integration.py", 48),
     ("16",  "Determinism",               "tests/test_determinism.py", 28),
-    ("B",   "Guardrail benchmark",       "tests/test_guardrail_benchmark.py", 85),
+    ("B",   "Guardrail benchmark",       "tests/test_guardrail_benchmark.py", 96),
     ("3-12", "AirSim code path (fake sim)", "tests/test_airsim_path.py", 20),
     ("16",  "AirSim regression missions", "tests/test_airsim_regression.py", 5),
 ]

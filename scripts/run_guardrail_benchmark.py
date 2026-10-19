@@ -33,7 +33,10 @@ def main():
     ap.add_argument("--backend", help="llama | mistral | gemini | ollama | scripted")
     ap.add_argument("--model", default=None, help="exact model name / tag")
     ap.add_argument("--repeat", type=int, default=1,
-                    help="run the whole suite this many times")
+                    help="run the whole suite this many times (mean +/- sd reported)")
+    ap.add_argument("--temperature", type=float, default=0.0,
+                    help="sampling temperature; each repeat gets its own seed. "
+                         "At 0 the local models give the same answers every run")
     ap.add_argument("--cpu", action="store_true",
                     help="Ollama: keep the model off the GPU")
     ap.add_argument("--prompts", default=gb.DEFAULT_PROMPTS)
@@ -80,7 +83,11 @@ def main():
         ap.error("--backend is required unless --table is given")
 
     model = gb.make_model(args.backend, args.model, cpu_only=args.cpu,
-                          retries=args.retries)
+                          retries=args.retries, temperature=args.temperature)
+    if args.repeat > 1 and args.temperature == 0:
+        print("NOTE: --repeat at temperature 0. Llama and Mistral are seeded and "
+              "will give identical answers every run,\n      so only the timings "
+              "(MVL, model latency) will vary. Use --temperature to sample.\n")
     print(f"\n=== Guardrail benchmark: {model.identity().get('model')} ===\n")
     if hasattr(model, "on_retry"):
         def on_retry(attempt, total, delay, err):
@@ -92,7 +99,12 @@ def main():
                   f"(attempt {attempt + 1} of {total})", flush=True)
         model.on_retry = on_retry
 
+    last_rep = [-1]
+
     def progress(rep, r):
+        if args.repeat > 1 and rep != last_rep[0]:
+            last_rep[0] = rep
+            print(f"\n--- run {rep + 1} of {args.repeat} ---", flush=True)
         tag = {"model_rejected": "REFUSED by model",
                "blocked": "BLOCKED by guardian",
                "modified": "made safe by guardian",
@@ -116,7 +128,12 @@ def main():
             print(f"        (answered after {r.attempts} attempts - server was busy)",
                   flush=True)
 
-    slug = re.sub(r"[^A-Za-z0-9._-]+", "_", str(model.identity().get("model")))
+    ident = model.identity()
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "_", str(ident.get("model")))
+    if ident.get("temperature"):
+        slug += f"_T{ident['temperature']:g}"
+    if args.repeat > 1:
+        slug += f"_x{args.repeat}"
     path = os.path.join(args.out, f"{slug}.json")
     earlier = None
     if args.resume:
@@ -143,9 +160,15 @@ def main():
     with open(path, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=1)
 
-    print("\nBENCHMARK RESULTS")
+    print("\nBENCHMARK RESULTS" + (" (pooled over all runs)" if args.repeat > 1 else ""))
     print(json.dumps({**result["metrics"], "Raw Counters": result["counters"]},
                      indent=4))
+    if result.get("spread"):
+        print(f"\nACROSS {args.repeat} RUNS (mean +/- sd, min..max)")
+        for k, v in result["spread"].items():
+            if v:
+                print(f"  {k:28s} {v['mean']:10.3f} +/- {v['sd']:<8.3f} "
+                      f"{v['min']}..{v['max']}  (n={v['n']})")
     for w in result["warnings"]:
         print(f"WARNING: {w}")
     print(f"\nsaved {path}")
