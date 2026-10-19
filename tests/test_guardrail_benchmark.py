@@ -576,6 +576,10 @@ def test_runs_with_backend_errors_stay_out_of_the_table():
     except ValueError as e:
         check("a run with unanswered prompts cannot enter the table",
               "unreachable-model" in str(e), str(e)[:80])
+    done, pending = gb.split_complete(gb.load_results(d))
+    check("--table sets an unfinished run aside and keeps the finished ones",
+          [r["model"]["model"] for r in done] == ["good-model"]
+          and [r["model"]["model"] for r in pending] == ["unreachable-model"])
 
 
 def main():

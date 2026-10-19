@@ -798,6 +798,13 @@ def load_results(directory):
     return rows
 
 
+def split_complete(rows):
+    """(complete, incomplete): a run still being resumed over several days has
+    unanswered prompts and stays out of the table until it is finished."""
+    done = [r for r in rows if not r["counters"].get("backend_errors")]
+    return done, [r for r in rows if r["counters"].get("backend_errors")]
+
+
 def write_table(rows, directory):
     """One row per model, as CSV and as a LaTeX table.
 

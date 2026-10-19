@@ -74,6 +74,15 @@ def main():
         if not rows:
             print(f"no results in {args.out}")
             return 1
+        rows, pending = gb.split_complete(rows)
+        for r in pending:
+            m = r["model"]
+            print(f"skipped (not finished - {r['counters']['backend_errors']} prompt(s) "
+                  f"unanswered, use --resume): {m.get('model')} "
+                  f"T={m.get('temperature', 0)} x{r.get('repeat', 1)}")
+        if not rows:
+            print("no finished results to put in a table")
+            return 1
         path = gb.write_table(rows, args.out)
         print(open(path, encoding="utf-8").read())
         print(f"wrote {path} and table.csv")
