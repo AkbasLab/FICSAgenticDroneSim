@@ -78,6 +78,13 @@ def main():
     model = gb.make_model(args.backend, args.model, cpu_only=args.cpu,
                           retries=args.retries)
     print(f"\n=== Guardrail benchmark: {model.identity().get('model')} ===\n")
+    if hasattr(model, "on_retry"):
+        def on_retry(attempt, total, delay, err):
+            code = "503 busy" if "503" in str(err) else (
+                "429 rate-limited" if "429" in str(err) else "server error")
+            print(f"        {code} - waiting {delay:.0f}s, then retrying "
+                  f"(attempt {attempt + 1} of {total})", flush=True)
+        model.on_retry = on_retry
 
     def progress(rep, r):
         tag = {"model_rejected": "REFUSED by model",

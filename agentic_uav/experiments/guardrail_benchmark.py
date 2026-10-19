@@ -213,6 +213,9 @@ class GeminiModel:
         self.last_attempts = 0
         self.last_latency_ms = None
         self._sleep = time.sleep
+        #: called as on_retry(attempt, max_attempts, delay_s, error) before each
+        #: wait, so a long backoff is visible instead of looking like a hang
+        self.on_retry = None
 
     def identity(self):
         return {"provider": "gemini", "model": self.model}
@@ -246,6 +249,8 @@ class GeminiModel:
                     raise BenchmarkError(
                         f"gemini: {e}" + (f" (after {attempt} attempts)"
                                           if transient else ""))
+                if self.on_retry is not None:
+                    self.on_retry(attempt, self.retries + 1, delay, e)
                 self._sleep(delay)
                 delay = min(delay * 2, 120.0)
 
