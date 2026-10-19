@@ -893,8 +893,10 @@ def validate(plan: Any) -> tuple[list[dict[str, Any]], list[str]]:
             if z > 0:
                 notes.append(f"step {position}: z={z} treated as {-z} (NED, negative is up)")
                 z = -float(z)
-            # NOT bounds-checked, unlike set_altitude, and that asymmetry is
-            # REAL and UNRESOLVED. set_altitude refuses z = 0 as "at or below
+            # NOT bounds-checked, unlike set_altitude. The asymmetry is real
+            # and the behaviour is DELIBERATE as of 2026-10-19: left alone, so
+            # "return home" means the origin at ground level and M04 scores as
+            # the model wrote it. set_altitude refuses z = 0 as "at or below
             # ground level"; fly_to accepts it, and since altitudes are anchored
             # to the measured ground, z = 0 means the terrain. Measured
             # 2026-10-09: two drones told to "return home and land" from 70 m and
@@ -902,11 +904,14 @@ def validate(plan: Any) -> tuple[list[dict[str, Any]], list[str]]:
             # implies 8 m. It explains M04 finishing at 0.27 m where every other
             # mission finishes near 1.17 m.
             #
-            # Applying the bounds here was tried and REVERTED the same day: the
-            # model emits {"x":0,"y":0,"z":0} for M04 in all three attempts, so
-            # the bounds turn a 3/3 mission into 0/3. That is a change to what
-            # the study scores, and it needs a decision and a re-fly, not a
-            # quiet fix. See the phase log.
+            # Applying the bounds here was tried and REVERTED on 2026-10-09:
+            # the model emits {"x":0,"y":0,"z":0} for M04 in all three attempts,
+            # so the bounds turn a 3/3 mission into 0/3. Decided 2026-10-19 to
+            # leave it: nothing in the prompt tells the model fly_to's z has a
+            # floor, so rejecting the plan would score it against a rule it was
+            # never given. The consequence is recorded instead -- a fly_to with
+            # z = 0 arrives at ground level, which is why M04 finishes at 0.27 m
+            # where other missions finish near 1.17 m. See the phase log.
             step = dict(step, z=float(z))
 
         checked.append(step)
