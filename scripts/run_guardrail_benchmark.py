@@ -39,6 +39,8 @@ def main():
     ap.add_argument("--out", default=OUT)
     ap.add_argument("--table", action="store_true",
                     help="build the comparison table from existing results")
+    ap.add_argument("--retries", type=int, default=6,
+                    help="Gemini: retries per prompt on 503/429, with backoff")
     ap.add_argument("--pause", type=float, default=0.0,
                     help="seconds between prompts (Gemini's free tier rate-limits)")
     ap.add_argument("--list-gemini-models", action="store_true",
@@ -49,7 +51,13 @@ def main():
         from dotenv import load_dotenv
         from google import genai
         load_dotenv()
-        client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+        key = os.getenv("GEMINI_API_KEY")
+        if not key:
+            print("GEMINI_API_KEY is not set. Create .env in this folder with:\n"
+                  '  Set-Content -Path .env -Value "GEMINI_API_KEY=your-key" '
+                  "-Encoding ascii")
+            return 2
+        client = genai.Client(api_key=key)
         for m in client.models.list():
             print(m.name)
         return 0
@@ -67,7 +75,8 @@ def main():
     if not args.backend:
         ap.error("--backend is required unless --table is given")
 
-    model = gb.make_model(args.backend, args.model, cpu_only=args.cpu)
+    model = gb.make_model(args.backend, args.model, cpu_only=args.cpu,
+                          retries=args.retries)
     print(f"\n=== Guardrail benchmark: {model.identity().get('model')} ===\n")
 
     def progress(rep, r):
@@ -77,12 +86,18 @@ def main():
                "executed": "executed",
                "unparseable": "UNPARSEABLE reply",
                "backend_error": "BACKEND ERROR"}[r.outcome]
-        right = (r.expected == "invalid") == (r.outcome in ("model_rejected", "blocked"))
-        mark = "ok " if right else "-- "
+        if r.outcome in ("backend_error", "unparseable"):
+            mark = "!! "              # no answer is never a right answer
+        else:
+            right = (r.expected == "invalid") == (r.outcome in ("model_rejected", "blocked"))
+            mark = "ok " if right else "-- "
         print(f"  {mark}{r.prompt_id} [{r.expected:7s}] {tag:22s} {r.text[:52]}",
               flush=True)
         if r.backend_error:
             print(f"        {r.backend_error[:100]}", flush=True)
+        elif r.attempts > 1:
+            print(f"        (answered after {r.attempts} attempts - server was busy)",
+                  flush=True)
 
     result = gb.run_benchmark(model, args.prompts, repeat=args.repeat,
                               progress=progress, pause_s=args.pause)

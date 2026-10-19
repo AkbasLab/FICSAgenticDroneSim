@@ -192,7 +192,13 @@ class OllamaModel:
 class GeminiModel:
     """Google Gemini. Needs GEMINI_API_KEY in the environment or a .env file."""
 
-    def __init__(self, model):
+    #: Server-side conditions worth waiting out. A 503 "high demand" from a
+    #: busy model, a 429 rate limit, a deadline - none of them says anything
+    #: about the prompt, so the same prompt is sent again after a pause.
+    TRANSIENT = ("503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED", "overloaded",
+                 "high demand", "DEADLINE_EXCEEDED", "500", "INTERNAL")
+
+    def __init__(self, model, retries=6, backoff_s=5.0):
         from dotenv import load_dotenv
         from google import genai                        # lazy: only if used
         load_dotenv()
@@ -202,22 +208,46 @@ class GeminiModel:
         self._client = genai.Client(api_key=key)
         self.model = model
         self.provider = "gemini"
+        self.retries = retries
+        self.backoff_s = backoff_s
+        self.last_attempts = 0
+        self.last_latency_ms = None
+        self._sleep = time.sleep
 
     def identity(self):
         return {"provider": "gemini", "model": self.model}
 
     def ask(self, instruction):
+        """Send one prompt, waiting out transient server errors.
+
+        Retries do not touch the result: it is the same prompt, and only the
+        attempt that succeeds is timed, so the backoff never inflates the
+        model latency. A permanent error (bad key, unknown model) fails at
+        once rather than being retried.
+        """
         from google.genai import types
-        try:
-            r = self._client.models.generate_content(
-                model=self.model, contents=instruction,
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_PROMPT,
-                    response_mime_type="application/json",
-                    temperature=0))
-        except Exception as e:                          # noqa: BLE001
-            raise BenchmarkError(f"gemini: {e}")
-        return r.text
+        delay = self.backoff_s
+        self.last_attempts = 0
+        for attempt in range(1, self.retries + 2):
+            self.last_attempts = attempt
+            t0 = time.perf_counter()
+            try:
+                r = self._client.models.generate_content(
+                    model=self.model, contents=instruction,
+                    config=types.GenerateContentConfig(
+                        system_instruction=SYSTEM_PROMPT,
+                        response_mime_type="application/json",
+                        temperature=0))
+                self.last_latency_ms = (time.perf_counter() - t0) * 1000.0
+                return r.text
+            except Exception as e:                      # noqa: BLE001
+                transient = any(tag in str(e) for tag in self.TRANSIENT)
+                if not transient or attempt > self.retries:
+                    raise BenchmarkError(
+                        f"gemini: {e}" + (f" (after {attempt} attempts)"
+                                          if transient else ""))
+                self._sleep(delay)
+                delay = min(delay * 2, 120.0)
 
 
 class ScriptedModel:
@@ -243,7 +273,7 @@ class ScriptedModel:
         return reply if isinstance(reply, str) else json.dumps(reply)
 
 
-def make_model(backend, model=None, cpu_only=False):
+def make_model(backend, model=None, cpu_only=False, retries=6):
     """Build a backend by name, with the defaults this project has used."""
     backend = backend.lower()
     if backend == "llama":
@@ -255,7 +285,7 @@ def make_model(backend, model=None, cpu_only=False):
             raise ValueError("--backend ollama needs --model")
         return OllamaModel(model, cpu_only=cpu_only)
     if backend == "gemini":
-        return GeminiModel(model or "gemini-flash-latest")
+        return GeminiModel(model or "gemini-flash-latest", retries=retries)
     if backend == "scripted":
         return ScriptedModel(default=_literal_planner)
     raise ValueError(f"unknown backend {backend!r}: llama, mistral, gemini, "
@@ -423,6 +453,7 @@ class PromptResult:
     backend_error: Optional[str] = None
     steps: List[Dict[str, Any]] = field(default_factory=list)   # per-step record
     outcome: str = ""      # model_rejected | blocked | modified | executed | unparseable | backend_error
+    attempts: int = 1      # >1 when the backend was retried after a transient error
 
 
 def _fresh_world(scenario):
@@ -453,8 +484,12 @@ def run_prompt(model, prompt, scenario) -> PromptResult:
     except BenchmarkError as e:
         res.backend_error = str(e)
         res.outcome = "backend_error"
+        res.attempts = getattr(model, "last_attempts", 1) or 1
         return res
-    res.model_latency_ms = (time.perf_counter() - t0) * 1000.0
+    # the backend's own timing if it retried, so waiting never counts as latency
+    res.model_latency_ms = (getattr(model, "last_latency_ms", None)
+                            or (time.perf_counter() - t0) * 1000.0)
+    res.attempts = getattr(model, "last_attempts", 1) or 1
     res.raw_reply = raw
 
     reply = parse_reply(raw)
@@ -640,6 +675,12 @@ def write_table(rows, directory):
     Refuses to mix rows from different prompt suites or system prompts: a table
     whose rows came from different prompts compares nothing.
     """
+    broken = [r["model"]["model"] for r in rows if r["counters"].get("backend_errors")]
+    if broken:
+        raise ValueError(
+            "these runs have prompts the model never answered (backend errors), so "
+            "their metrics are computed over part of the suite: "
+            + ", ".join(broken) + ". Rerun them, or delete their .json, first.")
     suites = {(r["suite_sha256"], r["system_prompt_sha256"]) for r in rows}
     if len(suites) > 1:
         raise ValueError("these results came from different prompt suites or "

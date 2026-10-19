@@ -320,6 +320,109 @@ def test_a_missing_gemini_key_is_a_clear_error():
             os.environ["GEMINI_API_KEY"] = old_key
 
 
+# --- 6. a busy or failing backend ------------------------------------------------
+
+def _fake_gemini(behaviour):
+    """Install fake google.genai/dotenv whose generate_content follows `behaviour`,
+    a list of exceptions or reply strings consumed one call at a time."""
+    import types
+    calls = []
+
+    class Models:
+        def generate_content(self, model, contents, config):
+            calls.append(contents)
+            item = behaviour.pop(0)
+            if isinstance(item, Exception):
+                raise item
+            return types.SimpleNamespace(text=item)
+
+    genai = types.ModuleType("google.genai")
+    genai.Client = lambda api_key: types.SimpleNamespace(models=Models())
+    gtypes = types.ModuleType("google.genai.types")
+    gtypes.GenerateContentConfig = lambda **kw: kw
+    genai.types = gtypes
+    google = types.ModuleType("google")
+    google.genai = genai
+    dotenv = types.ModuleType("dotenv")
+    dotenv.load_dotenv = lambda *a, **k: None
+    names = ("google", "google.genai", "google.genai.types", "dotenv")
+    saved = {n: sys.modules.get(n) for n in names}
+    sys.modules.update({"google": google, "google.genai": genai,
+                        "google.genai.types": gtypes, "dotenv": dotenv})
+    os.environ["GEMINI_API_KEY"] = "test-key"
+
+    def restore():
+        for n, mod in saved.items():
+            if mod is None:
+                sys.modules.pop(n, None)
+            else:
+                sys.modules[n] = mod
+        os.environ.pop("GEMINI_API_KEY", None)
+    return calls, restore
+
+
+def test_a_busy_server_is_waited_out_not_scored():
+    """Seen on the first real Gemini run: every prompt came back 503
+    "UNAVAILABLE - high demand" and was recorded as a backend error."""
+    busy = Exception("503 UNAVAILABLE. This model is currently experiencing high demand")
+    calls, restore = _fake_gemini([busy, busy, REFUSE])
+    try:
+        m = gb.make_model("gemini", "gemini-test-001")
+        slept = []
+        m._sleep = slept.append                     # no real waiting in a test
+        r = gb.run_prompt(m, {"id": "S01", "expected": "invalid",
+                              "boundary": "semantic", "text": "Fly me to the moon."}, SC)
+    finally:
+        restore()
+    check("a 503 is retried, and the third attempt's answer is scored",
+          r.outcome == "model_rejected" and len(calls) == 3, f"{r.outcome} {len(calls)}")
+    check("the retries are recorded", r.attempts == 3)
+    check("the wait between retries grows", slept == [5.0, 10.0], f"{slept}")
+    check("waiting is not counted as model latency", r.model_latency_ms < 1000.0)
+
+
+def test_a_permanent_error_fails_at_once():
+    calls, restore = _fake_gemini([Exception("400 INVALID_ARGUMENT: model not found")])
+    try:
+        m = gb.make_model("gemini", "no-such-model")
+        m._sleep = lambda s: None
+        r = gb.run_prompt(m, {"id": "V01", "expected": "valid",
+                              "text": "Hover for 3 seconds, then land."}, SC)
+    finally:
+        restore()
+    check("a permanent error is not retried", len(calls) == 1)
+    check("it is recorded as a backend error, not a result", r.outcome == "backend_error")
+
+
+def test_a_server_that_never_recovers_gives_up():
+    busy = Exception("503 UNAVAILABLE")
+    calls, restore = _fake_gemini([busy] * 10)
+    try:
+        m = gb.make_model("gemini", "gemini-test-001", retries=3)
+        m._sleep = lambda s: None
+        r = gb.run_prompt(m, {"id": "V01", "expected": "valid",
+                              "text": "Hover for 3 seconds, then land."}, SC)
+    finally:
+        restore()
+    check("retries are bounded", len(calls) == 4, f"{len(calls)}")
+    check("and the prompt ends as a backend error", r.outcome == "backend_error")
+    check("the error says how many attempts were made", "after 4 attempts" in r.backend_error)
+
+
+def test_runs_with_backend_errors_stay_out_of_the_table():
+    d = tempfile.mkdtemp()
+    good = run(gb.ScriptedModel(default=gb._literal_planner, name="good-model"))
+    bad = run(gb.ScriptedModel(replies={}, default=None, name="unreachable-model"))
+    json.dump(good, open(os.path.join(d, "good.json"), "w"))
+    json.dump(bad, open(os.path.join(d, "bad.json"), "w"))
+    try:
+        gb.write_table(gb.load_results(d), d)
+        check("a run with unanswered prompts cannot enter the table", False)
+    except ValueError as e:
+        check("a run with unanswered prompts cannot enter the table",
+              "unreachable-model" in str(e), str(e)[:80])
+
+
 def main():
     for fn in [v for k, v in sorted(globals().items()) if k.startswith("test_")]:
         fn()
