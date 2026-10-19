@@ -919,6 +919,29 @@ def validate(plan: Any) -> tuple[list[dict[str, Any]], list[str]]:
     return checked, notes
 
 
+def server_version(endpoint: str = OLLAMA_ENDPOINT) -> str | None:
+    """The Ollama server's own version string, or None if it cannot be read.
+
+    Recorded with every series because the server is part of the apparatus and
+    was previously invisible: the provenance named the ENDPOINT but not what was
+    running there, so two blocks produced by different Ollama versions looked
+    identical in the record. Found 2026-10-19, while upgrading 0.35.1 to 0.40.6
+    between two sets of runs that are meant to be compared.
+
+    Never fatal. A version that cannot be read is recorded as None, which is
+    still better than a number nobody checked.
+    """
+    import json
+    import urllib.request
+
+    try:
+        url = normalise_endpoint(endpoint).rstrip("/") + "/api/version"
+        with urllib.request.urlopen(url, timeout=10) as response:
+            return json.loads(response.read().decode("utf-8")).get("version")
+    except Exception:
+        return None
+
+
 class EndpointError(Exception):
     """The model endpoint is not usable. Raised before anything flies."""
 

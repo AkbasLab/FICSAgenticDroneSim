@@ -511,6 +511,13 @@ def main() -> int:
         print(exc, file=sys.stderr)
         return 1
 
+    # The server is part of the apparatus. Read once, here, and carried on every
+    # row: without it two blocks served by different Ollama versions are
+    # indistinguishable in the record, which matters whenever they are meant to
+    # be compared.
+    ollama_version = agent.server_version(endpoint)
+    print(f"server  : ollama {ollama_version or 'version unknown'}")
+
 
     client = None
     if not args.plan_only:
@@ -580,7 +587,8 @@ def main() -> int:
             # edited between them; a row that cannot state its own conditions is
             # not evidence.
             conditions = dict(config["protocol"], flown=not args.plan_only,
-                              code=manifest, ollama_endpoint=endpoint)
+                              code=manifest, ollama_endpoint=endpoint,
+                              ollama_version=ollama_version)
             # Overwrite the declared options with the ones actually sent, so a
             # row cannot claim conditions that never reached the model.
             conditions["options"] = options
