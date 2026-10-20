@@ -59,9 +59,10 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-# PHASE 2: execution now lives in agentic_uav/, behind a VehicleAdapter. These
-# names are re-exported so every caller of this module -- the runner, the
-# sandbox, the tests -- keeps working unchanged.
+# PHASE 2: execution lives in agentic_uav/control behind a VehicleAdapter, and
+# planning in agentic_uav/planners behind a MissionPlanner. These names are
+# re-exported so every caller of this module -- the runner, the sandbox, the
+# tests -- keeps working unchanged.
 from agentic_uav.control import executor as _executor  # noqa: E402
 from agentic_uav.control.contacts import (  # noqa: E402,F401
     CAMERA_OBJECTS,
@@ -97,6 +98,27 @@ from agentic_uav.control.ground import (  # noqa: E402,F401
 )
 from agentic_uav.control.monitor import SeparationMonitor  # noqa: E402,F401
 from agentic_uav.core.errors import PlanError  # noqa: E402,F401
+from agentic_uav.planners import ollama_planner as _ollama_planner  # noqa: E402
+from agentic_uav.planners.base_planner import MissionPlanner, PlanRecord  # noqa: E402,F401
+from agentic_uav.planners.endpoint import (  # noqa: E402,F401
+    MODEL,
+    OLLAMA_ENDPOINT,
+    EndpointError,
+    check_endpoint,
+    is_transport_error,
+    normalise_endpoint,
+    server_version,
+)
+from agentic_uav.planners.ollama_planner import OLLAMA_OPTIONS  # noqa: E402,F401
+from agentic_uav.planners.plan_schema import (  # noqa: E402,F401
+    ACTIONS,
+    MAX_ALTITUDE,
+    MAX_DURATION,
+    MIN_ALTITUDE,
+    PLAN_SCHEMA,
+    validate,
+)
+from agentic_uav.planners.prompt import EXAMPLES, SYSTEM_PROMPT, build_messages  # noqa: E402,F401
 from agentic_uav.simulator import scenario_manager as _scenario  # noqa: E402
 from agentic_uav.simulator.airsim_adapter import AirSimAdapter  # noqa: E402
 from agentic_uav.simulator.scenario_manager import (  # noqa: E402,F401
@@ -105,218 +127,12 @@ from agentic_uav.simulator.scenario_manager import (  # noqa: E402,F401
     foreign_vehicles,
 )
 
-# ----------------------------------------------------------------- constants
-
-MODEL = "llama3.2:3b"
-
-# Where planning calls are sent. Ollama's own default is http://127.0.0.1:11434,
-# and the library reads OLLAMA_HOST from the environment -- which is a trap when
-# the model is meant to be running somewhere else, because a plan can come from
-# a completely different machine than the data implies. So the endpoint is
-# resolved once, here, and recorded with every planning call.
-#
-# For a remote model, point this at the local end of an SSH tunnel:
-#
-#     ssh -N -L 11435:gpu01:11434 user@vega.erau.edu
-#     --ollama-host http://127.0.0.1:11435
-#
-# Deliberately NOT port 11434 for a tunnel: that is where a local Ollama
-# listens, so if the tunnel dies the agent would silently fall back to whatever
-# small model is installed locally and the results would be mislabelled.
-OLLAMA_ENDPOINT = os.environ.get("OLLAMA_HOST") or "http://127.0.0.1:11434"
-
-
-def is_transport_error(exc: BaseException) -> bool:
-    """True if the endpoint was unreachable, rather than the model misbehaving.
-
-    THE DISTINCTION IS NOT COSMETIC. plan_for() records any failure as an
-    invalid plan, so without this a dropped network link lands in the
-    `all_valid` column as the model having produced something unflyable. Over a
-    VPN to a cluster that will happen, and it would quietly understate the
-    model -- scoring our own connectivity as its failure.
-
-    Classified by type rather than by message: ollama talks over httpx, so a
-    dead endpoint surfaces as an httpx or httpcore exception, a socket error,
-    or a plain ConnectionError depending on how it died. Matching on module and
-    on the usual words in the class name covers those without importing httpx
-    here, which matters because --plan-only has to work on a machine with a
-    minimal install.
-    """
-    if isinstance(exc, (ConnectionError, TimeoutError)):
-        return True
-    module = type(exc).__module__.split(".")[0]
-    if module in ("httpx", "httpcore", "socket", "ssl", "urllib3", "requests"):
-        return True
-    name = type(exc).__name__
-    if any(word in name for word in
-           ("Connect", "Timeout", "Transport", "Unreachable", "Protocol")):
-        return True
-    # OSError last: ConnectionError is a subclass, but so are unrelated file
-    # errors, so this is a fallback rather than a first test.
-    return isinstance(exc, OSError)
-
-
-def normalise_endpoint(endpoint: str) -> str:
-    """Accept `host:port` as well as a full URL, since both get typed."""
-    endpoint = (endpoint or "").strip()
-    if endpoint and "://" not in endpoint:
-        endpoint = "http://" + endpoint
-    return endpoint or "http://127.0.0.1:11434"
-
-# DEFAULT inference options for running the agent directly. The authoritative
-# values for a scored series live in configs/missions/*.toml under
-# [protocol.options] and are passed in -- see plan_for(). These are part of the
-# measurement protocol, not preferences.
-#
-# num_gpu is the number of layers offloaded to the GPU, and it is PER REQUEST.
-# Zero is correct on this laptop, where the simulator already owns 4 GB of
-# VRAM -- but sending zero to a remote GPU server makes that server reload the
-# model onto CPU cores. Measured 2026-10-06: a 70B sitting entirely on an H100
-# would be thrown off it by this one value.
-#
-# num_ctx matters more than it looks. Left unset, Ollama uses the model's own
-# maximum, which for llama3.3 is 131072 -- and the KV cache for a 70B at that
-# length is about 43 GB on top of 42 GB of weights, so the model does not fit
-# in an 80 GB card and gets split 67%/33% CPU/GPU. Pinning it small puts the
-# whole model on the GPU and makes the number comparable between machines
-# instead of depending on each Ollama version's default.
-OLLAMA_OPTIONS = {
-    # The LAPTOP's defaults, not the study's. The runner always sends the
-    # protocol block from the mission config, which since 2026-10-19 asks for
-    # the model's full 131072 context on two H100s. These values are what a
-    # bare import gets on a machine whose VRAM belongs to the simulator.
-    "num_gpu": 0,
-    "num_ctx": 4096,
-    "temperature": 0,
-    "num_predict": 512,
-    "num_thread": 12,
-}
-
 
 AIRSIM_PORT = 41451
-MAX_DURATION = 60.0      # seconds; a single leg longer than this is rejected
-MAX_ALTITUDE = -120.0    # metres NED; roughly the legal ceiling for small UAS
-MIN_ALTITUDE = -2.0      # metres NED; below this is effectively ground level
 
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOG_PATH = os.path.join(REPO_ROOT, "runs", "agent-log.jsonl")
-
-ACTIONS = (
-    "fly_to", "fly_straight", "fly_backward", "fly_left", "fly_right",
-    "hover", "set_altitude", "land",
-)
-
-# The schema is the single most important part of this agent. Small local models
-# collapse multi-step requests into one action when left unconstrained -- asked
-# to hover then land, they return only the hover. Requiring an array, and
-# restricting the action name to an enum, fixes that and also stops the model
-# inventing actions that do not exist.
-PLAN_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "plan": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-                "type": "object",
-                "properties": {
-                    "action": {"type": "string", "enum": list(ACTIONS)},
-                    "duration": {"type": "number"},
-                    "x": {"type": "number"},
-                    "y": {"type": "number"},
-                    "z": {"type": "number"},
-                },
-                "required": ["action"],
-            },
-        }
-    },
-    "required": ["plan"],
-}
-
-SYSTEM_PROMPT = f"""You convert a plain-English drone instruction into a flight plan.
-
-Reply with JSON only: {{"plan": [ ... ]}} -- an array of steps, in execution order.
-
-Available actions, and their parameters:
-  fly_to        x, y, z    fly to an absolute coordinate
-  fly_straight  duration   forward, relative to the drone's heading
-  fly_backward  duration   backward
-  fly_left      duration   strafe left
-  fly_right     duration   strafe right
-  hover         duration   hold position
-  set_altitude  z          climb or descend
-  land                     controlled descent and landing
-
-Rules:
-- duration is in seconds. Speed is fixed at {MOVE_SPEED} m/s and cannot be changed.
-- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.
-- Emit one step per requested manoeuvre, in the order they must be executed,
-  which is not always the order they are mentioned.
-- "return home" is fly_to with x = 0, y = 0.
-- Do not invent actions. Do not add steps that were not asked for.
-"""
-
-# Worked examples, chosen so that none of them is a mission from
-# docs/BASELINE_MISSIONS.md or a close paraphrase of one. A demonstration that
-# mirrors a benchmark item makes that item score correct because it is in the
-# prompt, not because the model solved it.
-EXAMPLES = [
-    (
-        "fly left for 2 seconds, then climb to 30 meters",
-        {"plan": [
-            {"action": "fly_left", "duration": 2},
-            {"action": "set_altitude", "z": -30},
-        ]},
-    ),
-    (
-        "after hovering for 4 seconds, fly backward for 6 seconds",
-        {"plan": [
-            {"action": "hover", "duration": 4},
-            {"action": "fly_backward", "duration": 6},
-        ]},
-    ),
-]
-
-
-# ------------------------------------------------------------------- results
-
-@dataclass
-class PlanRecord:
-    """One planning call, as it is logged."""
-
-    drone: str
-    instruction: str
-    raw_output: str
-    plan: list[dict[str, Any]] | None
-    plan_seconds: float
-    valid: bool
-    error: str | None = None
-    normalised: list[str] = field(default_factory=list)
-    model: str = MODEL
-    # Which endpoint answered. A model name alone does not say where it ran,
-    # and "llama3.3:70b" served from a laptop and from an H100 are not the
-    # same measurement.
-    endpoint: str = OLLAMA_ENDPOINT
-    # True when the endpoint could not be reached at all. Such a row is NOT a
-    # measurement of the model and must not be scored as one.
-    transport_error: bool = False
-
-    def as_json(self) -> dict[str, Any]:
-        return {
-            "t": time.strftime("%Y-%m-%dT%H:%M:%S"),
-            "drone": self.drone,
-            "model": self.model,
-            "endpoint": self.endpoint,
-            "instruction": self.instruction,
-            "raw_output": self.raw_output,
-            "plan": self.plan,
-            "plan_seconds": round(self.plan_seconds, 2),
-            "valid": self.valid,
-            "transport_error": self.transport_error,
-            "error": self.error,
-            "normalised": self.normalised,
-        }
 
 
 def log_execution(outcomes: list[dict[str, Any]], separation: dict[str, Any] | None = None) -> None:
@@ -502,244 +318,18 @@ def write_settings(count: int, exact: bool = False) -> tuple[str, bool]:
 
 # ------------------------------------------------------------------ planning
 
-def build_messages(instruction: str) -> list[dict[str, str]]:
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    for example_instruction, example_plan in EXAMPLES:
-        messages.append({"role": "user", "content": example_instruction})
-        messages.append({"role": "assistant", "content": json.dumps(example_plan)})
-    messages.append({"role": "user", "content": instruction})
-    return messages
-
-
-def validate(plan: Any) -> tuple[list[dict[str, Any]], list[str]]:
-    """Check a plan is flyable. Returns (steps, notes) or raises PlanError.
-
-    The schema already guarantees shape and action names. This checks the things
-    a schema cannot: that parameters are present for the action that needs them,
-    that durations are sane, and that altitudes are the right sign.
-    """
-    if not isinstance(plan, dict) or "plan" not in plan:
-        raise PlanError("no 'plan' key in model output")
-    steps = plan["plan"]
-    if not isinstance(steps, list) or not steps:
-        raise PlanError("'plan' is not a non-empty array")
-
-    notes: list[str] = []
-    checked: list[dict[str, Any]] = []
-
-    for position, step in enumerate(steps, start=1):
-        if not isinstance(step, dict):
-            raise PlanError(f"step {position} is not an object")
-        action = step.get("action")
-        if action not in ACTIONS:
-            raise PlanError(f"step {position}: unknown action {action!r}")
-
-        if action in ("fly_straight", "fly_backward", "fly_left", "fly_right", "hover"):
-            duration = step.get("duration")
-            if not isinstance(duration, (int, float)):
-                raise PlanError(f"step {position}: {action} needs a duration")
-            if duration <= 0:
-                raise PlanError(f"step {position}: duration must be positive")
-            if duration > MAX_DURATION:
-                raise PlanError(
-                    f"step {position}: duration {duration}s exceeds the {MAX_DURATION}s limit"
-                )
-
-        if action == "set_altitude":
-            z = step.get("z")
-            if not isinstance(z, (int, float)):
-                raise PlanError(f"step {position}: set_altitude needs z")
-            if z > 0:
-                # The model meant "up". Obeying the sign would fly into the
-                # ground, so normalise and record that it happened -- silently
-                # correcting a model error would hide a real failure mode.
-                notes.append(f"step {position}: z={z} treated as {-z} (NED, negative is up)")
-                z = -float(z)
-            if z > MIN_ALTITUDE:
-                raise PlanError(f"step {position}: z={z} is at or below ground level")
-            if z < MAX_ALTITUDE:
-                raise PlanError(f"step {position}: z={z} exceeds the {MAX_ALTITUDE}m ceiling")
-            step = dict(step, z=float(z))
-
-        if action == "fly_to":
-            for axis in ("x", "y"):
-                if not isinstance(step.get(axis), (int, float)):
-                    raise PlanError(f"step {position}: fly_to needs {axis}")
-            z = step.get("z", CRUISE_ALTITUDE)
-            if not isinstance(z, (int, float)):
-                raise PlanError(f"step {position}: fly_to z must be a number")
-            if z > 0:
-                notes.append(f"step {position}: z={z} treated as {-z} (NED, negative is up)")
-                z = -float(z)
-            # NOT bounds-checked, unlike set_altitude. The asymmetry is real
-            # and the behaviour is DELIBERATE as of 2026-10-19: left alone, so
-            # "return home" means the origin at ground level and M04 scores as
-            # the model wrote it. set_altitude refuses z = 0 as "at or below
-            # ground level"; fly_to accepts it, and since altitudes are anchored
-            # to the measured ground, z = 0 means the terrain. Measured
-            # 2026-10-09: two drones told to "return home and land" from 70 m and
-            # 55 m both arrived at 0.04 m AGL after fly_to, where its default
-            # implies 8 m. It explains M04 finishing at 0.27 m where every other
-            # mission finishes near 1.17 m.
-            #
-            # Applying the bounds here was tried and REVERTED on 2026-10-09:
-            # the model emits {"x":0,"y":0,"z":0} for M04 in all three attempts,
-            # so the bounds turn a 3/3 mission into 0/3. Decided 2026-10-19 to
-            # leave it: nothing in the prompt tells the model fly_to's z has a
-            # floor, so rejecting the plan would score it against a rule it was
-            # never given. The consequence is recorded instead -- a fly_to with
-            # z = 0 arrives at ground level, which is why M04 finishes at 0.27 m
-            # where other missions finish near 1.17 m. See the phase log.
-            step = dict(step, z=float(z))
-
-        checked.append(step)
-
-    return checked, notes
-
-
-def server_version(endpoint: str = OLLAMA_ENDPOINT) -> str | None:
-    """The Ollama server's own version string, or None if it cannot be read.
-
-    Recorded with every series because the server is part of the apparatus and
-    was previously invisible: the provenance named the ENDPOINT but not what was
-    running there, so two blocks produced by different Ollama versions looked
-    identical in the record. Found 2026-10-19, while upgrading 0.35.1 to 0.40.6
-    between two sets of runs that are meant to be compared.
-
-    Never fatal. A version that cannot be read is recorded as None, which is
-    still better than a number nobody checked.
-    """
-    import json
-    import urllib.request
-
-    try:
-        url = normalise_endpoint(endpoint).rstrip("/") + "/api/version"
-        with urllib.request.urlopen(url, timeout=10) as response:
-            return json.loads(response.read().decode("utf-8")).get("version")
-    except Exception:
-        return None
-
-
-class EndpointError(Exception):
-    """The model endpoint is not usable. Raised before anything flies."""
-
-
-def check_endpoint(model: str = MODEL,
-                   endpoint: str = OLLAMA_ENDPOINT) -> dict[str, Any]:
-    """Confirm the endpoint answers AND is serving the model we asked for.
-
-    WHY THIS RUNS BEFORE EVERY SERIES
-    ---------------------------------
-    The failure it prevents is specific and silent. This laptop runs Ollama on
-    port 11434 with a 3B model. A remote model is reached through an SSH tunnel
-    on a different port. If that tunnel is not up -- or quietly died -- and the
-    endpoint falls back to the default, planning calls are answered by the
-    LOCAL 3B while every record still carries the model name that was
-    requested. The plans would look plausible, the scores would compute, and
-    the results would be wrong in a way nothing in the data could reveal.
-
-    Checking that the model is PRESENT at the endpoint, rather than merely that
-    something answered, is the whole point. "Something answered on 11434" is
-    exactly what a dead tunnel looks like.
-
-    Returns what it found, so the series can record it. Raises EndpointError
-    rather than returning a flag, because flying a scored series against the
-    wrong model is not a degraded run -- it is a worthless one, and it should
-    stop before the first takeoff rather than after twenty-four of them.
-    """
-    import ollama
-
-    endpoint = normalise_endpoint(endpoint)
-    try:
-        listing = ollama.Client(host=endpoint).list()
-    except Exception as exc:
-        raise EndpointError(
-            "no model endpoint at {}: {}: {}".format(
-                endpoint, type(exc).__name__, exc)
-            + "\n  If this should be a remote model, is the SSH tunnel up?"
-            + "\n    ssh -N -L 11435:<gpu-node>:11434 <user>@<cluster>"
-        ) from exc
-
-    # The ollama client returns objects in newer versions and plain dicts in
-    # older ones, and this has to work on whatever is installed on the machine
-    # flying the missions. So read both shapes rather than pinning a version.
-    available = []
-    entries = (listing.get("models", []) if isinstance(listing, dict)
-               else getattr(listing, "models", []))
-    for entry in entries:
-        if isinstance(entry, dict):
-            name = entry.get("model") or entry.get("name")
-        else:
-            name = getattr(entry, "model", None) or getattr(entry, "name", None)
-        if name:
-            available.append(name)
-
-    # Ollama reports a fully qualified tag such as "llama3.3:70b", while a
-    # config may name the family only. A bare family name is accepted as a
-    # prefix, but NEVER the reverse: asking for llama3.3:70b must not be
-    # satisfied by llama3.2:3b happening to be installed.
-    if not any(name == model or name.startswith(model + ":") for name in available):
-        raise EndpointError(
-            "endpoint {} is answering, but does NOT serve {!r}.".format(endpoint, model)
-            + "\n  available there: " + (", ".join(sorted(available)) or "(none)")
-            + "\n  Refusing to fly: a different model would be recorded under"
-            + "\n  the requested name. If this is a tunnel it may point at the"
-            + "\n  wrong host, or have died leaving a local Ollama answering."
-        )
-
-    found = {"endpoint": endpoint, "model": model,
-             "models_available": sorted(available)}
-    print("endpoint: {} serving {}  ({} model(s) available)".format(
-        endpoint, model, len(available)))
-    return found
-
 
 def plan_for(instruction: str, drone: str, model: str = MODEL,
              endpoint: str = OLLAMA_ENDPOINT,
              options: dict[str, Any] | None = None) -> PlanRecord:
-    """Ask the model for a plan and validate it. Never raises; records instead.
+    """Ask the model for a plan and validate it. See ollama_planner.plan_for.
 
-    An explicit `ollama.Client(host=...)` rather than the module-level
-    `ollama.chat`, because the module-level call silently honours OLLAMA_HOST
-    from the environment. That is convenient and dangerous in equal measure: a
-    stale environment variable would send planning calls somewhere other than
-    where the record claims, and nothing would look wrong.
+    `SYSTEM_PROMPT` is read from THIS module at call time, so replacing it
+    here still takes effect -- tools/fly_chat.py rewrites it for its speed
+    setting and its sandbox addendum.
     """
-    import ollama  # imported here so --plan-only works without AirSim installed
-
-    endpoint = normalise_endpoint(endpoint)
-    # The options that actually ran, not the ones a config happens to declare.
-    options = dict(OLLAMA_OPTIONS if options is None else options)
-    client = ollama.Client(host=endpoint)
-    started = time.time()
-    raw = ""
-    try:
-        response = client.chat(
-            model=model,
-            messages=build_messages(instruction),
-            format=PLAN_SCHEMA,
-            options=options,
-        )
-        raw = response["message"]["content"]
-        elapsed = time.time() - started
-        steps, notes = validate(json.loads(raw))
-        return PlanRecord(drone, instruction, raw, steps, elapsed, True, None,
-                          notes, model, endpoint)
-    except (PlanError, json.JSONDecodeError) as exc:
-        return PlanRecord(drone, instruction, raw, None, time.time() - started,
-                          False, str(exc), [], model, endpoint)
-    except Exception as exc:
-        # Separated deliberately: "the endpoint was unreachable" and "the model
-        # produced nonsense" are different findings, and only the second is
-        # about the model. See is_transport_error().
-        transport = is_transport_error(exc)
-        if transport:
-            print(f"[{drone}] ENDPOINT UNREACHABLE at {endpoint}: "
-                  f"{type(exc).__name__}: {exc}", flush=True)
-        return PlanRecord(
-            drone, instruction, raw, None, time.time() - started, False,
-            f"{type(exc).__name__}: {exc}", [], model, endpoint, transport,
-        )
+    return _ollama_planner.plan_for(instruction, drone, model, endpoint, options,
+                                    system_prompt=SYSTEM_PROMPT)
 
 
 # ----------------------------------------------------------------- execution

@@ -42,7 +42,8 @@ they must still pass, unedited, when the refactor is done.
 | `VehicleAdapter` + `SceneAdapter`, core types, AirSim adapter | [`agentic_uav/core/`](../../agentic_uav/core/), [`agentic_uav/simulator/`](../../agentic_uav/simulator/) | **Done** 2026-10-20; not yet used by the agent |
 | Adapter tests, expectations taken from the goldens | [`tests/test_adapter.py`](../../tests/test_adapter.py) | **Passing**, 21 tests |
 | Execution on the adapter | [`agentic_uav/control/`](../../agentic_uav/control/), [`simulator/scenario_manager.py`](../../agentic_uav/simulator/scenario_manager.py) | **Done** 2026-10-20; goldens pass unedited |
-| `MissionPlanner` + Ollama and replay planners | `agentic_uav/planners/` | Not started |
+| `MissionPlanner` + Ollama and replay planners | [`agentic_uav/planners/`](../../agentic_uav/planners/), [`core/protocol.py`](../../agentic_uav/core/protocol.py) | **Done** 2026-10-20; goldens pass unedited |
+| Planner tests | [`tests/test_planners.py`](../../tests/test_planners.py) | **Passing**, 8 tests |
 | Runner and logging moved | `agentic_uav/experiments/` | Not started |
 
 ## Plan
@@ -58,7 +59,8 @@ one without the goldens being re-recorded.
    the executor. AirSim is touched only inside the adapter. Done; see the
    record.
 4. **`MissionPlanner`**, with an Ollama planner (Llama and Mistral both run
-   through it) and a replay planner that returns recorded replies.
+   through it) and a replay planner that returns recorded replies. Done; see
+   the record.
 5. **Move the runner, monitor and logging into `agentic_uav/experiments/`.**
    `baseline/open_loop_agent.py` becomes a thin entry point with the same
    command line, so every documented command keeps working.
@@ -202,10 +204,78 @@ directly.
 connection and the leftover-drone preflight) and `fly_chat.py`'s status and
 land-all helpers. Both move in step 5.
 
+### 2026-10-20 — planning moved behind the MissionPlanner; the goldens pass unedited
+
+Everything that plans left the agent, which went from 971 lines to about 560.
+It is now an entry point: re-exports, three thin wrappers, settings,
+logging, provenance and `main`.
+
+| Moved | To |
+|---|---|
+| `ACTIONS`, `PLAN_SCHEMA`, `validate`, the duration and altitude limits | `planners/plan_schema.py` |
+| `SYSTEM_PROMPT`, `EXAMPLES`, `build_messages` | `planners/prompt.py` |
+| `MODEL`, `OLLAMA_ENDPOINT`, `normalise_endpoint`, `is_transport_error`, `server_version`, `check_endpoint` | `planners/endpoint.py` |
+| `OLLAMA_OPTIONS`, `plan_for` | `planners/ollama_planner.py`, plus `OllamaPlanner` |
+| `PlanRecord` | `planners/base_planner.py`, beside the `MissionPlanner` protocol |
+| `MOVE_SPEED`, `CRUISE_ALTITUDE` | `core/protocol.py`, out of the executor |
+
+Moved by script as in step 3: blocks cut by asserted line range, then only the
+substitutions the move needed. The comments moved word for word, with one
+exception: `OLLAMA_OPTIONS` said the config asks for 131072 context on two
+H100s, superseded the same day by 98304 on one.
+
+**`MissionPlanner.plan(instruction, drone) → PlanRecord`** never raises for a
+bad plan or an unreachable model. It returns a record that says so. Two
+implementations:
+
+* **`OllamaPlanner`** — `plan_for` with model, endpoint, options and system
+  prompt fixed. Llama and Mistral both run through it.
+* **`ReplayPlanner`** — recorded replies through the SAME `json.loads` and
+  `validate`, with no model. Built from a dict or a results file, it refuses
+  conflicting recorded replies and never invents a plan for an unrecorded
+  request. Checked against every reply in the planning goldens: identical
+  plan, notes, error and raw text for all 43.
+
+**The sandbox's prompt patching kept working.** `tools/fly_chat.py` rewrites
+`agent.SYSTEM_PROMPT` for its speed setting and its addendum. `build_messages`
+and `plan_for` now take a `system_prompt`, and the agent's `plan_for` wrapper
+passes the agent's current one at call time. Tested directly.
+
+**Shared constants have one home.** The prompt tells the model the speed and
+the executor flies it. The validator defaults `fly_to`'s z to cruise and the
+executor climbs to it. Both constants now live in `core/protocol.py`, so a
+planner never imports from the flight-control package and the two can never
+disagree.
+
+**Harness unchanged.** The scripted Ollama is installed in `sys.modules`, and
+`plan_for` still imports `ollama` at call time, so it reaches the moved code
+with no new patch point. `git diff tests/golden` is empty.
+
+**Mutations on the moved code, planning goldens:**
+
+| Mutation | Cases failing |
+|---|---|
+| `agent.SYSTEM_PROMPT` edited (the sandbox's path) | 44 |
+| one worked example dropped | 44 |
+| `PLAN_SCHEMA` `minItems` 1 → 2 | 44 |
+| `MAX_DURATION` 60 → 600 | 1, the too-long-duration case |
+
+**A step 3 slip, caught by a new check.** A scan for names used but never
+defined found `fly_plans`' inner `run(record: PlanRecord)` annotating with a
+name the executor never imports. It never failed, because annotations are not
+evaluated there, but it is now typed `Any`. Every module passes the scan.
+
+Also run: the agent's real command line, plan-only, against an unreachable
+endpoint. Planning went through the new planner, the transport failure was
+recorded, and nothing armed. 144 tests pass; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-10-20 | **Protocol constants live in `core/protocol.py`** | The speed and cruise altitude are told to the model by the planner and flown by the executor. One definition keeps them equal, and keeps planners independent of the control package. |
+| 2026-10-20 | **The system prompt is a parameter of the planner** | The sandbox depends on replacing it. A module constant inside `agentic_uav` would silently ignore that. |
+| 2026-10-20 | **`ReplayPlanner` reuses the planner's validation and refuses ambiguity** | A replayed plan must be the plan the model produced, not an approximation. Conflicting recorded replies, or a request never recorded, are errors rather than guesses. |
 | 2026-10-20 | **Move code by script with asserted boundaries, not by retyping** | 900 lines carrying the project's reasoning in their comments. A script that asserts each block's first and last line, and each substitution's count, either moves them exactly or stops. Retyping risks a silent change that the goldens might not reach, for example in a comment-adjacent constant. |
 | 2026-10-20 | **Speed and runner class are parameters of the executor** | The sandbox depends on replacing them, and a module constant read inside `agentic_uav` would silently ignore its replacement. Parameters make the dependency visible, and the study passes the defaults. |
 | 2026-10-20 | **The agent keeps thin wrappers that take a raw client** | Changing the runner, the sandbox and the tests in the same step as moving the code would mix two kinds of change. They move to adapters in step 5, on their own. |

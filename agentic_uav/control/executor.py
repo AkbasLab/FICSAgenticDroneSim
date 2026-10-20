@@ -30,8 +30,7 @@ from .ground import (
 )
 from .monitor import SeparationMonitor
 
-CRUISE_ALTITUDE = -8.0   # metres, NED: negative is up
-MOVE_SPEED = 5.0         # m/s for every directional move
+from ..core.protocol import CRUISE_ALTITUDE, MOVE_SPEED  # noqa: E402  (shared with the planner)
 TAKEOFF_SETTLE = 3.0     # seconds to let takeoff stabilise before the plan runs
 GROUND_SETTLE_TIMEOUT = 15.0   # seconds to wait for the drone to stop falling
 GROUND_SETTLE_TOLERANCE = 0.05 # metres of movement per sample that counts as still
@@ -589,7 +588,7 @@ def fly_plans(scene: Any, records: list[Any],
     outcomes: list[dict[str, Any]] = []
     lock = threading.Lock()
 
-    def run(record: PlanRecord) -> None:
+    def run(record: Any) -> None:     # needs .drone and .plan; see fly_plans' docstring
         # ITS OWN CONNECTION. See connect(): a shared client fails with
         # IOLoop and BufferError exceptions under concurrent use, and both
         # drones stay on the ground.

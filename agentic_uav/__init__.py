@@ -6,11 +6,15 @@ into interchangeable parts, without changing what it does. The tree follows
 `AUV-03 — Repository Architecture`:
 
     core/         plain data shared by everything: positions, vehicle state,
-                  skill commands and results
+                  skill commands and results, protocol constants, errors
     simulator/    the only code that talks to a simulator, behind the
                   VehicleAdapter and SceneAdapter protocols
+    control/      the open-loop executor, the ground reference, contact
+                  classification, the separation monitor
+    planners/     the MissionPlanner protocol: the plan language and its
+                  validation, the prompt, the Ollama and replay planners
 
-Further packages (control, planners, experiments, and later agents and
-coordination) arrive as the code they hold is moved. They are not created
-empty. Behaviour is pinned by `tests/test_golden.py`.
+Further packages (experiments, and later agents and coordination) arrive as
+the code they hold is moved. They are not created empty. Behaviour is pinned
+by `tests/test_golden.py`.
 """
