@@ -1410,7 +1410,7 @@ t+18.39   Drone3  32.1 m        <- Drone1 is at 32.0 m
 a commanded 5 m/s, arriving at the altitude of the drone it touched. And because
 a velocity leg commands `vz = 0` — zero vertical *velocity*, not a held height —
 nothing afterwards brings it back down. That is the whole of the "+14 m backward
-climb" recorded on 2026-10-09 and the "convergence to the other drone's
+climb" recorded on 2026-10-06 *(date corrected 2026-10-20; see the correction entry)* and the "convergence to the other drone's
 altitude" seen since.
 
 So the chain is: **paths cross underneath → contact → ejection → no recovery.**
@@ -1445,7 +1445,7 @@ measured `ground_z` against the known terrain before trusting a single result.
 
 #### A hole in the ground guard, found by being fooled by it
 
-The cross-drone check added on 2026-10-09 compares each drone's measured ground
+The cross-drone check added on 2026-10-06 *(date corrected 2026-10-20; see the correction entry)* compares each drone's measured ground
 against the others and refuses a run when they disagree by more than 5 m. It
 has no absolute reference, so **if every drone reads the same wrong ground it
 passes**, which is exactly what happened in experiment 2 above.
@@ -1469,8 +1469,9 @@ set when `fly()` read it was luck. M05 is the mission it matters for: it flies
 contact evidence.
 
 Identical flights — 22.2 s, final height 27.24 — reported **landed** on
-2026-10-09 and **not landed** on 2026-10-19. So the 9 October block's "24/24
-landed" was true by coincidence. The 10 Hz poll saw the terrain contact at
+2026-10-06 and **not landed** on 2026-10-19 *(dates corrected 2026-10-20; see
+the correction entry)*. So the 6 October `v3` block's "24/24 landed" was true by
+coincidence. The 10 Hz poll saw the terrain contact at
 t+21.94 in both. The check now falls back to it, and each outcome records
 `landed_evidence` saying what decided it: 39 by height or teardown read, 3 by
 polled contact.
@@ -1506,7 +1507,7 @@ would have been.
   indistinguishable.
 * **Flight times are unchanged across both the version jump and the 24× context
   change** — M01 21.7 s, M02 17.6, M03 27.4, M04 22.8, M05 22.2, M06 20.6,
-  M07 23.8, M08 30.9, matching 9 October exactly. Planning latency likewise:
+  M07 23.8, M08 30.9, matching the 6 October `v3` block exactly *(date corrected 2026-10-20; see the correction entry)*. Planning latency likewise:
   34.1 s cold, 0.8–1.9 s warm.
 * **`ollama list` now needs a running server**, where 0.35.1 answered from the
   models directory. The staging section of the manual uses it as a check.
@@ -1567,6 +1568,32 @@ the stale settings hash (above).
 tagged `v0.1-open-loop-baseline` along with `phase-01-complete`. The two things
 this does not show are in Open questions: a second person, and why Drone3
 jumps.
+
+### 2026-10-20 — correction: there was no 9 October block
+
+Four places in this log, four in `RUN_LEDGER.md`, one comment in
+`agentic_uav/control/executor.py` and one test docstring referred to a block
+flown on **9 October**. There was none. They mean the **`v3` block flown on
+6 October**, sessions `20261006-201608`, `-203012` and `-203259`.
+
+How it was established, from the data rather than recollection:
+
+* **The agent's own log has no flights on 9 October.** `runs/agent-log.jsonl`
+  holds execution records on 28–29 September, 6 October and 19–20 October
+  only. No results file is dated the 9th.
+* **The figures quoted for "9 October" are `v3`'s exactly.** Flight times M01
+  21.7, M02 17.6, M03 27.4, M04 22.8, M05 22.2, M06 20.7, M07 23.8, M08 30.9.
+  Its three M05 runs carry `landed_on_ground: true`, which is the comparison
+  being made against `v5-polled`'s `false`.
+* **Two changes dated the 9th were committed on the 6th:** the cross-drone
+  ground check (`a80c567`, 21:39) and the record of Drone3's ~14 m gain
+  (`4fe14dc`, 20:39).
+
+Corrected in place, each marked. **What genuinely happened on 9 October is
+unaffected and still dated so:** the `fly_chat` sandbox, the hotel pinning and
+the `fly_to` bound (`11af1e6`), the speed decisions, the `%CARLAAIR_ROOT%` path
+work and the audit fixes (`ddced04`). The commit messages of `1258aed` and
+`f35ded6` repeat the wrong date and, being history, stay as written.
 
 ## Decisions
 

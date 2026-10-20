@@ -636,8 +636,9 @@ def fly_plans(scene: Any, records: list[Any],
     # therefore rests entirely on contact evidence.
     #
     # Measured: identical flights, 22.2 s and a final height of 27.24 in both,
-    # reported landed on 2026-10-09 and NOT landed on 2026-10-19. The 9 October
-    # block's "24/24 landed" was true by coincidence rather than by measurement.
+    # reported landed on 2026-10-06 and NOT landed on 2026-10-19. The 6 October
+    # v3 block's "24/24 landed" was true by coincidence rather than by
+    # measurement. (First written as 9 October; no flights happened that day.)
     #
     # The 10 Hz poll does not have the problem -- it caught the terrain contact
     # at t+21.94 of a 22.2 s flight -- so the landing check now uses it. The

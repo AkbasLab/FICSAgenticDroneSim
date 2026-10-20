@@ -74,15 +74,20 @@ M10 (four drones):        3 /  3      COMPLETE; contacts recorded, see below
 > landing and contact are all measured rather than assumed**, and it supersedes
 > every earlier one.
 >
-> Earlier blocks are kept with their verdicts. In particular the 2026-10-09
-> block's "24/24 landed" was true **by coincidence**: `landed_on_ground` came
+> Earlier blocks are kept with their verdicts. In particular the 2026-10-06
+> `v3` block's "24/24 landed" was true **by coincidence**: `landed_on_ground` came
 > from one timing-dependent collision read, and the identical M05 flight
-> reported landed on the 9th and not landed on the 19th. See the phase log.
+> reported landed on the 6th and not landed on the 19th. See the phase log.
 >
-> **Comparability:** flight times are identical to 2026-10-09 across both an
+> **Comparability:** flight times are identical to the 2026-10-06 `v3` block across both an
 > Ollama version jump and a 24x context change — M01 21.7 s, M02 17.6, M03 27.4,
 > M04 22.8, M05 22.2, M06 20.6, M07 23.8, M08 30.9. Planning latency likewise.
 > Neither change affected anything measured.
+>
+> *Corrected 2026-10-20:* this note and §4b/§5 first said "9 October". No run was
+> flown that day (the agent log has no flights between 6 and 19 October). The
+> block meant is `v3`, flown 6 October, whose flight times and M05 landing flags
+> are the ones quoted. See the phase log's correction entry.
 >
 > **Reproduced from a clean clone, 2026-10-19/20.** On the server instance that
 > flew v6, all 42 drone-plans came back byte-identical, and M01–M09 flew to
@@ -363,7 +368,7 @@ use.
 
 ### What this means for earlier runs
 
-The runs of 6 and 9 October used `num_ctx = 4096`. By the same argument their
+The runs of 6 October used `num_ctx = 4096`. By the same argument their
 plans cannot have been affected either: 4,096 was already 4.9x the 838 tokens
 needed. They remain valid, and no comparison run is required to establish it.
 
@@ -387,7 +392,7 @@ Recorded here because a run's conditions are part of the result. These are
 | Planning latency | 35.6 s first call, then **0.8–6.0 s** by mission (M10 sums four drones) |
 | Flight times | M01 21.7 · M02 17.7 · M03 27.4 · M04 22.8 · M05 22.2 · M06 20.7 · M07 23.7 · M08 30.9 · M09 33.5 · M10 38.3–39.1 s |
 
-The 6 and 9 October runs used Ollama 0.35.1 and `num_ctx = 4096`. §4b shows
+The 6 October runs used Ollama 0.35.1 and `num_ctx = 4096`. §4b shows
 the context could not have affected their plans, and the comparability note in
 §2 shows the version and context change left flight times unchanged.
 

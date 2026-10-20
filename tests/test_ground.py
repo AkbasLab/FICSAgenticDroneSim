@@ -282,7 +282,7 @@ class LandingContactTests(unittest.TestCase):
     contact evidence.
 
     Measured: identical flights, 22.2 s and a final height of 27.24 both times,
-    reported LANDED on 2026-10-09 and NOT LANDED on 2026-10-19. The earlier
+    reported LANDED on 2026-10-06 and NOT LANDED on 2026-10-19. The earlier
     block's 24/24 was true by coincidence. The 10 Hz poll saw the contact in
     both cases.
     """
