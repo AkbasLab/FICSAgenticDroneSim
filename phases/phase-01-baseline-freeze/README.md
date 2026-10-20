@@ -1336,6 +1336,169 @@ where the physics engine recorded them interpenetrating. Contacts now collapse
 properly: two rows, five events each, worst penetration 0.009 m, where a stalled
 flight previously produced 3256 rows.
 
+### 2026-10-19 — Phase 1 flown clean, and the contact "contradiction" dissolves
+
+Thirty runs on `llama3.3:70b`, Ollama 0.40.6, `num_ctx = 98304`, collision
+polling on: **42/42 landings, 0 obstacle collisions, 27/30 plans correct** (M08
+unscoreable by design). The first block in this project's history where
+planning, flight, altitude, landing and contact are all measured rather than
+assumed.
+
+#### The 7.55 m contradiction was never a contradiction
+
+Recorded across three sessions as two measurements that could not both be true:
+`SeparationMonitor` reporting Drone1 and Drone3 never closer than **7.55 m**
+while the physics engine recorded them interpenetrating by up to **0.326 m**.
+Ruled out along the way: frame confusion (`simGetVehiclePose` and
+`kinematics_estimated` agree to 0.00 m on all four drones), stale client
+connections, and a misreading monitor.
+
+Instrumenting the real four-drone geometry at 10 Hz settles it. **They are two
+different instants.**
+
+```
+t+15.98   Drone1 (-0.1, 0.1, 25.1)   Drone3 (5.6, 0.0, 20.1)
+          horizontal 5.7 m, vertical 5.0 m  ->  3D 7.58 m   <- the monitor's minimum
+
+t+16.98   Drone1 (-0.1, 0.1, 29.5)   Drone3 (2.0, 0.0, 20.0)
+          horizontal 1.54 m, vertical 10.0 m                 <- the contact
+```
+
+The closest 3D approach happens about a second **before** the contact. Nothing
+was lying; the two numbers were simply never about the same moment, and the
+monitor reports a minimum over a flight rather than a value at an event.
+
+**Lesson for the measurement, not just this bug:** a minimum over an interval
+and a value at an instant are different quantities, and comparing them produced
+three sessions of apparent paradox. `per_pair_min_m` should probably be
+accompanied by the separation *at each recorded contact*.
+
+#### What the geometry actually does
+
+M10 places drones at x = 0, 4, 8, 12 and tells Drone3 to fly **backward**, so
+its path runs directly beneath Drone2 and then Drone1. At the contact it is
+1.5 m from being exactly under Drone1.
+
+The ejection follows immediately and is visible in the trace:
+
+```
+t+18.06   Drone3  20.0 m
+t+18.39   Drone3  32.1 m        <- Drone1 is at 32.0 m
+```
+
+**Drone3 does not climb — it is pushed**, 12.7 m in 0.44 s, about 29 m/s against
+a commanded 5 m/s, arriving at the altitude of the drone it touched. And because
+a velocity leg commands `vz = 0` — zero vertical *velocity*, not a held height —
+nothing afterwards brings it back down. That is the whole of the "+14 m backward
+climb" recorded on 2026-10-09 and the "convergence to the other drone's
+altitude" seen since.
+
+So the chain is: **paths cross underneath → contact → ejection → no recovery.**
+
+#### Still unexplained
+
+Why two bodies touch while 10 m apart vertically. The visible aircraft are
+nowhere near that size.
+
+The obvious hypothesis — that the collision volume is a tall vertical column —
+is **unsupported**. Five attempts to measure its height failed, and the failures
+are recorded below because they are the useful part.
+
+#### Five failed experiments, and what they have in common
+
+| # | Intended | Why it measured nothing |
+|---|---|---|
+| 1 | contact at 4/8/12/20 m gaps | `fly_plans` calls `ensure_vehicles`, which puts every drone back on the standard line. All four "gaps" flew at 4 m. The monitor reporting 4.02 m for every one of them was the tell |
+| 2 | same, bypassing that | drones placed at `z = 0`, which is 29 m **above** this terrain, so both read a ground of ≈0 — **wrong in the same direction**, so the cross-drone guard saw them agree and passed. Every altitude was 29 m out |
+| 3 | column height by altitude gap | `ensure_vehicles` hoisted Drone2 to `z = 0` immediately before `arm()`; the ground guard correctly refused it, and only one drone flew |
+| 4 | same, waiting for the ground first | the wait was before `fly_plans`, and the hoist happens inside it |
+| 5 | same, threads run directly | unarmed drones placed by `simSetVehiclePose` never fall, so nothing ever settled |
+
+Four of the five are the same mistake: **placing drones by hand quietly breaks
+the ground reference**, and the breakage is silent because `arm()` reports a
+number either way. The one that appeared to succeed was the one where the
+breakage was symmetric and the guard therefore missed it.
+
+**A controlled multi-drone experiment in this simulator needs the drones placed
+through the normal path, not by hand.** Any future attempt should assert the
+measured `ground_z` against the known terrain before trusting a single result.
+
+#### A hole in the ground guard, found by being fooled by it
+
+The cross-drone check added on 2026-10-09 compares each drone's measured ground
+against the others and refuses a run when they disagree by more than 5 m. It
+has no absolute reference, so **if every drone reads the same wrong ground it
+passes**, which is exactly what happened in experiment 2 above.
+
+That is not hypothetical: `z = 0` is a natural wrong value here, because it is
+where `simSetVehiclePose` and `client.reset()` put things, so all drones reading
+it together is the *likely* failure rather than an unlucky one.
+
+Fixing it needs an absolute check — the ground at the spawn point is a property
+of the map, so a run whose measured ground is tens of metres from the session's
+first good reading is wrong whether or not the drones agree with each other.
+Not yet implemented.
+
+#### Landing, decided by evidence rather than timing
+
+`landed_on_ground` came from a single post-teardown `simGetCollisionInfo`, and
+AirSim clears `has_collided` when contact ends, so whether the flag was still
+set when `fly()` read it was luck. M05 is the mission it matters for: it flies
+25 m out onto terrain about 0.8 m higher, rests **2.01 m** above its arming
+`ground_z`, fails the 1.5 m height test, and therefore depends entirely on
+contact evidence.
+
+Identical flights — 22.2 s, final height 27.24 — reported **landed** on
+2026-10-09 and **not landed** on 2026-10-19. So the 9 October block's "24/24
+landed" was true by coincidence. The 10 Hz poll saw the terrain contact at
+t+21.94 in both. The check now falls back to it, and each outcome records
+`landed_evidence` saying what decided it: 39 by height or teardown read, 3 by
+polled contact.
+
+#### Context sizing, and a 12-hour queue avoided
+
+`num_ctx` moved 4096 → 131072 → **98304** in one day. The middle step was a
+mistake worth recording: full context needs ~43 GB of KV cache on top of 42 GB
+of weights, **1,408 MiB more than one H100 holds**, so a second GPU was being
+requested to cover a 1.4 GB shortfall — at a 12-hour queue and a card another
+user could have had.
+
+98,304 fits with 8.8 GB spare and was verified in flight: **81/81 layers on
+GPU, 30,720 MiB of cache, 71,555 MiB total, no CPU buffers.**
+
+The deciding measurement was of the prompt, not the hardware: the longest
+request in the mission set is **1,302 characters, about 326 tokens**, plus a
+512-token reply cap — roughly **838 tokens**. Since Ollama reserves cache for the
+context *declared* rather than used, `num_ctx` is a memory reservation and not a
+limit on anything. 98,304 is **117×** what the task can consume, and 4,096 was
+already 4.9×.
+
+That also retired the plan to keep the 4,096 runs as a comparison. "The prompt
+is 326 tokens against a 4,096 window" shows the cap could never be *reached*,
+which is a stronger answer than re-running the experiment on more hardware
+would have been.
+
+#### Also this session
+
+* **Ollama 0.35.1 → 0.40.6**, and the server version is now recorded on every
+  row. It was previously invisible: the provenance named the endpoint but not
+  what was running there, so two blocks served by different versions were
+  indistinguishable.
+* **Flight times are unchanged across both the version jump and the 24× context
+  change** — M01 21.7 s, M02 17.6, M03 27.4, M04 22.8, M05 22.2, M06 20.6,
+  M07 23.8, M08 30.9, matching 9 October exactly. Planning latency likewise:
+  34.1 s cold, 0.8–1.9 s warm.
+* **`ollama list` now needs a running server**, where 0.35.1 answered from the
+  models directory. The staging section of the manual uses it as a check.
+* **`gpuq` exists and `batch` is disabled** — the reverse of 6 October, when
+  `gpuq` did not exist and `batch` was the only route. A job exceeding
+  `resources_max.ncpus = 48` is **cancelled 40 seconds later rather than
+  refused at submit**, which looks exactly like a Ctrl-C and cost three jobs
+  before `qstat -Qf gpuq` showed the limit.
+* **`simGetObjectPose` returns NaN for every runtime-spawned drone** and works
+  for the one declared in `settings.json`, though `simListSceneObjects` lists
+  all four. Runtime vehicles are bookkept differently; unexplored.
+
 ### Pending — 1.3
 
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after
@@ -1359,6 +1522,10 @@ the multi-drone missions, or the single-drone missions become invalid.
 
 ## Open questions
 
+- **Why two drones touch while 10 m apart vertically.** At the M10 contact they are 1.54 m apart horizontally and 10.0 m vertically, and the visible aircraft are nowhere near that size. The obvious explanation -- a tall vertical collision volume -- is UNSUPPORTED: five attempts to measure its height on 2026-10-19 all measured nothing, four of them because placing drones by hand silently breaks the ground reference. Any further attempt must place drones through the normal path and assert the measured `ground_z` against the known terrain before trusting a result.
+- **The ground guard has no absolute reference.** It compares drones against each other, so if they all read the same wrong ground it passes -- and `z = 0` is a natural shared wrong value here, being where `simSetVehiclePose` and `client.reset()` put things. Demonstrated accidentally on 2026-10-19. Needs a check against the session's first good reading, not only against the other drones.
+- **`simGetObjectPose` returns NaN for runtime-spawned drones** and works for the one declared in `settings.json`, though `simListSceneObjects` lists all four. Runtime vehicles are bookkept differently somewhere in the engine; unexplored, and possibly related to the contact question above.
+- **`per_pair_min_m` is a minimum over a flight, not a value at an event.** Comparing it with a contact produced three sessions of apparent paradox. It should probably be accompanied by the separation recorded AT each contact.
 - **One AirSim client shared across threads.** `DroneRunner` threads share a
   single `MultirotorClient`. `msgpack-rpc-python` multiplexes one socket and is
   not documented as thread-safe, so this is a plausible source of rare failures

@@ -60,13 +60,41 @@ matching the upstream benchmark so results are comparable.
 runs flown and landed:   30 / 30      (100%)
 plans correct:           21 / 21 scored, + 6 M09 and 12 M10 drone-plans
 altitudes verified:      30 / 30      within 0.13 m of the commanded height
+landings:                42 / 42      drone-landings, on evidence
+obstacle collisions:      0           POLLED at 10 Hz, not inferred
 
-single-drone (M01-M08):  24 / 24      COMPLETE, re-flown 2026-10-06
+single-drone (M01-M08):  24 / 24      COMPLETE
 M09 (two drones):         3 /  3      COMPLETE
-M10 (four drones):        3 /  3      flown; see the caveat below
+M10 (four drones):        3 /  3      COMPLETE; contacts recorded, see below
 ```
 
-> ### Caveat on collision and proximity, 2026-10-06
+> ### The citable block is `v6-polled`, 2026-10-19
+> Thirty runs on `llama3.3:70b`, Ollama **0.40.6**, `num_ctx` **98304**, with
+> collision polling. **This is the first block where planning, flight, altitude,
+> landing and contact are all measured rather than assumed**, and it supersedes
+> every earlier one.
+>
+> Earlier blocks are kept with their verdicts. In particular the 2026-10-09
+> block's "24/24 landed" was true **by coincidence**: `landed_on_ground` came
+> from one timing-dependent collision read, and the identical M05 flight
+> reported landed on the 9th and not landed on the 19th. See the phase log.
+>
+> **Comparability:** flight times are identical to 2026-10-09 across both an
+> Ollama version jump and a 24x context change — M01 21.7 s, M02 17.6, M03 27.4,
+> M04 22.8, M05 22.2, M06 20.6, M07 23.8, M08 30.9. Planning latency likewise.
+> Neither change affected anything measured.
+
+> ### RESOLVED 2026-10-19 — the caveat below no longer applies to `v6-polled`
+> Collisions are polled at 10 Hz throughout every flight, so the 30 runs of
+> 2026-10-19 carry real contact data. The caveat stands for every block before
+> it, which was flown without polling.
+>
+> The 7.55 m "contradiction" is also resolved, and was never a contradiction:
+> the monitor's minimum (t+15.98) and the contact (t+16.98) are **two different
+> instants**. A minimum over an interval is not a value at an event. See the
+> phase log.
+>
+> ### Caveat on collision and proximity, 2026-10-06 (historical)
 > Flight and planning results for all 30 runs stand. **Collision counts do
 > not.** `collisions()` is read once after teardown and AirSim returns only the
 > most recent collision, so the landing contact overwrites anything earlier — a
@@ -181,6 +209,8 @@ sessions stands.
 | **`20261006-201608-v3-M01-M08`** | **70b** | **24** | **VALID STUDY DATA** — plan and execution |
 | **`20261006-203012-v3-M09`** | **70b** | **3** | **VALID** — two drones, 6/6 drone-plans |
 | **`20261006-203259-v3-M10`** | **70b** | **3** | **VALID for plan, flight, altitude** — collision/proximity not trustworthy |
+| `20261019-18*-v5-polled` | 70b | 24 | **diagnostic** — exposed the timing-dependent landing check |
+| **`20261019-18*-v6-polled`** | **70b** | **30** | **THE CITABLE BLOCK** — plan, flight, altitude, landing and contact all measured |
 | `20261006-184158-v2-M10` | 70b | 1 | **diagnostic** — the run that exposed the altitude defect |
 
 ### Why Block A is split
