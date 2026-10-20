@@ -2,14 +2,17 @@
 #
 #     pip install -r requirements.txt
 #
-# CARLA IS NOT LISTED HERE, DELIBERATELY. The carla 0.9.16 wheel for
-# cp310/win_amd64 is not published on PyPI -- it ships inside the CarlaAir
-# package, so it must be installed from your own extracted copy:
+# CARLA IS NOT LISTED HERE, DELIBERATELY. Install the wheel that ships inside
+# the CarlaAir package, from your own extracted copy:
 #
 #     pip install <carlaair-root>\PythonAPI\carla\dist\carla-0.9.16-cp310-cp310-win_amd64.whl
 #
 # Wheel SHA-256: f255c0fa2c89cdbd7b194546a45c03be45009033e4fece8c7021d13d9727fc33
-# Full instructions: docs/SETUP.md
+#
+# PyPI also has carla 0.9.16 for cp310/win_amd64, but it is a different build
+# (SHA-256 5e7d46f13216f0c65ec5ccc6a4b922d0d939be4ef97e07167a4b5f4595865ca6),
+# and the shipped one is what every result was measured with. Don't let pip
+# fetch it. Full instructions: docs/SETUP.md
 #
 # This file used to pin carla by absolute path into one machine's disk, and
 # `packaging` to the conda maintainer's internal build directory -- neither of

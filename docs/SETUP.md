@@ -19,10 +19,15 @@ in particular must be installed before the simulator is first launched.
 | GPU | RTX 3050 Laptop, **4 GB VRAM** | The simulator alone uses 2.6–3.2 GB |
 | Disk | ~25 GB | 6.7 GB archive plus the extracted build |
 
-**The 4 GB VRAM figure is load-bearing, not incidental.** It is why language
-models run on the CPU (`num_gpu: 0`) and compete for system RAM rather than
-video memory, and it is why the factorial experiments are planned against a
-mock adapter rather than live AirSim.
+**The 4 GB VRAM figure is load-bearing, not incidental.** The simulator needs
+most of it, so the study's model cannot run on this laptop at all. It runs on
+a GPU server and is reached over an SSH tunnel (§7). It is also why the
+factorial experiments are planned against a mock adapter rather than live
+AirSim.
+
+The laptop runs the simulator, the agent and the runner. A GPU server with
+about 48 GB of free VRAM serves the model: for this study, one H100 80 GB on
+ERAU's Vega cluster.
 
 ---
 
@@ -66,7 +71,7 @@ this documentation refers to that location as **`%CARLAAIR_ROOT%`** rather than
 naming one machine's drive letter:
 
 ```powershell
-setx CARLAAIR_ROOT "C:\path	o\CarlaAir-v0.1.7-Windows11-x86_64"
+setx CARLAAIR_ROOT "C:\path\to\CarlaAir-v0.1.7-Windows11-x86_64"
 ```
 
 `setx` affects only new sessions, so open a fresh terminal before continuing.
@@ -102,17 +107,30 @@ conda activate carlaAir
 Python is **3.10.21**, built from conda-forge with `--override-channels`,
 deliberately avoiding the Anaconda commercial Terms of Service gate.
 
-### The one package that is not portable
+### CARLA: install the wheel from the archive, not from PyPI
 
-`requirements.txt` is a `pip freeze` of the measured environment, and its
-`carla` entry is a **local file URL** into this machine's install. On any other
-machine, install that wheel from your own extracted archive:
+Neither `environment.yml` nor `requirements.txt` lists `carla`, on purpose.
+Install the wheel that ships inside the CarlaAir archive, into the activated
+environment:
 
 ```powershell
-pip install <carlaair-root>\PythonAPI\carla\dist\carla-0.9.16-cp310-cp310-win_amd64.whl
+pip install $env:CARLAAIR_ROOT\PythonAPI\carla\dist\carla-0.9.16-cp310-cp310-win_amd64.whl
 ```
 
 Wheel SHA-256: `f255c0fa2c89cdbd7b194546a45c03be45009033e4fece8c7021d13d9727fc33`
+
+PyPI also has a `carla 0.9.16` wheel for this Python and platform, but it is a
+**different build** (SHA-256 `5e7d46f1…865ca6`). The shipped one is what every
+result was measured with. A plain `pip install carla==0.9.16` gets the PyPI
+build silently, which is what `environment.yml` used to do. Check which one you
+have:
+
+```powershell
+python -c "import importlib.metadata as m; print(m.distribution('carla').read_text('direct_url.json'))"
+```
+
+The shipped wheel prints a `file:///` URL into your CarlaAir folder with the
+`f255c0fa…` hash. A PyPI install prints `None`.
 
 ### Do not downgrade NumPy
 
@@ -151,23 +169,106 @@ simulator.
 
 ---
 
-## 7. Ollama and the local models
+## 7. The language model
 
-| | |
-|---|---|
-| Runtime | Ollama 0.34.x, endpoint `http://127.0.0.1:11434` |
-| Model store | Set `OLLAMA_MODELS` (User scope) if you keep models off C: |
-| Primary model | `llama3.2:3b` — 1.88 GB |
-| Secondary | `llama3.1:8b` — 4.58 GB, needs other applications closed |
+**The study's model is `llama3.3:70b`**, 4-bit (42 GB), served by **Ollama
+0.40.6** from one NVIDIA H100 80 GB. It does not run on the laptop: the laptop
+has 4 GB of VRAM and the simulator needs most of it. So the model runs on a GPU
+server and the laptop reaches it over an SSH tunnel. The simulator and the
+agent stay on the laptop.
+
+```
+laptop                                      GPU server
+  simulator  :2000 :41451                     ollama serve  0.0.0.0:11434
+  agent ──► 127.0.0.1:11435 ══ SSH tunnel ══► <node>:11434
+```
+
+The protocol in `configs/missions/baseline_v1.toml` names the model and the
+inference options. The runner refuses to start unless the endpoint is actually
+serving `llama3.3:70b`, and it records the server's Ollama version on every
+row.
+
+### 7a. On ERAU's Vega cluster
+
+This is how every valid run so far was served. The full procedure, with every
+command verified and the traps explained, is the
+[Vega HPC manual](vega/vega-carlaair-manual.pdf) (source and notes in
+[`vega/`](vega/)). The short version:
+
+**Once:** install Ollama 0.40.6 into `/scratch/$USER/ollama` from the release
+tarball (no root needed, as it bundles its own CUDA), write an `env.sh` that
+puts it on `PATH` and sets `OLLAMA_MODELS`, and pull `llama3.3:70b` from the
+login node. Compute nodes have no internet.
+
+**Every session**, on Vega:
+
+```bash
+ssh gpu01 nvidia-smi --query-gpu=index,memory.used,utilization.gpu --format=csv
+ssh gpu02 nvidia-smi --query-gpu=index,memory.used,utilization.gpu --format=csv
+```
+
+```bash
+qsub -I -q gpuq -l nodes=gpu01:ppn=48:gpus=1,mem=64gb,walltime=04:00:00
+```
+
+Name the node that has an idle card (near-zero memory **and** 0%). Then, inside
+the job:
+
+```bash
+source /scratch/$USER/ollama/env.sh
+export CUDA_VISIBLE_DEVICES=N
+OLLAMA_HOST=0.0.0.0:11434 OLLAMA_CONTEXT_LENGTH=98304 nohup ollama serve > /scratch/$USER/ollama/serve-gpu.log 2>&1 &
+```
+
+`N` is the idle card's index. Vega does not set `CUDA_VISIBLE_DEVICES` for
+you, and without it the model can land on another user's GPU.
+
+**On the laptop**, in a window you leave open. The node must be the one the job
+is on:
+
+```powershell
+ssh -N -o ServerAliveInterval=30 -L 11435:gpu01:11434 <user>@vega.erau.edu
+```
+
+Check it from a second window. It must print a version:
+
+```powershell
+curl.exe http://127.0.0.1:11435/api/version
+```
+
+> **Every new job needs its own `ollama serve`.** The server dies with the job.
+> A tunnel left over from an earlier job still listens on 11435, but `curl`
+> gets `Connection was reset` until the server is started again.
+
+### 7b. Any other GPU server
+
+Nothing above is Vega-specific except the scheduler. Any machine with about
+48 GB of free VRAM, running Ollama 0.40.6 bound to `0.0.0.0:11434` with
+`llama3.3:70b` pulled, works the same way. Tunnel to it and pass
+`--ollama-host http://127.0.0.1:11435`. Record the server and card in your
+results. Temperature 0 is reproducible per server instance, but not always
+across instances.
+
+### 7c. Laptop-only smoke test (not study data)
+
+To check the stack without a GPU server, run Ollama locally on the CPU with the
+small model the project started on:
 
 ```powershell
 ollama pull llama3.2:3b
-ollama list
 ```
 
-Manifest and weight digests for both models are recorded in
-`BASELINE_ENVIRONMENT.md` §7. A 12B model does not fit alongside the simulator
-on 15.7 GB.
+```powershell
+python scripts\run_missions.py --plan-only --model llama3.2:3b --option num_gpu=0 --option num_ctx=4096
+```
+
+`num_gpu=0` keeps the model on the CPU, leaving the GPU to the simulator.
+`num_ctx=4096` keeps its cache to about 0.5 GB of RAM, where the protocol's
+98,304 would reserve about 11 GB. The longest prompt is about 840 tokens, so
+neither limit can be reached (`RUN_LEDGER.md` §4b). This exercises everything
+except the model the study measures. **Results from
+it are not baseline results.** Manifest and weight digests for `llama3.2:3b`
+and `llama3.1:8b` are in `BASELINE_ENVIRONMENT.md` §7.
 
 The cloud model `gemini-flash-latest` is **not used in the baseline**: it needs
 an API key, sends data off-machine, and is a moving tag, which disqualifies it
@@ -177,14 +278,21 @@ from a frozen baseline.
 
 ## 8. Verify the whole stack
 
-Start the simulator, then run the shipped self-test:
+Start the simulator. For a quick check, a light launch is fine:
 
 ```powershell
-.\CarlaAir.ps1 Town10HD --no-traffic --quality Low
+cd $env:CARLAAIR_ROOT; .\CarlaAir.ps1 Town10HD --no-traffic --quality Low
 ```
 
+That is **not** the protocol, which runs at the launcher defaults (Epic,
+traffic on). Use the §9 launch for anything you intend to compare with the
+baseline.
+
+Then, in a second window with the environment active, run the self-test that
+ships with CarlaAir. It lives in the CarlaAir folder, not in this repository:
+
 ```powershell
-.\env_setup\TestEnv.ps1
+conda activate carlaAir; cd $env:CARLAAIR_ROOT; .\env_setup\TestEnv.ps1
 ```
 
 It checks imports, a live CARLA connection on 2000 and a live AirSim connection
@@ -197,15 +305,50 @@ For a first flight and the day-to-day commands, continue to
 
 ## 9. Reproducing the baseline specifically
 
+You need the model endpoint from §7 answering on 11435, and the simulator
+started **fresh**, under the protocol's conditions (Epic, 1080p, traffic on,
+which are the launcher defaults):
+
 ```powershell
-conda activate carlaAir
-python baseline\open_loop_agent.py
+cd $env:CARLAAIR_ROOT; .\CarlaAir.ps1 Town10HD
 ```
 
-The agent writes `runs/agent-log.jsonl` itself — one JSON object per planning
-call with the instruction, the model's raw output, the validated plan and
-`plan_seconds`. No patching step, and nothing to remember to turn on: a run that
-is not logged cannot be reported.
+Then, from the repository root, fly the ten missions **in increasing drone
+count**. M09 and M10 spawn their extra drones as they need them:
 
-The mission set, the run protocol and what to record per run are in
-[`BASELINE_MISSIONS.md`](BASELINE_MISSIONS.md).
+```powershell
+conda activate carlaAir
+```
+
+```powershell
+python scripts\run_missions.py --missions M01,M02,M03,M04,M05,M06,M07,M08 --block repro --ollama-host http://127.0.0.1:11435
+```
+
+```powershell
+python scripts\run_missions.py --missions M09 --block repro --ollama-host http://127.0.0.1:11435
+```
+
+```powershell
+python scripts\run_missions.py --missions M10 --block repro --ollama-host http://127.0.0.1:11435
+```
+
+> **Restart the simulator before flying fewer drones again.** Drones spawned
+> by M09 and M10 stay in the scene, parked on the other missions' flight paths.
+> The runner checks for this before the first takeoff and refuses.
+
+Each invocation writes its runs, a summary table and a snapshot of the code
+that flew them to `phases/phase-01-baseline-freeze/results/`. Compare yours
+against the citable block, `v6-polled`. The mission set, the protocol and what
+each run records are in [`BASELINE_MISSIONS.md`](BASELINE_MISSIONS.md). Which
+blocks are valid data, and why, is in
+[`phases/RUN_LEDGER.md`](../phases/RUN_LEDGER.md).
+
+To try the agent interactively instead, type your own instruction and fly it:
+
+```powershell
+python baseline\open_loop_agent.py --model llama3.3:70b --ollama-host http://127.0.0.1:11435
+```
+
+Without those two flags it plans with `llama3.2:3b` on a local Ollama, which
+is the §7c smoke test, not the study's model. Every planning call, whatever
+made it, is logged to `runs/agent-log.jsonl`.

@@ -5,7 +5,7 @@ study remains. Maintained because "how many runs have we done" turned out to be
 a harder question than it should be, and because two thirds of the runs on disk
 are **not** study data for reasons that are easy to forget.
 
-> **Updated 2026-10-06 (late evening).** Update this file whenever a series is flown, in the
+> **Updated 2026-10-20.** Update this file whenever a series is flown, in the
 > same commit as the data.
 
 ---
@@ -50,8 +50,8 @@ matching the upstream benchmark so results are comparable.
 | M06 | 1 | 3 | 3 | 3 | **done** — 3/3, flown valid |
 | M07 | 1 | 3 | 3 | 3 | **done** — 3/3, flown valid |
 | M08 | 1 | 3 | 3 | 3 | **done** — unscoreable by design; 3/3 consistent |
-| M09 | 2 | 3 | 3 | 6 | **plans correct** — 6/6; separation invalid; re-fly |
-| M10 | 4 | 3 | 3 | 12 | 4/4 plans correct on run 1; re-fly |
+| M09 | 2 | 3 | 3 | 6 | **done** — 3/3, 6/6 drone-plans, flown valid |
+| M10 | 4 | 3 | 3 | 12 | **done** — 3/3, 12/12 drone-plans; Drone1–Drone3 contact every run; lands ~13/16, see below |
 | **Total** | | | **30** | **42** | |
 
 ### Completion
@@ -83,6 +83,23 @@ M10 (four drones):        3 /  3      COMPLETE; contacts recorded, see below
 > Ollama version jump and a 24x context change — M01 21.7 s, M02 17.6, M03 27.4,
 > M04 22.8, M05 22.2, M06 20.6, M07 23.8, M08 30.9. Planning latency likewise.
 > Neither change affected anything measured.
+>
+> **Reproduced from a clean clone, 2026-10-19/20.** On the server instance that
+> flew v6, all 42 drone-plans came back byte-identical, and M01–M09 flew to
+> within 0.10 s and 3 cm of it. Two qualifications came out of it, both now
+> part of how this block is quoted:
+>
+> * **M10's 3/3 landings are a favourable draw.** The Drone1–Drone3 contact
+>   happens on every M10 run, and across 16 runs from the clone Drone3 landed
+>   in 13. The three failures had the longest contacts (2.3–3.7 s). Quote the
+>   rate, not the 3/3.
+> * **Temperature 0 is deterministic per server instance only.** On a second
+>   Vega job, M09's Drone1 added `"z": 0` to its `fly_to`, which still scored
+>   correct but flew home at ground level.
+>
+> The clone's 97 flown runs are verification, not study data, and are not
+> in this repository. The record is
+> `phase-01-baseline-freeze/evidence/clean-clone-dry-run-2026-10-19.md`.
 
 > ### RESOLVED 2026-10-19 — the caveat below no longer applies to `v6-polled`
 > Collisions are polled at 10 Hz throughout every flight, so the 30 runs of
@@ -138,7 +155,9 @@ displacement is unchanged, which is the check that the altitude fix touched only
 altitude: M01 20.46 → 20.22, M03 19.16 → 19.16, M05 25.26 → 25.23, M07
 20.46 → 20.22.
 
-**Remaining: 6 runs** — M09 (two drones) and M10 (four).
+~~**Remaining: 6 runs** — M09 (two drones) and M10 (four).~~ **None
+remaining:** M09 and M10 were flown valid on 2026-10-06 and again, with
+collision polling, in `v6-polled` on 2026-10-19.
 
 > ### Correction, 2026-10-06 (late) — every altitude was 29 m too high
 > `moveToZAsync` targets are relative to the map origin, and Town10HD's ground
@@ -186,9 +205,10 @@ altitude: M01 20.46 → 20.22, M03 19.16 → 19.16, M05 25.26 → 25.23, M07
 
 ## 3. Session register
 
-Everything on disk, with a verdict. Twelve sessions, 43 recorded runs, of which
-**none currently carry valid execution data**. Planning data from the five 70B
-sessions stands.
+Everything on disk, with a verdict. **`v6-polled` is the citable block.** The
+2026-10-06 `v3` sessions are valid for plan, flight and altitude, but were
+flown without collision polling. Everything else is superseded or diagnostic,
+and kept on purpose. Planning data from every 70B session stands.
 
 | Session | Model | Runs | Verdict |
 |---|---|---|---|
@@ -351,19 +371,25 @@ needed. They remain valid, and no comparison run is required to establish it.
 
 ## 5. Conditions of the valid data
 
-Recorded here because a run's conditions are part of the result.
+Recorded here because a run's conditions are part of the result. These are
+`v6-polled`'s. Every row also carries them in its `protocol` field.
 
 | | |
 |---|---|
 | Model | `llama3.3:70b`, 4-bit |
+| Server | Ollama **0.40.6** |
 | Placement | 100% GPU on one NVIDIA H100 PCIe, 80 GB |
-| Host | ERAU Vega, node `gpu01`, reached by SSH tunnel through `vegaln1` |
-| Simulator | local — CarlaAir v0.1.7, Town10HD, Epic, traffic on |
-| `num_ctx` | 4096 |
+| Host | ERAU Vega, node **`gpu02`, card 0**, job 70633, reached by SSH tunnel through `vegaln1` |
+| Simulator | local — CarlaAir v0.1.7, Town10HD, Epic, 1080p, traffic on (30 vehicles, 50 walkers) |
+| `num_ctx` | **98304** (§4b) |
 | `num_gpu` | 999 (all layers) |
 | `temperature` | 0 |
-| Planning latency | 34.9 s first call, then **0.7–1.8 s** by mission |
-| Flight times | M02 38 s · M05 43 s · M04 44 s · M03 48 s · M08 51 s — no variance within a mission |
+| Planning latency | 35.6 s first call, then **0.8–6.0 s** by mission (M10 sums four drones) |
+| Flight times | M01 21.7 · M02 17.7 · M03 27.4 · M04 22.8 · M05 22.2 · M06 20.7 · M07 23.7 · M08 30.9 · M09 33.5 · M10 38.3–39.1 s |
+
+The 6 and 9 October runs used Ollama 0.35.1 and `num_ctx = 4096`. §4b shows
+the context could not have affected their plans, and the comparability note in
+§2 shows the version and context change left flight times unchanged.
 
 For comparison, `llama3.2:3b` on this laptop's CPU plans in 1.2–1.3 s. The 70B
 on an H100 is roughly **twice as fast** despite being twenty-three times larger,

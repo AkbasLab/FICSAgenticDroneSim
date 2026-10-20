@@ -67,23 +67,28 @@ credited in the phase record, not merged.
 | Write my own agent against the simulator | [`docs/carlaair/00-architecture.md`](docs/carlaair/00-architecture.md) |
 | Look up any simulator control, feature or API | [`docs/carlaair/`](docs/carlaair/) — the reference set |
 | Understand what is being studied and why | [`docs/RESEARCH_PLAN.md`](docs/RESEARCH_PLAN.md) |
-| Reproduce the frozen baseline measurements | [`docs/BASELINE_MISSIONS.md`](docs/BASELINE_MISSIONS.md) |
+| Serve the study's model from a GPU cluster | [`docs/vega/`](docs/vega/) — the Vega HPC manual |
+| Reproduce the frozen baseline measurements | [`docs/SETUP.md`](docs/SETUP.md) §9, then [`docs/BASELINE_MISSIONS.md`](docs/BASELINE_MISSIONS.md) |
+| Know which runs are valid data, and why | [`phases/RUN_LEDGER.md`](phases/RUN_LEDGER.md) |
 | Know exactly what machine produced them | [`docs/BASELINE_ENVIRONMENT.md`](docs/BASELINE_ENVIRONMENT.md) |
 
-First flight, assuming the stack is installed:
+First flight, assuming the stack is installed and the model endpoint from
+[`docs/SETUP.md`](docs/SETUP.md) §7 is answering on 11435:
 
 ```powershell
 cd $env:CARLAAIR_ROOT        # set once in docs/SETUP.md
-.\CarlaAir.ps1 Town10HD --no-traffic --quality Low
+.\CarlaAir.ps1 Town10HD
 ```
 
 ```powershell
 conda activate carlaAir
-python baseline\open_loop_agent.py
+python baseline\open_loop_agent.py --model llama3.3:70b --ollama-host http://127.0.0.1:11435
 ```
 
 Type an instruction in plain English — `fly forward for 5 seconds then return
 home and land`. The model plans it, the plan is validated, the drones fly it.
+Without a GPU server, SETUP §7c has a laptop-only smoke test with a small
+model.
 
 ---
 
@@ -183,7 +188,7 @@ specific scored series. Neither replaces the other: the first is a black box
 recorder, the second is the experimental record.
 
 ```powershell
-python -m unittest discover tests     # 90 tests, no simulator needed
+python -m unittest discover tests     # no simulator or model needed
 python tools\audit_repo.py            # run before every commit
 python tools\fly_chat.py              # interactive: ask a model, fly the answer
 ```
@@ -204,11 +209,13 @@ change rather than four separate codebases.
 
 ## Status, provenance and licensing
 
-> **This project is under active development.** Nothing here is a finished
-> result. Interfaces will change without notice until Phase 2 settles the module
-> structure, and the execution half of the Block A dataset has been invalidated
-> and is being re-flown — see
-> [`docs/BASELINE_MISSIONS.md`](docs/BASELINE_MISSIONS.md).
+> **This project is under active development.** Interfaces will change without
+> notice until Phase 2 settles the module structure. The Phase 1 baseline has
+> been flown in full on `llama3.3:70b` (block `v6-polled`, 30 runs). Phase 1
+> itself stays open until its exit criterion, reproduction by someone else, is
+> met. See [`docs/BASELINE_MISSIONS.md`](docs/BASELINE_MISSIONS.md) for the
+> results and [`phases/RUN_LEDGER.md`](phases/RUN_LEDGER.md) for which blocks
+> are valid.
 >
 > **Licence: MIT**, held by the Flexible & Intelligent Complex Systems (FICS)
 > Research Group — see [`LICENSE`](LICENSE). This matches the licence on the

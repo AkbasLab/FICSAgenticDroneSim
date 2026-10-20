@@ -89,15 +89,21 @@ be scored for correctness. Record instead:
 Consistency on M08 is the interesting variable, not accuracy. It is also the
 only mission that speaks to the ambiguity clause in H4.
 
-**M09 / M10 — a side effect to expect.** Answering more than 1 to *"How many
-drones?"* causes the agent to **rewrite `settings.json` permanently** with that
-many drones. The simulator will boot with that count from then on. Restore
-afterwards, or the single-drone missions become invalid:
+**M09 / M10 — extra drones are spawned, and they stay.** `settings.json`
+declares one drone and is never rewritten. M09 and M10 add their extra drones
+to the running simulator, and those drones remain in the scene until the
+simulator restarts. Hence the ordering rule under Protocol.
 
-```
-$f = Join-Path ([Environment]::GetFolderPath('MyDocuments')) "AirSim\settings.json"
-Get-Content $f | Select-String '"Drone'
-```
+> **Changed 2026-10-20.** This used to warn that answering more than 1 to
+> *"How many drones?"* rewrote `settings.json` permanently. It no longer does:
+> drones are spawned at runtime instead, and `write_settings()` is no longer
+> called.
+
+**M10 — a contact in every run.** Drone3 flies backward beneath Drone1, and on
+every recorded run it jumps from about 18 m to about 33 m AGL in under half a
+second, arriving at Drone1's altitude. The two touch at t ≈ 17 s. Usually the
+contact is brief and both land. When it lasts more than about 2 s, Drone3 is
+left unable to descend. The cause is open: see `RUN_LEDGER.md`.
 
 ---
 
@@ -108,12 +114,23 @@ directly comparable.
 
 | | |
 |---|---|
-| Model | `llama3.2:3b` (primary) — repeat with `llama3.1:8b` where memory allows |
-| Options | `num_gpu: 0`, `temperature: 0`, `num_predict: 512`, `num_thread: 12` |
+| Model | **`llama3.3:70b`**, 4-bit, on one NVIDIA H100 80 GB (ERAU Vega), reached by SSH tunnel. See [`SETUP.md`](SETUP.md) §7 |
+| Server | Ollama **0.40.6**, recorded on every row as `ollama_version` |
+| Options | `num_gpu: 999`, `num_ctx: 98304`, `temperature: 0`, `num_predict: 512`, `num_thread: 12` |
 | Map | Town10HD |
 | Launch | `.\CarlaAir.ps1 Town10HD` |
 | Quality | Epic (launcher default), 1920×1080 |
 | Traffic | 30 vehicles, 50 walkers — the platform as it is actually used |
+
+The authoritative copy of these values is `[protocol]` in
+[`../configs/missions/baseline_v1.toml`](../configs/missions/baseline_v1.toml),
+which is what the runner reads, sends and records.
+
+> **Changed 2026-10-06 and 2026-10-19.** The model was `llama3.2:3b` on the
+> laptop CPU (`num_gpu: 0`). It moved to `llama3.3:70b` on an H100 on
+> 2026-10-06. `num_ctx` was set to 98,304 on 2026-10-19, the largest context
+> one H100 holds alongside the weights, and Ollama went from 0.35.1 to 0.40.6
+> the same day. The reasoning is in `RUN_LEDGER.md` §4b and the phase log.
 
 > **Changed 2026-09-28.** This previously read `--no-traffic --quality Low`,
 > with traffic off "to remove a confound and free GPU". Changed deliberately to
@@ -152,16 +169,23 @@ record whether each run was cold or warm.
 
 ### What to record per run
 
-| Field | Source |
+`run_missions.py` records all of these on every row of its JSONL. Nothing is
+read off the viewport.
+
+| Field | Where it is in the row |
 |---|---|
-| Plan **syntactically valid** | Agent accepted it without raising |
-| **Matches expected sequence** | Exact match, no missing or extra actions |
-| **Planning latency** | `plan_seconds` in `agent-log.jsonl` |
-| **Execution success** | Mission ran to `Control released` without hanging |
-| **Collision / proximity events** | Observed in the viewport; `simGetCollisionInfo()` |
-| **Raw model output** | `raw_output` in `agent-log.jsonl` |
-| Cold or warm cache | First plan of a session, or later |
-| Generated tokens | Ollama `server.log`, `stop processing: n_tokens` |
+| Plan **syntactically valid** | `all_valid`; per drone `valid` |
+| **Matches expected sequence** | `all_correct`; per drone `correct`, `extra_steps` |
+| **Planning latency** | `plan_seconds` (the first run of a session is cold) |
+| **Raw model output** | per drone `raw_output` |
+| **Execution** | `execution.outcomes`: steps executed, `flight_seconds`, `ground_z`, altitude after each step, `final_position` |
+| **Landing** | `landed_on_ground`, with `landed_evidence` saying how it was decided |
+| **Collisions** | `execution.separation`: contacts **polled at 10 Hz** throughout the flight, split into `obstacle_collisions` and `drone_collisions` |
+| **Separation** (multi-drone) | `min_separation_m`, `per_pair_min_m`. Note that these are minima over the flight, not values at a contact |
+| Conditions | `protocol`: model, options actually sent, `ollama_version`, endpoint, code commit and digests |
+
+Generated token counts are only in the Ollama server's own log
+(`stop processing: n_tokens`), and are not recorded.
 
 A plan is **correct** only if its action sequence matches exactly — no missing
 steps and no invented ones. Partial credit is not recorded; extra actions are
@@ -181,9 +205,60 @@ produces unrepeatable measurements.
 
 ## Results
 
-Fill in as runs complete. `✔` correct, `✘` incorrect, `—` not applicable.
+`✔` correct, `✘` incorrect, `—` not applicable. Which blocks are valid data,
+and why the others are not, is in [`../phases/RUN_LEDGER.md`](../phases/RUN_LEDGER.md).
 
-### `llama3.2:3b`
+### `llama3.3:70b` — `v6-polled`, the citable block
+
+Flown 2026-10-19, 18:24–18:40, under the protocol above. Thirty runs in three
+invocations, in increasing drone count, on one simulator session. Raw data and
+the code that flew it are in `phases/phase-01-baseline-freeze/results/`:
+`baseline_v1-llama3.3_70b-20261019-182324-v6-polled` (M01–M08),
+`…-183553-v6-polled` (M09) and `…-183805-v6-polled` (M10).
+
+| Mission | Valid | Correct | Consistent | Extra steps | Latency (s) | Flight (s) | Landed | Obstacle contacts | Notes |
+|---|---|---|---|---|---|---|---|---|---|
+| M01 | ✔ 3/3 | 3/3 | ✔ | 0 | 0.8 (35.6 cold) | 21.7 | 3/3 | 0 | |
+| M02 | ✔ 3/3 | 3/3 | ✔ | 0 | 0.9 | 17.7 | 3/3 | 0 | |
+| M03 | ✔ 3/3 | 3/3 | ✔ | 0 | 1.5 | 27.4 | 3/3 | 0 | |
+| M04 | ✔ 3/3 | 3/3 | ✔ | 0 | 1.9 | 22.8 | 3/3 | 0 | |
+| M05 | ✔ 3/3 | 3/3 | ✔ | 0 | 1.3 | 22.2 | 3/3 | 0 | landing decided by polled terrain contact |
+| M06 | ✔ 3/3 | 3/3 | ✔ | 0 | 1.6 | 20.7 | 3/3 | 0 | |
+| M07 | ✔ 3/3 | 3/3 | ✔ | 0 | 1.2 | 23.7 | 3/3 | 0 | reordering handled |
+| M08 | ✔ 3/3 | — | ✔ | — | 1.7 | 30.9 | 3/3 | 0 | unscoreable by design; see below |
+| M09 | ✔ 3/3 | 3/3 | ✔ | 0 | 4.1 | 33.5 | 6/6 | 0 | 2 drones; min separation 4.02 m |
+| M10 | ✔ 3/3 | 3/3 | ✔ | 0 | 6.0 | 38.3–39.1 | 12/12 | 0 | 4 drones; **Drone1–Drone3 contact in 3/3** |
+
+**27/27 scored runs correct (39/39 drone-plans) · every mission gave the same
+raw output on all three runs · 42/42 drone-landings · 0 obstacle contacts.**
+Latency is per run, summed over a mission's drones. Flight time is the
+longest drone's.
+
+**M08.** All three runs planned `set_altitude(-25) → hover(5) →
+set_altitude(-20)`: up to 25 m, hold, then down to 20 m. "Come back down" got
+the right direction, unlike the 3B model (below), but "safely" did not become
+a landing. The harness's teardown landed the drone, which is outside the plan.
+
+**M10's landings are not a property of the mission.** The contact happens in
+every M10 run. In the clean-clone reproduction of 2026-10-19/20, M10 landed in
+**13 of 16** runs: the three failures had the longest contacts (2.3–3.7 s),
+which left Drone3 unable to descend. So v6's 3/3 is a correct record of those
+three runs and a favourable draw: at 13/16 per run, three clean landings in a
+row is roughly a coin toss. Quote the rate, not the 3/3. Evidence:
+`phases/phase-01-baseline-freeze/evidence/clean-clone-dry-run-2026-10-19.md`.
+
+**Reproduced from a clean clone.** On the server instance that flew v6, all
+42 drone-plans came back byte-identical, and every M01–M09 run flown with those
+plans matched v6 to within 0.10 s and 3 cm. A complete 30-run repeat block
+landed 30/30. On a second Vega job, M09's Drone1 answered with an extra
+`"z": 0` on `fly_to`. It still scored correct, but flew home at ground level
+and finished 3.3 s sooner. Temperature 0 is deterministic per server instance,
+not across instances.
+
+### `llama3.2:3b` — Block A, superseded
+
+Planning results stand; execution results do not. This was the study's model
+until 2026-10-06, run on the laptop's CPU.
 
 Single-drone missions flown 2026-09-28, Town10HD, Epic, traffic on. Raw data:
 `phases/phase-01-baseline-freeze/results/baseline_v1-llama3.2_3b-20260928-212436-blockA-M01-M08.jsonl`
@@ -246,29 +321,20 @@ likely the reset placed the drone on or beside a traffic vehicle — the confoun
 the original protocol avoided by disabling traffic. Worth watching; if it
 recurs, a spawn-clearance check before arming is the fix.
 
-### `llama3.1:8b`
+### `llama3.1:8b` — not run
 
-| Mission | Valid 3/3 | Correct | Consistent | Extra steps | Latency (s) | Executed | Notes |
-|---|---|---|---|---|---|---|---|
-| M01 | | /3 | | | | | |
-| M02 | | /3 | | | | | |
-| M03 | | /3 | | | | | |
-| M04 | | /3 | | | | | |
-| M05 | | /3 | | | | | upstream reports 0/3 |
-| M06 | | /3 | | | | | upstream reports 3/3 |
-| M07 | | /3 | | | | | upstream reports 1/3 |
-| M08 | | — | | — | | | |
-| M09 | | /3 | | | | | |
-| M10 | | /3 | | | | | |
+Not part of the protocol. It is staged on Vega, and running it would connect
+these numbers to the upstream benchmark's (M05 0/3, M06 3/3, M07 1/3 there).
+Whether to run it, and a 3B column, is an open question, not a commitment.
 
 ### Summary
 
-| Model | Correct runs | Fully-correct missions | Consistent missions | Avg extra steps | Avg latency |
+| Model | Scored runs correct | Fully-correct missions | Consistent missions | Extra steps | Latency, warm |
 |---|---|---|---|---|---|
-| `llama3.2:3b` | /24 | /8 | /8 | | |
-| `llama3.1:8b` | /24 | /8 | /8 | | |
+| **`llama3.3:70b`** (`v6-polled`) | **27/27** | **9/9** | **10/10** | 0 | 0.8–6.0 s |
+| `llama3.2:3b` (Block A, single-drone, planning only) | 21/21 | 7/7 | 7/8 | 0 | 1.2–3.3 s |
 
-Denominators exclude M08 (unscoreable) and count M09/M10 per drone.
+Scored counts exclude M08, which is unscoreable. Consistency counts it.
 
 ---
 
@@ -281,9 +347,9 @@ Running this set turns them into measured, re-runnable evidence attached to a
 named environment — and gives every later architecture something constant to be
 compared against.
 
-It also produces a result nobody has: the upstream benchmarks cover only
-`llama3.1:8b` and `mistral-nemo`. **A 3B column is new**, and if 3B holds up it
-is the difference between this project running on available hardware and not.
+It also produces results nobody has: the upstream benchmarks cover only
+`llama3.1:8b` and `mistral-nemo`. Both the 70B results and the 3B planning
+column are new.
 
 ---
 
@@ -292,3 +358,4 @@ is the difference between this project running on available hardware and not.
 | Date | Change |
 |---|---|
 | 2026-09-18 | v1.0 — mission set frozen. |
+| 2026-10-20 | Protocol and results brought up to date: `llama3.3:70b` on Vega, `v6-polled` as the citable block, the M10 landing rate, the restart rule. Mission text unchanged. |

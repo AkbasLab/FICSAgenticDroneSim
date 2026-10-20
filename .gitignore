@@ -18,6 +18,12 @@ runs/*
 .env
 *.key
 
+# LaTeX build files (docs/vega/). The .tex source and the built .pdf are committed.
+*.aux
+*.log
+*.out
+*.toc
+
 # OS / editor
 Thumbs.db
 desktop.ini

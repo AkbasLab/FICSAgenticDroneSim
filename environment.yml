@@ -1,3 +1,17 @@
+# The conda environment the baseline was measured in.
+#
+#     conda env create -f environment.yml
+#
+# CARLA IS NOT LISTED, DELIBERATELY. Install it afterwards from your own
+# extracted CarlaAir archive, as docs/SETUP.md section 5 says:
+#
+#     pip install <carlaair-root>\PythonAPI\carla\dist\carla-0.9.16-cp310-cp310-win_amd64.whl
+#
+# PyPI does have a carla 0.9.16 wheel for cp310/win_amd64, but it is a
+# different build (SHA-256 5e7d46f1...) from the one CarlaAir ships
+# (f255c0fa...), and the shipped one is what every result was measured with.
+# This file used to pin carla==0.9.16, which made conda fetch the PyPI build
+# silently. Found by a clean-clone dry run on 2026-10-19.
 name: carlaAir
 channels:
   - conda-forge
@@ -27,7 +41,6 @@ dependencies:
       - annotated-types==0.8.0
       - anyio==4.15.1
       - build==1.6.1
-      - carla==0.9.16
       - certifi==2026.7.22
       - cffi==2.1.1
       - charset-normalizer==3.5.1

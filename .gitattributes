@@ -18,6 +18,7 @@
 *.txt   text eol=lf
 *.json  text eol=lf
 *.jsonl text eol=lf
+*.tex   text eol=lf
 
 # PowerShell is the exception: some Windows tooling is unhappy with LF-only
 # .ps1 files, and these are run by Windows, not by the experiment.

@@ -9,7 +9,7 @@ student would trip on before one is asked to try.
 
 | | |
 |---|---|
-| Clone | `git clone` of the local `SC` at `f35ded6` into `D:\Research\CleanCloneDryRun-20261019` |
+| Clone | `git clone` of the local `SC` at `f35ded6` into a fresh folder outside the repository (`CleanCloneDryRun-20261019`) |
 | Python | existing `carlaAir` env (not rebuilt — see finding 5) |
 | Model | `llama3.3:70b` on Vega `gpu01`, Ollama 0.40.6, via the existing tunnel on 11435 |
 | Simulator | CarlaAir v0.1.7, `.\CarlaAir.ps1 Town10HD` (launcher defaults: Epic, 1920×1080, 30 vehicles, 50 walkers requested / 49 spawned), roster of one in `settings.json` |
