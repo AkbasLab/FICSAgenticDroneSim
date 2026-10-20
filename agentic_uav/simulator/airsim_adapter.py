@@ -74,6 +74,10 @@ class AirSimAdapter:
             impact_point=None if point is None else Position(point.x_val, point.y_val, point.z_val),
         )
 
+    def has_control(self, vehicle_id: str) -> bool:
+        # Added in Phase 2 step 5 for the sandbox's :status, which reads it.
+        return self.client.isApiControlEnabled(vehicle_name=vehicle_id)
+
     def take_control(self, vehicle_id: str) -> None:
         self.client.enableApiControl(True, vehicle_name=vehicle_id)
         self.client.armDisarm(True, vehicle_name=vehicle_id)

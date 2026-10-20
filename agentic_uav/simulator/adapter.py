@@ -52,6 +52,10 @@ class VehicleAdapter(Protocol):
         """The most recent collision. Stale until its time_stamp changes."""
         ...
 
+    def has_control(self, vehicle_id: str) -> bool:
+        """Whether the API holds control of the vehicle."""
+        ...
+
     def take_control(self, vehicle_id: str) -> None:
         """Enable API control, then arm. The vehicle should be at rest."""
         ...

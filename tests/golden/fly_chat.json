@@ -1,0 +1,3747 @@
+{
+ "cases": [
+  {
+   "id": "sandbox:one-drone-every-command",
+   "inputs": [
+    "1",
+    "",
+    ":help",
+    "fly forward for 5 seconds",
+    "y",
+    ":status",
+    "fly forward for 5 seconds then return home and land",
+    "y",
+    "y",
+    "fly forward for 5 seconds",
+    "n",
+    ":plans",
+    ":again",
+    "y",
+    ":land",
+    ":land",
+    ":speed 8",
+    ":speed",
+    ":speed fast",
+    ":speed 50",
+    "hover for 3 seconds then land",
+    "y",
+    ":auto",
+    "do a barrel roll",
+    ":reset",
+    ":bogus",
+    ":quit"
+   ],
+   "reply_overrides": {
+    "do a barrel roll": "this is not json"
+   },
+   "result": {
+    "calls": {
+     "Drone1": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        5.0,
+        0.0,
+        0.0,
+        5
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        5.0,
+        0.0,
+        0.0,
+        5
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToPositionAsync",
+       [
+        0.0,
+        0.0,
+        29.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 90.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        5.0,
+        0.0,
+        0.0,
+        5
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        8.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ]
+     ],
+     "main": [
+      [
+       "confirmConnection",
+       [],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "isApiControlEnabled",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "isApiControlEnabled",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "isApiControlEnabled",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "isApiControlEnabled",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "reset",
+       [],
+       {}
+      ],
+      [
+       "confirmConnection",
+       [],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "isApiControlEnabled",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ]
+     ]
+    },
+    "exit": 0,
+    "requests": [
+     {
+      "host": "http://127.0.0.1:11435",
+      "messages": [
+       {
+        "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n\nIf the instruction does not give a number, choose a sensible one yourself rather\nthan refusing: a few seconds for a duration, 10 to 30 metres for an altitude.\nVague words map to values -- \"a bit\" or \"briefly\" is small, \"high\" or \"a while\"\nis larger. Always return a complete plan. Never ask a question, never explain,\nand never return an empty plan.",
+        "role": "system"
+       },
+       {
+        "content": "fly left for 2 seconds, then climb to 30 meters",
+        "role": "user"
+       },
+       {
+        "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+        "role": "assistant"
+       },
+       {
+        "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+        "role": "user"
+       },
+       {
+        "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+        "role": "assistant"
+       },
+       {
+        "content": "fly forward for 5 seconds",
+        "role": "user"
+       }
+      ],
+      "model": "llama3.3:70b",
+      "options": {
+       "num_ctx": 4096,
+       "num_gpu": 999,
+       "num_predict": 512,
+       "num_thread": 12,
+       "temperature": 0
+      }
+     },
+     {
+      "host": "http://127.0.0.1:11435",
+      "messages": [
+       {
+        "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n\nIf the instruction does not give a number, choose a sensible one yourself rather\nthan refusing: a few seconds for a duration, 10 to 30 metres for an altitude.\nVague words map to values -- \"a bit\" or \"briefly\" is small, \"high\" or \"a while\"\nis larger. Always return a complete plan. Never ask a question, never explain,\nand never return an empty plan.",
+        "role": "system"
+       },
+       {
+        "content": "fly left for 2 seconds, then climb to 30 meters",
+        "role": "user"
+       },
+       {
+        "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+        "role": "assistant"
+       },
+       {
+        "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+        "role": "user"
+       },
+       {
+        "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+        "role": "assistant"
+       },
+       {
+        "content": "fly forward for 5 seconds then return home and land",
+        "role": "user"
+       }
+      ],
+      "model": "llama3.3:70b",
+      "options": {
+       "num_ctx": 4096,
+       "num_gpu": 999,
+       "num_predict": 512,
+       "num_thread": 12,
+       "temperature": 0
+      }
+     },
+     {
+      "host": "http://127.0.0.1:11435",
+      "messages": [
+       {
+        "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n\nIf the instruction does not give a number, choose a sensible one yourself rather\nthan refusing: a few seconds for a duration, 10 to 30 metres for an altitude.\nVague words map to values -- \"a bit\" or \"briefly\" is small, \"high\" or \"a while\"\nis larger. Always return a complete plan. Never ask a question, never explain,\nand never return an empty plan.",
+        "role": "system"
+       },
+       {
+        "content": "fly left for 2 seconds, then climb to 30 meters",
+        "role": "user"
+       },
+       {
+        "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+        "role": "assistant"
+       },
+       {
+        "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+        "role": "user"
+       },
+       {
+        "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+        "role": "assistant"
+       },
+       {
+        "content": "fly forward for 5 seconds",
+        "role": "user"
+       }
+      ],
+      "model": "llama3.3:70b",
+      "options": {
+       "num_ctx": 4096,
+       "num_gpu": 999,
+       "num_predict": 512,
+       "num_thread": 12,
+       "temperature": 0
+      }
+     },
+     {
+      "host": "http://127.0.0.1:11435",
+      "messages": [
+       {
+        "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 8.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n\nIf the instruction does not give a number, choose a sensible one yourself rather\nthan refusing: a few seconds for a duration, 10 to 30 metres for an altitude.\nVague words map to values -- \"a bit\" or \"briefly\" is small, \"high\" or \"a while\"\nis larger. Always return a complete plan. Never ask a question, never explain,\nand never return an empty plan.",
+        "role": "system"
+       },
+       {
+        "content": "fly left for 2 seconds, then climb to 30 meters",
+        "role": "user"
+       },
+       {
+        "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+        "role": "assistant"
+       },
+       {
+        "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+        "role": "user"
+       },
+       {
+        "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+        "role": "assistant"
+       },
+       {
+        "content": "hover for 3 seconds then land",
+        "role": "user"
+       }
+      ],
+      "model": "llama3.3:70b",
+      "options": {
+       "num_ctx": 4096,
+       "num_gpu": 999,
+       "num_predict": 512,
+       "num_thread": 12,
+       "temperature": 0
+      }
+     },
+     {
+      "host": "http://127.0.0.1:11435",
+      "messages": [
+       {
+        "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 8.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n\nIf the instruction does not give a number, choose a sensible one yourself rather\nthan refusing: a few seconds for a duration, 10 to 30 metres for an altitude.\nVague words map to values -- \"a bit\" or \"briefly\" is small, \"high\" or \"a while\"\nis larger. Always return a complete plan. Never ask a question, never explain,\nand never return an empty plan.",
+        "role": "system"
+       },
+       {
+        "content": "fly left for 2 seconds, then climb to 30 meters",
+        "role": "user"
+       },
+       {
+        "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+        "role": "assistant"
+       },
+       {
+        "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+        "role": "user"
+       },
+       {
+        "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+        "role": "assistant"
+       },
+       {
+        "content": "do a barrel roll",
+        "role": "user"
+       }
+      ],
+      "model": "llama3.3:70b",
+      "options": {
+       "num_ctx": 4096,
+       "num_gpu": 999,
+       "num_predict": 512,
+       "num_thread": 12,
+       "temperature": 0
+      }
+     }
+    ],
+    "stdout": [
+     "\u001b[2m",
+     "connecting to the simulator ...\u001b[0m",
+     "\u001b[2mchecking http://127.0.0.1:11435 ...\u001b[0m",
+     "endpoint: http://127.0.0.1:11435 serving llama3.3:70b  (2 model(s) available)",
+     "\u001b[32mendpoint OK, serving llama3.3:70b on the cluster\u001b[0m",
+     "\u001b[33msandbox mode: the model is told to invent numbers when you give none,\u001b[0m",
+     "\u001b[33mand an aircraft is left HOVERING unless the plan says land (:land to recover)\u001b[0m",
+     "\u001b[1m",
+     "how many drones? [1-4] \u001b[0m1",
+     "\u001b[1m",
+     "speed in m/s? [blank = 5.0 as in the study] \u001b[0m",
+     "\u001b[35m",
+     "roster: Drone1   speed 5.0 m/s\u001b[0m",
+     "\u001b[2mspawning any that are missing ...\u001b[0m",
+     "\u001b[36m  Drone1: x    0.00  y    0.00    0.00 m AGL   landed=0  api=False\u001b[0m",
+     "\u001b[2m",
+     "type instructions, or :help for commands",
+     "\u001b[0m",
+     "\u001b[1mfly> \u001b[0m:help",
+     "\u001b[2m",
+     "    :drones N    change the number of drones (1-4) and respawn",
+     "    :speed N     change speed in m/s, and tell the model about it",
+     "    :land        land every aircraft still flying and release control",
+     "    :status      where every drone is",
+     "    :reset       return all drones to their start poses",
+     "    :again       re-fly the last set of plans without asking the model",
+     "    :auto        toggle confirm-before-fly (default: confirm on)",
+     "    :plans       show the last plans with the raw model output",
+     "    :help        this list",
+     "    :quit",
+     "\u001b[0m",
+     "\u001b[1mfly> \u001b[0mfly forward for 5 seconds",
+     "\u001b[0m",
+     "\u001b[36m  Drone1 (0.0s): fly_straight 5s\u001b[0m",
+     "\u001b[1m  fly it? [y/N] \u001b[0my",
+     "[Drone1] armed, ground z = 29.25",
+     "[Drone1] 1/1 fly_straight",
+     "[Drone1] plan ended without land; holding",
+     "[Drone1] no land step; holding position, control retained (:land to bring it down)",
+     "",
+     "monitored <N> samples, 0 contact(s); one drone, so no separation to report",
+     "\u001b[0m",
+     "\u001b[2m  (flown at 5.0 m/s)\u001b[0m",
+     "\u001b[33m  Drone1  fly_straight   3.3s\u001b[0m",
+     "\u001b[2m       after take_off       8.0 m\u001b[0m",
+     "\u001b[2m       after fly_straight   8.0 m\u001b[0m",
+     "\u001b[31m       did NOT land: 8.00 m above ground\u001b[0m",
+     "\u001b[2m  no drone or obstacle contacts\u001b[0m",
+     "\u001b[0m",
+     "\u001b[33m  still flying, holding position: Drone1 at 8.0 m\u001b[0m",
+     "\u001b[2m  :land to bring them down, :reset to return them to the pad\u001b[0m",
+     "\u001b[0m",
+     "\u001b[1mfly> \u001b[0m:status",
+     "\u001b[36m  Drone1: x   25.00  y    0.00    8.00 m AGL   landed=1  api=True\u001b[0m",
+     "\u001b[1mfly> \u001b[0mfly forward for 5 seconds then return home and land",
+     "\u001b[0m",
+     "\u001b[36m  Drone1 (0.0s): fly_straight 5s -> fly_to(0,0) -> land\u001b[0m",
+     "\u001b[1m  fly it? [y/N] \u001b[0my",
+     "\u001b[33m  these are still in the air: Drone1 at 8.0 m\u001b[0m",
+     "\u001b[33m  arming from up there would read the ground wrong, and the session guard will refuse the run.\u001b[0m",
+     "\u001b[1m  land them first? [Y/n] \u001b[0my",
+     "\u001b[32m  Drone1 brought down from 8.0 m\u001b[0m",
+     "[Drone1] armed, ground z = 29.25",
+     "[Drone1] 1/3 fly_straight",
+     "[Drone1] 2/3 fly_to",
+     "[Drone1] 3/3 land",
+     "[Drone1] control released",
+     "",
+     "monitored <N> samples, 0 contact(s); one drone, so no separation to report",
+     "\u001b[0m",
+     "\u001b[2m  (flown at 5.0 m/s)\u001b[0m",
+     "\u001b[32m  Drone1  fly_straight/fly_to/land   3.3s\u001b[0m",
+     "\u001b[2m       after take_off       8.0 m\u001b[0m",
+     "\u001b[2m       after fly_straight   8.0 m\u001b[0m",
+     "\u001b[2m       after fly_to         0.0 m\u001b[0m",
+     "\u001b[2m       after land           0.0 m\u001b[0m",
+     "\u001b[2m  no drone or obstacle contacts\u001b[0m",
+     "\u001b[0m",
+     "\u001b[1mfly> \u001b[0mfly forward for 5 seconds",
+     "\u001b[0m",
+     "\u001b[36m  Drone1 (0.0s): fly_straight 5s\u001b[0m",
+     "\u001b[1m  fly it? [y/N] \u001b[0mn",
+     "\u001b[2m  not flown\u001b[0m",
+     "\u001b[1mfly> \u001b[0m:plans",
+     "\u001b[2m  Drone1: fly forward for 5 seconds\u001b[0m",
+     "\u001b[2m      raw : {\"plan\": [{\"action\": \"fly_straight\", \"duration\": 5}]}\u001b[0m",
+     "\u001b[36m      plan: fly_straight 5s\u001b[0m",
+     "\u001b[1mfly> \u001b[0m:again",
+     "\u001b[1m  fly it? [y/N] \u001b[0my",
+     "[Drone1] armed, ground z = 29.25",
+     "[Drone1] 1/1 fly_straight",
+     "[Drone1] plan ended without land; holding",
+     "[Drone1] no land step; holding position, control retained (:land to bring it down)",
+     "",
+     "monitored <N> samples, 0 contact(s); one drone, so no separation to report",
+     "\u001b[0m",
+     "\u001b[2m  (flown at 5.0 m/s)\u001b[0m",
+     "\u001b[33m  Drone1  fly_straight   3.3s\u001b[0m",
+     "\u001b[2m       after take_off       8.0 m\u001b[0m",
+     "\u001b[2m       after fly_straight   8.0 m\u001b[0m",
+     "\u001b[31m       did NOT land: 8.00 m above ground\u001b[0m",
+     "\u001b[2m  no drone or obstacle contacts\u001b[0m",
+     "\u001b[0m",
+     "\u001b[33m  still flying, holding position: Drone1 at 8.0 m\u001b[0m",
+     "\u001b[2m  :land to bring them down, :reset to return them to the pad\u001b[0m",
+     "\u001b[0m",
+     "\u001b[1mfly> \u001b[0m:land",
+     "\u001b[32m  Drone1 brought down from 8.0 m\u001b[0m",
+     "\u001b[36m  Drone1: x   25.00  y    0.00    0.00 m AGL   landed=0  api=False\u001b[0m",
+     "\u001b[1mfly> \u001b[0m:land",
+     "\u001b[2mnothing is flying\u001b[0m",
+     "\u001b[36m  Drone1: x   25.00  y    0.00    0.00 m AGL   landed=0  api=False\u001b[0m",
+     "\u001b[1mfly> \u001b[0m:speed 8",
+     "\u001b[35mspeed 5.0 -> 8.0 m/s   (a 5 s leg is now 40 m, was 25 m)\u001b[0m",
+     "\u001b[33mthe model is told the new speed, so re-plan rather than :again -- an old plan's durations assumed the old speed\u001b[0m",
+     "\u001b[1mfly> \u001b[0m:speed",
+     "\u001b[36mspeed is 8.0 m/s   (usage: :speed 8.5)\u001b[0m",
+     "\u001b[1mfly> \u001b[0m:speed fast",
+     "\u001b[33musage: :speed 8.5\u001b[0m",
+     "\u001b[1mfly> \u001b[0m:speed 50",
+     "\u001b[33mkeep it between 0.5 and 20 m/s\u001b[0m",
+     "\u001b[1mfly> \u001b[0mhover for 3 seconds then land",
+     "\u001b[0m",
+     "\u001b[36m  Drone1 (0.0s): hover 3s -> land\u001b[0m",
+     "\u001b[1m  fly it? [y/N] \u001b[0my",
+     "[Drone1] armed, ground z = 29.25",
+     "[Drone1] 1/2 hover",
+     "[Drone1] 2/2 land",
+     "[Drone1] control released",
+     "",
+     "monitored <N> samples, 0 contact(s); one drone, so no separation to report",
+     "\u001b[0m",
+     "\u001b[2m  (flown at 8.0 m/s)\u001b[0m",
+     "\u001b[32m  Drone1  hover/land   6.3s\u001b[0m",
+     "\u001b[2m       after take_off       8.0 m\u001b[0m",
+     "\u001b[2m       after hover          8.0 m\u001b[0m",
+     "\u001b[2m       after land           0.0 m\u001b[0m",
+     "\u001b[2m  no drone or obstacle contacts\u001b[0m",
+     "\u001b[0m",
+     "\u001b[1mfly> \u001b[0m:auto",
+     "\u001b[33mconfirm-before-fly is OFF\u001b[0m",
+     "\u001b[1mfly> \u001b[0mdo a barrel roll",
+     "\u001b[0m",
+     "\u001b[31m  Drone1: REJECTED (0.0s) Expecting value: line 1 column 1 (char 0)\u001b[0m",
+     "\u001b[2m      raw: this is not json\u001b[0m",
+     "\u001b[33m  not flying: at least one plan was rejected\u001b[0m",
+     "\u001b[1mfly> \u001b[0m:reset",
+     "\u001b[32mworld reset\u001b[0m",
+     "\u001b[36m  Drone1: x    0.00  y    0.00    0.00 m AGL   landed=0  api=False\u001b[0m",
+     "\u001b[1mfly> \u001b[0m:bogus",
+     "\u001b[33munknown command :bogus\u001b[0m",
+     "\u001b[1mfly> \u001b[0m:quit",
+     "\u001b[2mbye\u001b[0m"
+    ]
+   }
+  },
+  {
+   "id": "sandbox:startup-speed-and-more-drones",
+   "inputs": [
+    "0",
+    "7",
+    "2",
+    "abc",
+    "50",
+    "8.5",
+    "go up to 25 meters, fly forward for 6 seconds, then return home and land",
+    "go up to 12 meters, fly right for 5 seconds, hover for 2 seconds, then land",
+    "y",
+    ":drones 4",
+    "go up to 30 meters, fly forward for 5 seconds, then land",
+    "go up to 24 meters, fly right for 5 seconds, then land",
+    "",
+    "go up to 12 meters, fly left for 5 seconds, then land",
+    "y",
+    ":drones 1"
+   ],
+   "result": {
+    "calls": {
+     "Drone1": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        8.5
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        4.25,
+        8.5
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        8.5,
+        0.0,
+        0.0,
+        6
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToPositionAsync",
+       [
+        0.0,
+        0.0,
+        21.25,
+        8.5
+       ],
+       {
+        "timeout_sec": 90.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        8.5
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        -0.75,
+        8.5
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        8.5,
+        0.0,
+        0.0,
+        5
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ]
+     ],
+     "Drone2": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        8.5
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        17.25,
+        8.5
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        0.0,
+        8.5,
+        0.0,
+        5
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone2"
+       ],
+       {}
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        8.5
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        5.25,
+        8.5
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        0.0,
+        8.5,
+        0.0,
+        5
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone2"
+       ],
+       {}
+      ]
+     ],
+     "Drone3": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        8.5
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        5.25,
+        8.5
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        0.0,
+        8.5,
+        0.0,
+        5
+       ],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone3"
+       ],
+       {}
+      ]
+     ],
+     "Drone4": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        8.5
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        17.25,
+        8.5
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        0.0,
+        -8.5,
+        0.0,
+        5
+       ],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone4"
+       ],
+       {}
+      ]
+     ],
+     "main": [
+      [
+       "confirmConnection",
+       [],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simAddVehicle",
+       [
+        "Drone2",
+        "SimpleFlight",
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          4.0,
+          0.0,
+          0.0
+         ]
+        }
+       ],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          4.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "isApiControlEnabled",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone2"
+       ],
+       {}
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "isApiControlEnabled",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone2"
+       ],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          4.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone2"
+       ],
+       {}
+      ],
+      [
+       "reset",
+       [],
+       {}
+      ],
+      [
+       "confirmConnection",
+       [],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simAddVehicle",
+       [
+        "Drone3",
+        "SimpleFlight",
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          8.0,
+          0.0,
+          0.0
+         ]
+        }
+       ],
+       {}
+      ],
+      [
+       "simAddVehicle",
+       [
+        "Drone4",
+        "SimpleFlight",
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          12.0,
+          0.0,
+          0.0
+         ]
+        }
+       ],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          4.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          8.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          12.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "isApiControlEnabled",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone2"
+       ],
+       {}
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "isApiControlEnabled",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone3"
+       ],
+       {}
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "isApiControlEnabled",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone4"
+       ],
+       {}
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "isApiControlEnabled",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone2"
+       ],
+       {}
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone3"
+       ],
+       {}
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone4"
+       ],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          4.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          8.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          12.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone2"
+       ],
+       {}
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone3"
+       ],
+       {}
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone4"
+       ],
+       {}
+      ],
+      [
+       "reset",
+       [],
+       {}
+      ],
+      [
+       "confirmConnection",
+       [],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ]
+     ]
+    },
+    "exit": "crashed: ForeignVehicleError: the scene holds Drone2, Drone3, Drone4, which this flight does not use (it flies Drone1). Leftover drones sit on the +X flight path and are hit as obstacles, and nothing can remove them short of a simulator restart. Restart the simulator, and fly missions in increasing drone count.",
+    "requests": [
+     {
+      "host": "http://127.0.0.1:11435",
+      "messages": [
+       {
+        "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 8.5 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n\nIf the instruction does not give a number, choose a sensible one yourself rather\nthan refusing: a few seconds for a duration, 10 to 30 metres for an altitude.\nVague words map to values -- \"a bit\" or \"briefly\" is small, \"high\" or \"a while\"\nis larger. Always return a complete plan. Never ask a question, never explain,\nand never return an empty plan.",
+        "role": "system"
+       },
+       {
+        "content": "fly left for 2 seconds, then climb to 30 meters",
+        "role": "user"
+       },
+       {
+        "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+        "role": "assistant"
+       },
+       {
+        "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+        "role": "user"
+       },
+       {
+        "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+        "role": "assistant"
+       },
+       {
+        "content": "go up to 25 meters, fly forward for 6 seconds, then return home and land",
+        "role": "user"
+       }
+      ],
+      "model": "llama3.3:70b",
+      "options": {
+       "num_ctx": 4096,
+       "num_gpu": 999,
+       "num_predict": 512,
+       "num_thread": 12,
+       "temperature": 0
+      }
+     },
+     {
+      "host": "http://127.0.0.1:11435",
+      "messages": [
+       {
+        "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 8.5 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n\nIf the instruction does not give a number, choose a sensible one yourself rather\nthan refusing: a few seconds for a duration, 10 to 30 metres for an altitude.\nVague words map to values -- \"a bit\" or \"briefly\" is small, \"high\" or \"a while\"\nis larger. Always return a complete plan. Never ask a question, never explain,\nand never return an empty plan.",
+        "role": "system"
+       },
+       {
+        "content": "fly left for 2 seconds, then climb to 30 meters",
+        "role": "user"
+       },
+       {
+        "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+        "role": "assistant"
+       },
+       {
+        "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+        "role": "user"
+       },
+       {
+        "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+        "role": "assistant"
+       },
+       {
+        "content": "go up to 12 meters, fly right for 5 seconds, hover for 2 seconds, then land",
+        "role": "user"
+       }
+      ],
+      "model": "llama3.3:70b",
+      "options": {
+       "num_ctx": 4096,
+       "num_gpu": 999,
+       "num_predict": 512,
+       "num_thread": 12,
+       "temperature": 0
+      }
+     },
+     {
+      "host": "http://127.0.0.1:11435",
+      "messages": [
+       {
+        "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 8.5 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n\nIf the instruction does not give a number, choose a sensible one yourself rather\nthan refusing: a few seconds for a duration, 10 to 30 metres for an altitude.\nVague words map to values -- \"a bit\" or \"briefly\" is small, \"high\" or \"a while\"\nis larger. Always return a complete plan. Never ask a question, never explain,\nand never return an empty plan.",
+        "role": "system"
+       },
+       {
+        "content": "fly left for 2 seconds, then climb to 30 meters",
+        "role": "user"
+       },
+       {
+        "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+        "role": "assistant"
+       },
+       {
+        "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+        "role": "user"
+       },
+       {
+        "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+        "role": "assistant"
+       },
+       {
+        "content": "go up to 30 meters, fly forward for 5 seconds, then land",
+        "role": "user"
+       }
+      ],
+      "model": "llama3.3:70b",
+      "options": {
+       "num_ctx": 4096,
+       "num_gpu": 999,
+       "num_predict": 512,
+       "num_thread": 12,
+       "temperature": 0
+      }
+     },
+     {
+      "host": "http://127.0.0.1:11435",
+      "messages": [
+       {
+        "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 8.5 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n\nIf the instruction does not give a number, choose a sensible one yourself rather\nthan refusing: a few seconds for a duration, 10 to 30 metres for an altitude.\nVague words map to values -- \"a bit\" or \"briefly\" is small, \"high\" or \"a while\"\nis larger. Always return a complete plan. Never ask a question, never explain,\nand never return an empty plan.",
+        "role": "system"
+       },
+       {
+        "content": "fly left for 2 seconds, then climb to 30 meters",
+        "role": "user"
+       },
+       {
+        "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+        "role": "assistant"
+       },
+       {
+        "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+        "role": "user"
+       },
+       {
+        "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+        "role": "assistant"
+       },
+       {
+        "content": "go up to 24 meters, fly right for 5 seconds, then land",
+        "role": "user"
+       }
+      ],
+      "model": "llama3.3:70b",
+      "options": {
+       "num_ctx": 4096,
+       "num_gpu": 999,
+       "num_predict": 512,
+       "num_thread": 12,
+       "temperature": 0
+      }
+     },
+     {
+      "host": "http://127.0.0.1:11435",
+      "messages": [
+       {
+        "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 8.5 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n\nIf the instruction does not give a number, choose a sensible one yourself rather\nthan refusing: a few seconds for a duration, 10 to 30 metres for an altitude.\nVague words map to values -- \"a bit\" or \"briefly\" is small, \"high\" or \"a while\"\nis larger. Always return a complete plan. Never ask a question, never explain,\nand never return an empty plan.",
+        "role": "system"
+       },
+       {
+        "content": "fly left for 2 seconds, then climb to 30 meters",
+        "role": "user"
+       },
+       {
+        "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+        "role": "assistant"
+       },
+       {
+        "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+        "role": "user"
+       },
+       {
+        "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+        "role": "assistant"
+       },
+       {
+        "content": "go up to 24 meters, fly right for 5 seconds, then land",
+        "role": "user"
+       }
+      ],
+      "model": "llama3.3:70b",
+      "options": {
+       "num_ctx": 4096,
+       "num_gpu": 999,
+       "num_predict": 512,
+       "num_thread": 12,
+       "temperature": 0
+      }
+     },
+     {
+      "host": "http://127.0.0.1:11435",
+      "messages": [
+       {
+        "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 8.5 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n\nIf the instruction does not give a number, choose a sensible one yourself rather\nthan refusing: a few seconds for a duration, 10 to 30 metres for an altitude.\nVague words map to values -- \"a bit\" or \"briefly\" is small, \"high\" or \"a while\"\nis larger. Always return a complete plan. Never ask a question, never explain,\nand never return an empty plan.",
+        "role": "system"
+       },
+       {
+        "content": "fly left for 2 seconds, then climb to 30 meters",
+        "role": "user"
+       },
+       {
+        "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+        "role": "assistant"
+       },
+       {
+        "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+        "role": "user"
+       },
+       {
+        "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+        "role": "assistant"
+       },
+       {
+        "content": "go up to 12 meters, fly left for 5 seconds, then land",
+        "role": "user"
+       }
+      ],
+      "model": "llama3.3:70b",
+      "options": {
+       "num_ctx": 4096,
+       "num_gpu": 999,
+       "num_predict": 512,
+       "num_thread": 12,
+       "temperature": 0
+      }
+     }
+    ],
+    "stdout": [
+     "\u001b[2m",
+     "connecting to the simulator ...\u001b[0m",
+     "\u001b[2mchecking http://127.0.0.1:11435 ...\u001b[0m",
+     "endpoint: http://127.0.0.1:11435 serving llama3.3:70b  (2 model(s) available)",
+     "\u001b[32mendpoint OK, serving llama3.3:70b on the cluster\u001b[0m",
+     "\u001b[33msandbox mode: the model is told to invent numbers when you give none,\u001b[0m",
+     "\u001b[33mand an aircraft is left HOVERING unless the plan says land (:land to recover)\u001b[0m",
+     "\u001b[1m",
+     "how many drones? [1-4] \u001b[0m0",
+     "\u001b[33m  a number from 1 to 4\u001b[0m",
+     "\u001b[1m",
+     "how many drones? [1-4] \u001b[0m7",
+     "\u001b[33m  a number from 1 to 4\u001b[0m",
+     "\u001b[1m",
+     "how many drones? [1-4] \u001b[0m2",
+     "\u001b[1m",
+     "speed in m/s? [blank = 5.0 as in the study] \u001b[0mabc",
+     "\u001b[33m  a number, e.g. 5 or 8.5\u001b[0m",
+     "\u001b[1m",
+     "speed in m/s? [blank = 5.0 as in the study] \u001b[0m50",
+     "\u001b[33m  keep it between 0.5 and 20 m/s\u001b[0m",
+     "\u001b[1m",
+     "speed in m/s? [blank = 5.0 as in the study] \u001b[0m8.5",
+     "\u001b[35m  speed 8.5 m/s -- a 5 s leg is now 42 m, not 25 m\u001b[0m",
+     "\u001b[35m",
+     "roster: Drone1, Drone2   speed 8.5 m/s\u001b[0m",
+     "\u001b[2mspawning any that are missing ...\u001b[0m",
+     "spawned at runtime: Drone2",
+     "spawn layout: Drone1(0.0, 0.0)  Drone2(4.0, 0.0)",
+     "\u001b[36m  Drone1: x    0.00  y    0.00    0.00 m AGL   landed=0  api=False\u001b[0m",
+     "\u001b[36m  Drone2: x    4.00  y    0.00    0.00 m AGL   landed=0  api=False\u001b[0m",
+     "\u001b[2m",
+     "type instructions, or :help for commands",
+     "\u001b[0m",
+     "\u001b[1mfly> \u001b[0mgo up to 25 meters, fly forward for 6 seconds, then return home and land",
+     "\u001b[2m  'go up to 25 meters, fly forward for 6 seconds, then return home and land' is for Drone1\u001b[0m",
+     "\u001b[2m  instructions (blank = same as the drone above, :cancel to abort)\u001b[0m",
+     "\u001b[1m  Drone2> \u001b[0mgo up to 12 meters, fly right for 5 seconds, hover for 2 seconds, then land",
+     "\u001b[0m",
+     "\u001b[36m  Drone1 (0.0s): set_altitude 25m -> fly_straight 6s -> fly_to(0,0) -> land\u001b[0m",
+     "\u001b[36m  Drone2 (0.0s): set_altitude 12m -> fly_right 5s -> hover 2s -> land\u001b[0m",
+     "\u001b[1m  fly it? [y/N] \u001b[0my",
+     "spawn layout: Drone1(0.0, 0.0)  Drone2(4.0, 0.0)",
+     "[Drone1] armed, ground z = 29.25",
+     "[Drone1] 1/4 set_altitude",
+     "[Drone1] 2/4 fly_straight",
+     "[Drone1] 3/4 fly_to",
+     "[Drone1] 4/4 land",
+     "[Drone1] control released",
+     "[Drone2] armed, ground z = 29.25",
+     "[Drone2] 1/4 set_altitude",
+     "[Drone2] 2/4 fly_right",
+     "[Drone2] 3/4 hover",
+     "[Drone2] 4/4 land",
+     "[Drone2] control released",
+     "",
+     "closest approach: <M> m at t+<M>s (<N> samples)",
+     "\u001b[0m",
+     "\u001b[2m  (flown at 8.5 m/s)\u001b[0m",
+     "\u001b[32m  Drone1  set_altitude/fly_straight/fly_to/land   3.3s\u001b[0m",
+     "\u001b[2m       after take_off       8.0 m\u001b[0m",
+     "\u001b[2m       after set_altitude   25.0 m   asked 25.0\u001b[0m",
+     "\u001b[2m       after fly_straight   25.0 m\u001b[0m",
+     "\u001b[2m       after fly_to         8.0 m\u001b[0m",
+     "\u001b[2m       after land           0.0 m\u001b[0m",
+     "\u001b[32m  Drone2  set_altitude/fly_right/hover/land   5.3s\u001b[0m",
+     "\u001b[2m       after take_off       8.0 m\u001b[0m",
+     "\u001b[2m       after set_altitude   12.0 m   asked 12.0\u001b[0m",
+     "\u001b[2m       after fly_right      12.0 m\u001b[0m",
+     "\u001b[2m       after hover          12.0 m\u001b[0m",
+     "\u001b[2m       after land           0.0 m\u001b[0m",
+     "\u001b[2m  closest approach per pair: {'Drone1-Drone2': <M>}\u001b[0m",
+     "\u001b[2m  no drone or obstacle contacts\u001b[0m",
+     "\u001b[0m",
+     "\u001b[1mfly> \u001b[0m:drones 4",
+     "spawned at runtime: Drone3, Drone4",
+     "spawn layout: Drone1(0.0, 0.0)  Drone2(4.0, 0.0)  Drone3(8.0, 0.0)  Drone4(12.0, 0.0)",
+     "\u001b[35mroster is now Drone1, Drone2, Drone3, Drone4\u001b[0m",
+     "\u001b[36m  Drone1: x    0.00  y    0.00    0.00 m AGL   landed=0  api=False\u001b[0m",
+     "\u001b[36m  Drone2: x    4.00  y    0.00    0.00 m AGL   landed=0  api=False\u001b[0m",
+     "\u001b[36m  Drone3: x    8.00  y    0.00    0.00 m AGL   landed=0  api=False\u001b[0m",
+     "\u001b[36m  Drone4: x   12.00  y    0.00    0.00 m AGL   landed=0  api=False\u001b[0m",
+     "\u001b[1mfly> \u001b[0mgo up to 30 meters, fly forward for 5 seconds, then land",
+     "\u001b[2m  'go up to 30 meters, fly forward for 5 seconds, then land' is for Drone1\u001b[0m",
+     "\u001b[2m  instructions (blank = same as the drone above, :cancel to abort)\u001b[0m",
+     "\u001b[1m  Drone2> \u001b[0mgo up to 24 meters, fly right for 5 seconds, then land",
+     "\u001b[1m  Drone3> \u001b[0m",
+     "\u001b[2m       (same as above: go up to 24 meters, fly right for 5 seconds, then land)\u001b[0m",
+     "\u001b[1m  Drone4> \u001b[0mgo up to 12 meters, fly left for 5 seconds, then land",
+     "\u001b[0m",
+     "\u001b[36m  Drone1 (0.0s): set_altitude 30m -> fly_straight 5s -> land\u001b[0m",
+     "\u001b[36m  Drone2 (0.0s): set_altitude 24m -> fly_right 5s -> land\u001b[0m",
+     "\u001b[36m  Drone3 (0.0s): set_altitude 24m -> fly_right 5s -> land\u001b[0m",
+     "\u001b[36m  Drone4 (0.0s): set_altitude 12m -> fly_left 5s -> land\u001b[0m",
+     "\u001b[1m  fly it? [y/N] \u001b[0my",
+     "spawn layout: Drone1(0.0, 0.0)  Drone2(4.0, 0.0)  Drone3(8.0, 0.0)  Drone4(12.0, 0.0)",
+     "[Drone1] armed, ground z = 29.25",
+     "[Drone1] 1/3 set_altitude",
+     "[Drone1] 2/3 fly_straight",
+     "[Drone1] 3/3 land",
+     "[Drone1] control released",
+     "[Drone2] armed, ground z = 29.25",
+     "[Drone2] 1/3 set_altitude",
+     "[Drone2] 2/3 fly_right",
+     "[Drone2] 3/3 land",
+     "[Drone2] control released",
+     "[Drone3] armed, ground z = 29.25",
+     "[Drone3] 1/3 set_altitude",
+     "[Drone3] 2/3 fly_right",
+     "[Drone3] 3/3 land",
+     "[Drone3] control released",
+     "[Drone4] armed, ground z = 29.25",
+     "[Drone4] 1/3 set_altitude",
+     "[Drone4] 2/3 fly_left",
+     "[Drone4] 3/3 land",
+     "[Drone4] control released",
+     "",
+     "closest approach: <M> m at t+<M>s (<N> samples)",
+     "\u001b[0m",
+     "\u001b[2m  (flown at 8.5 m/s)\u001b[0m",
+     "\u001b[32m  Drone1  set_altitude/fly_straight/land   3.3s\u001b[0m",
+     "\u001b[2m       after take_off       8.0 m\u001b[0m",
+     "\u001b[2m       after set_altitude   30.0 m   asked 30.0\u001b[0m",
+     "\u001b[2m       after fly_straight   30.0 m\u001b[0m",
+     "\u001b[2m       after land           0.0 m\u001b[0m",
+     "\u001b[32m  Drone2  set_altitude/fly_right/land   3.3s\u001b[0m",
+     "\u001b[2m       after take_off       8.0 m\u001b[0m",
+     "\u001b[2m       after set_altitude   24.0 m   asked 24.0\u001b[0m",
+     "\u001b[2m       after fly_right      24.0 m\u001b[0m",
+     "\u001b[2m       after land           0.0 m\u001b[0m",
+     "\u001b[32m  Drone3  set_altitude/fly_right/land   3.3s\u001b[0m",
+     "\u001b[2m       after take_off       8.0 m\u001b[0m",
+     "\u001b[2m       after set_altitude   24.0 m   asked 24.0\u001b[0m",
+     "\u001b[2m       after fly_right      24.0 m\u001b[0m",
+     "\u001b[2m       after land           0.0 m\u001b[0m",
+     "\u001b[32m  Drone4  set_altitude/fly_left/land   3.3s\u001b[0m",
+     "\u001b[2m       after take_off       8.0 m\u001b[0m",
+     "\u001b[2m       after set_altitude   12.0 m   asked 12.0\u001b[0m",
+     "\u001b[2m       after fly_left       12.0 m\u001b[0m",
+     "\u001b[2m       after land           0.0 m\u001b[0m",
+     "\u001b[2m  closest approach per pair: {'Drone1-Drone2': <M>, 'Drone1-Drone3': <M>, 'Drone1-Drone4': <M>, 'Drone2-Drone3': <M>, 'Drone2-Drone4': <M>, 'Drone3-Drone4': <M>}\u001b[0m",
+     "\u001b[2m  no drone or obstacle contacts\u001b[0m",
+     "\u001b[0m",
+     "\u001b[1mfly> \u001b[0m:drones 1"
+    ]
+   }
+  },
+  {
+   "id": "sandbox:end-of-input",
+   "inputs": [
+    "1",
+    ""
+   ],
+   "result": {
+    "calls": {
+     "main": [
+      [
+       "confirmConnection",
+       [],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "isApiControlEnabled",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ]
+     ]
+    },
+    "exit": 0,
+    "requests": [],
+    "stdout": [
+     "\u001b[2m",
+     "connecting to the simulator ...\u001b[0m",
+     "\u001b[2mchecking http://127.0.0.1:11435 ...\u001b[0m",
+     "endpoint: http://127.0.0.1:11435 serving llama3.3:70b  (2 model(s) available)",
+     "\u001b[32mendpoint OK, serving llama3.3:70b on the cluster\u001b[0m",
+     "\u001b[33msandbox mode: the model is told to invent numbers when you give none,\u001b[0m",
+     "\u001b[33mand an aircraft is left HOVERING unless the plan says land (:land to recover)\u001b[0m",
+     "\u001b[1m",
+     "how many drones? [1-4] \u001b[0m1",
+     "\u001b[1m",
+     "speed in m/s? [blank = 5.0 as in the study] \u001b[0m",
+     "\u001b[35m",
+     "roster: Drone1   speed 5.0 m/s\u001b[0m",
+     "\u001b[2mspawning any that are missing ...\u001b[0m",
+     "\u001b[36m  Drone1: x    0.00  y    0.00    0.00 m AGL   landed=0  api=False\u001b[0m",
+     "\u001b[2m",
+     "type instructions, or :help for commands",
+     "\u001b[0m",
+     "\u001b[1mfly> \u001b[0m",
+     "\u001b[2mbye\u001b[0m"
+    ]
+   }
+  },
+  {
+   "id": "sandbox:endpoint-not-serving-the-model",
+   "inputs": [],
+   "models": [
+    "llama3.2:3b"
+   ],
+   "result": {
+    "calls": {
+     "main": [
+      [
+       "confirmConnection",
+       [],
+       {}
+      ]
+     ]
+    },
+    "exit": 1,
+    "requests": [],
+    "stdout": [
+     "\u001b[2m",
+     "connecting to the simulator ...\u001b[0m",
+     "\u001b[2mchecking http://127.0.0.1:11435 ...\u001b[0m",
+     "\u001b[31mendpoint problem: endpoint http://127.0.0.1:11435 is answering, but does NOT serve 'llama3.3:70b'.",
+     "  available there: llama3.2:3b",
+     "  Refusing to fly: a different model would be recorded under",
+     "  the requested name. If this is a tunnel it may point at the",
+     "  wrong host, or have died leaving a local Ollama answering.\u001b[0m"
+    ]
+   }
+  }
+ ],
+ "meta": {
+  "agent_sha256": "9c70f9f46c76fc39",
+  "note": "Phase 2 characterisation goldens. See tools/record_golden.py.",
+  "recorded_from": "5f9ac56 (step 4), exported with git archive and recorded with the step 5 harness, before the runner and fly_chat moved",
+  "replies_from": [
+   "baseline_v1-llama3.3_70b-20261019-182324-v6-polled.jsonl",
+   "baseline_v1-llama3.3_70b-20261019-183553-v6-polled.jsonl",
+   "baseline_v1-llama3.3_70b-20261019-183805-v6-polled.jsonl"
+  ]
+ },
+ "replies": {
+  "before flying forward for 5 seconds, hover in place for 2 seconds": "{\"plan\": [{\"action\": \"hover\", \"duration\": 2}, {\"action\": \"fly_straight\", \"duration\": 5}]}",
+  "fly forward for 3 seconds, then do the exact same thing again": "{\"plan\": [{\"action\": \"fly_straight\", \"duration\": 3}, {\"action\": \"fly_straight\", \"duration\": 3}]}",
+  "fly forward for 5 seconds": "{\"plan\": [{\"action\": \"fly_straight\", \"duration\": 5}]}",
+  "fly forward for 5 seconds then return home and land": "{\"plan\": [{\"action\": \"fly_straight\", \"duration\": 5}, {\"action\": \"fly_to\", \"x\": 0, \"y\": 0, \"z\": 0}, {\"action\": \"land\"}]}",
+  "go up a bit, look around for a moment, then come back down safely": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -25}, {\"action\": \"hover\", \"duration\": 5}, {\"action\": \"set_altitude\", \"z\": -20}]}",
+  "go up to 12 meters, fly left for 5 seconds, then land": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -12}, {\"action\": \"fly_left\", \"duration\": 5}, {\"action\": \"land\"}]}",
+  "go up to 12 meters, fly right for 5 seconds, hover for 2 seconds, then land": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -12}, {\"action\": \"fly_right\", \"duration\": 5}, {\"action\": \"hover\", \"duration\": 2}, {\"action\": \"land\"}]}",
+  "go up to 15 meters, fly forward for 5 seconds, then land": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -15}, {\"action\": \"fly_straight\", \"duration\": 5}, {\"action\": \"land\"}]}",
+  "go up to 18 meters, fly backward for 5 seconds, then land": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -18}, {\"action\": \"fly_backward\", \"duration\": 5}, {\"action\": \"land\"}]}",
+  "go up to 24 meters, fly right for 5 seconds, then land": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -24}, {\"action\": \"fly_right\", \"duration\": 5}, {\"action\": \"land\"}]}",
+  "go up to 25 meters, fly forward for 6 seconds, then return home and land": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -25}, {\"action\": \"fly_straight\", \"duration\": 6}, {\"action\": \"fly_to\", \"x\": 0, \"y\": 0}, {\"action\": \"land\"}]}",
+  "go up to 30 meters, fly forward for 5 seconds, then land": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -30}, {\"action\": \"fly_straight\", \"duration\": 5}, {\"action\": \"land\"}]}",
+  "hover for 3 seconds then land": "{\"plan\": [{\"action\": \"hover\", \"duration\": 3}, {\"action\": \"land\"}]}",
+  "hover in place for 2 seconds, three times in a row": "{\"plan\": [{\"action\": \"hover\", \"duration\": 2}, {\"action\": \"hover\", \"duration\": 2}, {\"action\": \"hover\", \"duration\": 2}]}"
+ }
+}

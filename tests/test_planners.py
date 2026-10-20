@@ -71,7 +71,8 @@ class OllamaPlannerTests(unittest.TestCase):
         self.assertEqual(fake.requests[0]["chat"]["messages"][0]["content"], "SANDBOX PROMPT")
 
     def test_the_agent_wrapper_sends_the_agents_current_prompt(self):
-        # tools/fly_chat.py rewrites agent.SYSTEM_PROMPT; that must still reach the model.
+        # A caller that rewrites agent.SYSTEM_PROMPT must still reach the model with
+        # it (tools/fly_chat.py did, until Phase 2 step 5).
         fake = airsim_fake.ScriptedOllama('{"plan": [{"action": "land"}]}')
         saved_module, saved_prompt = sys.modules.get("ollama"), agent.SYSTEM_PROMPT
         sys.modules["ollama"] = fake.module

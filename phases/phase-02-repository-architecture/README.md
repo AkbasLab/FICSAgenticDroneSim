@@ -38,13 +38,16 @@ they must still pass, unedited, when the refactor is done.
 | Recording fake AirSim + virtual clock + scripted Ollama | [`tests/airsim_fake.py`](../../tests/airsim_fake.py) | **Done** 2026-10-20 |
 | Golden recorder | [`tools/record_golden.py`](../../tools/record_golden.py) | **Done** 2026-10-20 |
 | Goldens: execution (16 cases), planning (44 cases) | [`tests/golden/`](../../tests/golden/) | **Recorded** from `v0.1-open-loop-baseline` |
-| Regression test | [`tests/test_golden.py`](../../tests/test_golden.py) | **Passing** against the baseline |
-| `VehicleAdapter` + `SceneAdapter`, core types, AirSim adapter | [`agentic_uav/core/`](../../agentic_uav/core/), [`agentic_uav/simulator/`](../../agentic_uav/simulator/) | **Done** 2026-10-20; not yet used by the agent |
-| Adapter tests, expectations taken from the goldens | [`tests/test_adapter.py`](../../tests/test_adapter.py) | **Passing**, 21 tests |
+| Goldens: runner (10 cases), fly_chat (4 sessions) | [`tests/golden/`](../../tests/golden/) | **Recorded** from step 4 (`5f9ac56`), before the runner and sandbox moved |
+| Regression test | [`tests/test_golden.py`](../../tests/test_golden.py) | **Passing**, all four goldens |
+| `VehicleAdapter` + `SceneAdapter`, core types, AirSim adapter | [`agentic_uav/core/`](../../agentic_uav/core/), [`agentic_uav/simulator/`](../../agentic_uav/simulator/) | **Done** 2026-10-20 |
+| Adapter tests, expectations taken from the goldens | [`tests/test_adapter.py`](../../tests/test_adapter.py) | **Passing**, 23 tests |
 | Execution on the adapter | [`agentic_uav/control/`](../../agentic_uav/control/), [`simulator/scenario_manager.py`](../../agentic_uav/simulator/scenario_manager.py) | **Done** 2026-10-20; goldens pass unedited |
 | `MissionPlanner` + Ollama and replay planners | [`agentic_uav/planners/`](../../agentic_uav/planners/), [`core/protocol.py`](../../agentic_uav/core/protocol.py) | **Done** 2026-10-20; goldens pass unedited |
 | Planner tests | [`tests/test_planners.py`](../../tests/test_planners.py) | **Passing**, 8 tests |
-| Runner and logging moved | `agentic_uav/experiments/` | Not started |
+| Runner, agent log, provenance moved; settings.json helpers moved | [`agentic_uav/experiments/`](../../agentic_uav/experiments/), [`simulator/airsim_settings.py`](../../agentic_uav/simulator/airsim_settings.py) | **Done** 2026-10-20; goldens pass unedited |
+| Sandbox on the adapter and the planner | [`tools/fly_chat.py`](../../tools/fly_chat.py) | **Done** 2026-10-20; goldens pass unedited |
+| Experiment and sandbox tests | [`tests/test_experiments.py`](../../tests/test_experiments.py), [`tests/test_fly_chat.py`](../../tests/test_fly_chat.py) | **Passing**, 11 + 2 tests |
 
 ## Plan
 
@@ -63,7 +66,9 @@ one without the goldens being re-recorded.
    the record.
 5. **Move the runner, monitor and logging into `agentic_uav/experiments/`.**
    `baseline/open_loop_agent.py` becomes a thin entry point with the same
-   command line, so every documented command keeps working.
+   command line, so every documented command keeps working. Done; see the
+   record. The monitor had already moved, with execution, in step 3; the
+   sandbox moved onto the adapter in this step too.
 6. **Close:** docs, a live block flown by the user, compared with `v6-polled`.
 
 ## Record
@@ -269,10 +274,141 @@ Also run: the agent's real command line, plan-only, against an unreachable
 endpoint. Planning went through the new planner, the transport failure was
 recorded, and nothing armed. 144 tests pass; audit clean.
 
+### 2026-10-20 — the runner, the agent log and the sandbox moved onto the adapters; the goldens pass unedited
+
+**Pinned first, again.** The execution and planning goldens stop at
+`fly_plans` and `plan_for`. Nothing recorded what the runner does around
+them: the preflight refusals, row construction, scoring, the summary, the
+console, the agent log, the code snapshot. Nor anything of the sandbox. So
+two more goldens came before any code moved, both recorded from the step 4
+code:
+
+* **`runner.json`, 10 cases**: whole `scripts/run_missions.py` invocations,
+  each case one simulator session. The protocol series in one session (M01–M08,
+  M09, M10, then M01 again, refused), plan-only, `--model`/`--option`/`--block`
+  overrides with no server version, four drones declared, a rejected plan plus
+  a dead endpoint mid-series, a stuck landing, a drone appearing mid-series
+  (the `STOPPED at` path), a model not served, an endpoint down, and two bad
+  arguments. Compared per invocation: exit code, console, result rows,
+  summary, agent-log records, the code snapshot's shape, every AirSim call.
+  The replies are v6's own, from its three files, so no model runs.
+* **`fly_chat.json`, 4 sessions**: scripted input through every sandbox
+  command, both departures from the study (the prompt addendum and hovering),
+  a startup speed, two and four drones, `:drones 1` with four in the scene, end
+  of input, a model not served. Compared: console, every request the model
+  received, every AirSim call.
+
+The harness grew to drive them: a whole-runner scripted Ollama that refuses an
+unscripted instruction loudly (the planner catches every exception, so a gap
+in the script would otherwise pass as the model's own failure), a scenario
+runner whose world persists across invocations, a world that can grow an
+intruder on its n-th reset, and a sandbox driver that feeds `input()`. Two of
+its stand-ins were made faithful at the connection boundary: they confirm the
+connection as the real `connect` does, and a per-drone stream does not record
+the handshake, since it addresses no vehicle. Each change was checked against
+the unmoved code first: the existing goldens stayed byte-identical.
+
+**What is not compared, and why.** Only what differs between two runs of
+identical code: timestamps, the output directory, the code digests and commit
+(they change with every edit, by design), the separation monitor's figures,
+which depend on a real 10 Hz timer racing virtual flight time, the order flight
+threads finish in, and how two drones' console lines interleave. Each drone's
+own lines keep their order. The digests' MEANING is pinned by unit tests
+instead (below).
+
+**Recorded twice, both times from the pre-move code.** The first recording
+kept the monitor's sample counts and closest approach in 34 console lines.
+Deterministic on this machine, but a slower one could take a second sample and
+fail. Those figures were normalised and the goldens recorded again from
+`5f9ac56`, exported with `git archive`, with only the new harness and recorder
+laid over it. The second recording differs from the first in exactly those 34
+lines and nothing else, and the agent and runner digests in its metadata are
+step 4's. The moved code was then checked against it, unedited.
+
+| Moved | To |
+|---|---|
+| `load_toml`, `score`, `snapshot_code`, `current_roster`, `series_conflicts`, `describe`, `fly_one`, `run_one`, `summarise`, `main` | `experiments/runner.py` |
+| `LOG_PATH`, `log_record`, `log_execution` | `experiments/agent_log.py` |
+| `file_digest`, `provenance`, `package_digest` | `experiments/provenance.py` |
+| `documents_dir`, `vehicle_names`, `CAMERA_TEMPLATE`, `build_settings`, `write_settings` | `simulator/airsim_settings.py` |
+
+Moved by script, as in steps 3 and 4. `scripts/run_missions.py` went from 704
+lines to 42: the command line and re-exports, so `from run_missions import
+score` and every documented command still work. Its `--help` is byte-identical
+to step 4's. The agent went from 561 lines to 315. The settings helpers moved
+because the runner reads the declared roster, and a package module importing
+from `baseline/` would invert the dependency. Imports this step left unused
+were pruned (`ctypes`, `json`, `time`), along with five unused since steps 3–4
+(`math`, `threading`, `dataclass`, `field`, `Iterable`).
+
+**The runner no longer takes the agent.** `run_one(planner, mission, model,
+attempt, protocol)` plans through any `MissionPlanner`; `fly_one(planner,
+scene, connect, ...)` resets through the scenario manager and flies through
+the executor's `fly_plans`. Its own connection comes from
+`AirSimAdapter.connect`, which confirms it as the old explicit
+`confirmConnection` did, and the leftover-drone preflight reads
+`scene.list_vehicles()`. A test now walks every module of `agentic_uav`:
+AirSim is imported only by the AirSim adapter, Ollama only by the Ollama
+planner and the endpoint check, and the baseline by nothing. Importing the
+runner loads neither, so `--help` and a bad mission id still fail instantly.
+
+**Provenance states the same agent.** Two paths were `__file__` in the agent:
+the repository and the agent file itself. They are named explicitly now, so a
+record still says `open_loop_agent.py` with that file's digest, plus one
+digest over the package. The goldens cannot pin digests, so unit tests do:
+the fields, the agent file's digest, the package digest recomputed
+independently, and the agent log's path.
+
+**The sandbox stopped rewriting the study.** `tools/fly_chat.py` made its two
+departures and its speed by assigning `agent.SYSTEM_PROMPT`,
+`agent.DroneRunner` and `agent.MOVE_SPEED`. Now it hands its prompt to an
+`OllamaPlanner` and `HoverRunner` and the speed to `fly_plans`, the
+parameters steps 3 and 4 added for it. `status`, `airborne` and `land_all` go
+through the adapter. That needed one new method, `has_control`
+(`isApiControlEnabled`), whose expected call is taken from the sandbox golden,
+as are those of `land_all`'s take-control, land, release. A test runs a
+session and checks the study's prompt, speed and runner are untouched
+afterwards. The sandbox no longer imports `airsim` or the agent.
+
+**Mutations, on the moved code.**
+
+| Mutation | Runner cases failing (of 10) | Sandbox sessions failing (of 4) |
+|---|---|---|
+| `score` counts one extra step | 7 | — |
+| `series_conflicts` never refuses | 1, the wrong-order series | — |
+| `reset_world` skipped | 5 | — |
+| `log_record` / `log_execution` silent | 7 / 5 | — |
+| `current_roster` empty | 5 | — |
+| a new key in `OLLAMA_OPTIONS` | 9 | — |
+| `provenance` drops a field | 7 | — |
+| snapshot misses `executor.py` | 7 | — |
+| the speed retune leaves the prompt alone | — | 2 |
+| sandbox addendum removed | — | 2 |
+| study runner instead of `HoverRunner` | — | 1 |
+| `release` does nothing | — | 2 |
+| `has_control` always true | — | 3 |
+| `LAND_TIMEOUT` changed | — | 1 |
+| speed not passed to `fly_plans` | — | 2 |
+
+Three mutations failed nothing, each for a reason: `num_ctx` in
+`OLLAMA_OPTIONS` (the config sets it, so the default never reaches a run), a
+`file_digest` returning `None`, and `build_settings` (digests are unpinned by
+design and unit-tested instead; the runner never calls `build_settings`, which
+`tests/test_settings.py` pins).
+
+162 tests pass; `record_golden.py --check` matches all four goldens; audit
+clean. The live block that closes the phase is step 6.
+
 ## Decisions
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-10-20 | **Pin the runner and the sandbox as whole invocations before moving them** | The first two goldens stop at `fly_plans` and `plan_for`. Everything the runner does around them (refusals, scoring, the summary, the log, the snapshot) and everything the sandbox does was unpinned, and step 5 moves exactly that. |
+| 2026-10-20 | **A golden is re-recorded only from the code it pins** | `runner.json` needed a second recording to drop timing-dependent monitor figures. Recording it from the moved code would have made the moved code its own reference. It was recorded from `5f9ac56`, and shown to differ from the first recording in those lines only. |
+| 2026-10-20 | **The harness removes measurement noise, never behaviour** | Each normalisation names something that differs between two runs of identical code: clock, paths, digests, the monitor's 10 Hz race with virtual time, thread order. What the code decides, prints, writes or sends is compared exactly. |
+| 2026-10-20 | **The sandbox passes its departures as arguments** | Rewriting the agent's globals made the sandbox's changes invisible at the call site and process-wide. Steps 3 and 4 had added the parameters for it; this step uses them. The agent's wrappers keep reading their globals, for any other caller. |
+| 2026-10-20 | **settings.json helpers live beside the AirSim adapter** | The runner reads the declared roster. Leaving them in the agent would have had `agentic_uav` import `baseline/`, inverting the dependency. They are AirSim's file format, so `simulator/`. |
+| 2026-10-20 | **`has_control` joins the `VehicleAdapter` protocol** | The sandbox's `:status` reads AirSim's API-control flag. Without it in the protocol the sandbox would reach past the adapter, which 2.2 forbids. One line for a mock to implement. |
 | 2026-10-20 | **Protocol constants live in `core/protocol.py`** | The speed and cruise altitude are told to the model by the planner and flown by the executor. One definition keeps them equal, and keeps planners independent of the control package. |
 | 2026-10-20 | **The system prompt is a parameter of the planner** | The sandbox depends on replacing it. A module constant inside `agentic_uav` would silently ignore that. |
 | 2026-10-20 | **`ReplayPlanner` reuses the planner's validation and refuses ambiguity** | A replayed plan must be the plan the model produced, not an approximation. Conflicting recorded replies, or a request never recorded, are errors rather than guesses. |
@@ -295,9 +431,32 @@ recorded, and nothing armed. 144 tests pass; audit clean.
   becomes part of the `safety_guardian` is a Phase 3 or Phase 16 question.
 - ~~**The `DroneRunner` docstring still calls the client SHARED.**~~
   **Corrected in step 3**, when the class moved.
-- **`run_missions.py` and `fly_chat.py` still call AirSim directly** for
-  connection setup, the leftover-drone preflight and the sandbox's status and
-  land-all helpers. Step 5.
+- ~~**`run_missions.py` and `fly_chat.py` still call AirSim directly.**~~
+  **Done in step 5**: both go through the adapter, and a test keeps every
+  other module of `agentic_uav` from importing AirSim.
+- **The runner prints `min sep Nonem` for every single-drone flight.**
+  `describe()` checks that the monitor ran, not that there was a distance to
+  report. The executor fixed the same mistake in its own line long ago. The
+  console only; the rows are right. Pinned in `runner.json`, so fixing it is
+  a deliberate change with a re-recording and a line here.
+- **`:drones N` with fewer drones than the scene holds ends the sandbox.**
+  `ensure_vehicles` refuses, correctly, with `ForeignVehicleError`, and
+  nothing in `fly_chat.py` catches it. Pinned in `fly_chat.json`.
+- **The sandbox's options claim to be the study's but are not.** Its comment
+  says "the study's frozen options"; its `num_ctx` is 4096 against the
+  protocol's 98304. Sandbox plans are not comparable anyway (the addendum), so
+  the comment or the value should change; which is a decision for the study's
+  owner.
+- ~~**The local agent log held 90 records of scripted replies.**~~ **Removed
+  2026-10-20, with the owner's go-ahead.** The first smoke test of the runner
+  harness, at 14:38 that day, ran before the harness redirected the log, and
+  appended 66 planning and 24 execution records to `runs/agent-log.jsonl`,
+  each naming `llama3.3:70b`. They were the file's last 90 lines and the only
+  records from 14:38; the 459 before them, real flights included, are
+  untouched. The file is ignored by git, so nothing committed was affected.
+  The untouched file is kept beside it as
+  `runs/agent-log.backup-before-removing-90-scripted-records-20261020.jsonl`.
+  The harness now redirects the log and raises if the real one changes.
 
 ---
 

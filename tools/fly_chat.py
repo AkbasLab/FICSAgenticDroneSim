@@ -35,8 +35,14 @@ inference options, and `fly_plans` for the flight itself. That last one is
 deliberate; the agent's own comment says the interactive and scored paths must
 not diverge or they stop being the same experiment.
 
-It writes NOTHING. No results file, no agent log -- `plan_for` and `fly_plans`
-do not log; only `main()` does, and this is not it.
+Since Phase 2 step 5 it reaches the simulator only through the AirSim adapter,
+and hands its two departures from the study -- the prompt and the hovering
+runner -- and its speed to the planner and to `fly_plans` as arguments. It
+used to write them into the agent's globals; nothing of the study is rewritten
+now, not even at runtime.
+
+It writes NOTHING. No results file, no agent log -- the planner and
+`fly_plans` do not log; only the runner and the agent's own `main()` do.
 
 Commands:
     :drones N    change the number of drones (1-4) and respawn
@@ -57,10 +63,18 @@ import time
 # Derived from this file's own location, so the tool works in any clone. The
 # repository is the parent of tools/.
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(REPO, "baseline"))
+sys.path.insert(0, REPO)
 
-import airsim                      # noqa: E402  (kept for the type, not used directly)
-import open_loop_agent as agent    # noqa: E402
+from agentic_uav.control.executor import LAND_TIMEOUT, DroneRunner, fly_plans  # noqa: E402
+from agentic_uav.control.ground import forget_ground_reference  # noqa: E402
+from agentic_uav.core.models import SkillCommand  # noqa: E402
+from agentic_uav.core.protocol import MOVE_SPEED  # noqa: E402
+from agentic_uav.planners.endpoint import check_endpoint  # noqa: E402
+from agentic_uav.planners.ollama_planner import OllamaPlanner  # noqa: E402
+from agentic_uav.planners.prompt import SYSTEM_PROMPT  # noqa: E402
+from agentic_uav.simulator.airsim_adapter import AirSimAdapter  # noqa: E402
+from agentic_uav.simulator.airsim_settings import vehicle_names  # noqa: E402
+from agentic_uav.simulator.scenario_manager import ensure_vehicles, reset_world  # noqa: E402
 
 ENDPOINT = os.environ.get("OLLAMA_HOST") or "http://127.0.0.1:11435"
 MODEL = "llama3.3:70b"
@@ -112,16 +126,16 @@ def describe(steps):
     return " -> ".join(out)
 
 
-def status(client):
-    for d in client.listVehicles():
-        p = client.simGetVehiclePose(d).position
-        s = client.getMultirotorState(vehicle_name=d)
-        say(f"  {d}: x {p.x_val:7.2f}  y {p.y_val:7.2f}  "
-            f"{29.25 - p.z_val:6.2f} m AGL   landed={s.landed_state}  "
-            f"api={client.isApiControlEnabled(vehicle_name=d)}", "c")
+def status(scene):
+    for d in scene.list_vehicles():
+        p = scene.get_pose(d)
+        s = scene.get_state(d)
+        say(f"  {d}: x {p.x:7.2f}  y {p.y:7.2f}  "
+            f"{29.25 - p.z:6.2f} m AGL   landed={s.landed_state}  "
+            f"api={scene.has_control(d)}", "c")
 
 
-class HoverRunner(agent.DroneRunner):
+class HoverRunner(DroneRunner):
     """A DroneRunner that leaves the aircraft up if the plan never said land.
 
     `fly()` calls `_land_and_release(skip_landing=...)`, passing True only when
@@ -153,12 +167,12 @@ class HoverRunner(agent.DroneRunner):
                   "(:land to bring it down)")
 
 
-def airborne(client, names, margin=2.0):
+def airborne(scene, names, margin=2.0):
     """Names of drones more than `margin` above the ground, with their height."""
     up = []
     for n in names:
         try:
-            z = client.simGetVehiclePose(n).position.z_val
+            z = scene.get_pose(n).z
         except Exception:
             continue
         agl = 29.25 - z
@@ -167,39 +181,37 @@ def airborne(client, names, margin=2.0):
     return up
 
 
-def land_all(client, names):
+def land_all(scene, names):
     """Bring every flying aircraft down and release it."""
     brought = []
-    for n, agl in airborne(client, names):
+    for n, agl in airborne(scene, names):
         try:
-            client.enableApiControl(True, vehicle_name=n)
-            client.armDisarm(True, vehicle_name=n)
-            client.landAsync(timeout_sec=agent.LAND_TIMEOUT,
-                             vehicle_name=n).join()
+            scene.take_control(n)
+            scene.execute_skill(n, SkillCommand.land(LAND_TIMEOUT))
         except Exception as exc:
             say(f"  {n}: landing failed: {type(exc).__name__}: {exc}", "r")
         finally:
             try:
-                client.armDisarm(False, vehicle_name=n)
-                client.enableApiControl(False, vehicle_name=n)
+                scene.release(n)
             except Exception:
                 pass
         brought.append((n, agl))
     return brought
 
 
-def set_speed(speed):
-    """Change the speed AND the prompt that tells the model about it."""
-    old = agent.MOVE_SPEED
-    agent.MOVE_SPEED = speed
-    agent.SYSTEM_PROMPT = agent.SYSTEM_PROMPT.replace(
-        f"fixed at {old} m/s", f"fixed at {speed} m/s")
-    return old
+def retune(prompt, old, speed):
+    """The prompt, telling the model `speed` instead of `old`.
+
+    The system prompt is an f-string built at import, so the old number is
+    baked into it. Without this the model is TOLD 5 m/s while the aircraft
+    flies at something else, and every duration it reasons about is wrong.
+    """
+    return prompt.replace(f"fixed at {old} m/s", f"fixed at {speed} m/s")
 
 
-def report(outcomes, separation):
+def report(outcomes, separation, speed):
     say()
-    say(f"  (flown at {agent.MOVE_SPEED} m/s)", "dim")
+    say(f"  (flown at {speed} m/s)", "dim")
     for o in sorted(outcomes, key=lambda o: o["drone"]):
         ok = o["completed"] and o["landed_on_ground"]
         say(f"  {o['drone']}  {'/'.join(o['executed']) or '(nothing)'}"
@@ -231,8 +243,8 @@ def report(outcomes, separation):
     say()
 
 
-def report_left_flying(client, names):
-    up = airborne(client, names)
+def report_left_flying(scene, names):
+    up = airborne(scene, names)
     if up:
         say("  still flying, holding position: "
             + ", ".join(f"{n} at {a} m" for n, a in up), "y")
@@ -261,14 +273,14 @@ def collect(names):
     return instructions
 
 
-def plan_all(names, instructions):
+def plan_all(names, instructions, prompt):
+    planner = OllamaPlanner(MODEL, ENDPOINT, OPTIONS, system_prompt=prompt)
     records, bad = [], False
     say()
     for n, text in zip(names, instructions):
         t0 = time.time()
         try:
-            r = agent.plan_for(text, n, model=MODEL, endpoint=ENDPOINT,
-                               options=OPTIONS)
+            r = planner.plan(text, n)
         except Exception as exc:
             say(f"  {n}: planning failed: {type(exc).__name__}: {exc}", "r")
             bad = True
@@ -287,19 +299,20 @@ def plan_all(names, instructions):
 
 def main():
     say("\nconnecting to the simulator ...", "dim")
-    client = agent.connect()
+    scene = AirSimAdapter.connect()
 
     say(f"checking {ENDPOINT} ...", "dim")
     try:
-        agent.check_endpoint(MODEL, ENDPOINT)
+        check_endpoint(MODEL, ENDPOINT)
     except Exception as exc:
         say(f"endpoint problem: {exc}", "r")
         return 1
     say(f"endpoint OK, serving {MODEL} on the cluster", "g")
 
-    # Both divergences from the study, stated plainly rather than hidden.
-    agent.SYSTEM_PROMPT = agent.SYSTEM_PROMPT.rstrip() + "\n" + SANDBOX_ADDENDUM
-    agent.DroneRunner = HoverRunner
+    # Both divergences from the study, stated plainly rather than hidden. The
+    # prompt goes to the planner and HoverRunner to fly_plans, as arguments.
+    prompt = SYSTEM_PROMPT.rstrip() + "\n" + SANDBOX_ADDENDUM
+    speed = MOVE_SPEED
     say("sandbox mode: the model is told to invent numbers when you give none,",
         "y")
     say("and an aircraft is left HOVERING unless the plan says land "
@@ -323,33 +336,28 @@ def main():
     # sandbox, nothing is recorded anyway, and varying it is one of the more
     # interesting things to try.
     while True:
-        raw = ask(f"\nspeed in m/s? [blank = {agent.MOVE_SPEED} as in the study] ")
+        raw = ask(f"\nspeed in m/s? [blank = {speed} as in the study] ")
         if not raw:
             break
         try:
-            speed = float(raw)
+            value = float(raw)
         except ValueError:
             say("  a number, e.g. 5 or 8.5", "y")
             continue
-        if not 0.5 <= speed <= 20.0:
+        if not 0.5 <= value <= 20.0:
             say("  keep it between 0.5 and 20 m/s", "y")
             continue
-        old = agent.MOVE_SPEED
-        agent.MOVE_SPEED = speed
-        # The system prompt is an f-string built at import, so the old number is
-        # baked into it. Without this the model is TOLD 5 m/s while the aircraft
-        # flies at something else, and every duration it reasons about is wrong.
-        agent.SYSTEM_PROMPT = agent.SYSTEM_PROMPT.replace(
-            f"fixed at {old} m/s", f"fixed at {speed} m/s")
+        old, speed = speed, value
+        prompt = retune(prompt, old, speed)
         say(f"  speed {speed} m/s -- a 5 s leg is now {speed * 5:.0f} m, "
             f"not {old * 5:.0f} m", "m")
         break
 
-    names = agent.vehicle_names(count)
-    say(f"\nroster: {', '.join(names)}   speed {agent.MOVE_SPEED} m/s", "m")
+    names = vehicle_names(count)
+    say(f"\nroster: {', '.join(names)}   speed {speed} m/s", "m")
     say("spawning any that are missing ...", "dim")
-    agent.ensure_vehicles(client, names)
-    status(client)
+    ensure_vehicles(scene, names)
+    status(scene)
     say("\ntype instructions, or :help for commands\n", "dim")
 
     confirm = True
@@ -368,26 +376,26 @@ def main():
             say(__doc__.split("Commands:")[1], "dim")
             continue
         if line == ":status":
-            status(client)
+            status(scene)
             continue
         if line == ":auto":
             confirm = not confirm
             say(f"confirm-before-fly is {'ON' if confirm else 'OFF'}", "y")
             continue
         if line == ":land":
-            down = land_all(client, names)
+            down = land_all(scene, names)
             if down:
                 for n, agl in down:
                     say(f"  {n} brought down from {agl} m", "g")
             else:
                 say("nothing is flying", "dim")
-            status(client)
+            status(scene)
             continue
         if line == ":reset":
-            agent.reset_world(client)
-            agent.forget_ground_reference()
+            reset_world(scene)
+            forget_ground_reference()
             say("world reset", "g")
-            status(client)
+            status(scene)
             continue
         if line == ":plans":
             if not last_records:
@@ -401,31 +409,32 @@ def main():
             parts = line.split()
             if len(parts) == 2:
                 try:
-                    speed = float(parts[1])
+                    value = float(parts[1])
                 except ValueError:
                     say("usage: :speed 8.5", "y")
                     continue
-                if not 0.5 <= speed <= 20.0:
+                if not 0.5 <= value <= 20.0:
                     say("keep it between 0.5 and 20 m/s", "y")
                     continue
-                old = set_speed(speed)
+                old, speed = speed, value
+                prompt = retune(prompt, old, speed)
                 say(f"speed {old} -> {speed} m/s   (a 5 s leg is now "
                     f"{speed * 5:.0f} m, was {old * 5:.0f} m)", "m")
                 say("the model is told the new speed, so re-plan rather than "
                     ":again -- an old plan's durations assumed the old speed", "y")
             else:
-                say(f"speed is {agent.MOVE_SPEED} m/s   (usage: :speed 8.5)", "c")
+                say(f"speed is {speed} m/s   (usage: :speed 8.5)", "c")
             continue
         if line.startswith(":drones"):
             parts = line.split()
             if len(parts) == 2 and parts[1].isdigit() and 1 <= int(parts[1]) <= MAX_DRONES:
                 count = int(parts[1])
-                names = agent.vehicle_names(count)
-                agent.reset_world(client)
-                agent.forget_ground_reference()
-                agent.ensure_vehicles(client, names)
+                names = vehicle_names(count)
+                reset_world(scene)
+                forget_ground_reference()
+                ensure_vehicles(scene, names)
                 say(f"roster is now {', '.join(names)}", "m")
-                status(client)
+                status(scene)
             else:
                 say(f"usage: :drones N   (1-{MAX_DRONES})", "y")
             continue
@@ -448,7 +457,7 @@ def main():
                 if rest is None:
                     continue
                 instructions = [line] + rest
-            records, bad = plan_all(names, instructions)
+            records, bad = plan_all(names, instructions, prompt)
             if bad or len(records) != count:
                 say("  not flying: at least one plan was rejected", "y")
                 continue
@@ -463,24 +472,25 @@ def main():
                 print()
                 break
 
-        up = airborne(client, names)
+        up = airborne(scene, names)
         if up:
             say("  these are still in the air: "
                 + ", ".join(f"{n} at {a} m" for n, a in up), "y")
             say("  arming from up there would read the ground wrong, and the "
                 "session guard will refuse the run.", "y")
             if ask("  land them first? [Y/n] ").lower() in ("", "y", "yes"):
-                for n, a in land_all(client, names):
+                for n, a in land_all(scene, names):
                     say(f"  {n} brought down from {a} m", "g")
 
-        agent.forget_ground_reference()
+        forget_ground_reference()
         try:
-            outcomes, separation = agent.fly_plans(client, records)
+            outcomes, separation = fly_plans(scene, records, AirSimAdapter.connect,
+                                             runner_class=HoverRunner, speed=speed)
         except Exception as exc:
             say(f"  flight failed: {type(exc).__name__}: {exc}", "r")
             continue
-        report(outcomes, separation)
-        report_left_flying(client, names)
+        report(outcomes, separation, speed)
+        report_left_flying(scene, names)
 
     say("bye", "dim")
     return 0

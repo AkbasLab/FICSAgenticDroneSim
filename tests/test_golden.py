@@ -19,6 +19,16 @@ These tests are that criterion made checkable without a simulator or a model.
 * planning -- every distinct model reply on record, plus the error paths,
   through `plan_for` with a scripted model. Compared: the exact request sent,
   and the plan record produced.
+* runner -- whole `scripts/run_missions.py` invocations, recorded in step 5
+  before the runner moved: the protocol series in one simulator session,
+  plan-only, overrides, every refusal and the mid-series stop. Compared: exit
+  code, console, result rows, summary, agent-log records, the code snapshot's
+  shape and every simulator call.
+* fly_chat -- scripted `tools/fly_chat.py` sessions, recorded in step 5
+  before the sandbox moved: every command, both of its deliberate departures
+  from the study (the prompt addendum and hovering), more drones, fewer
+  drones, a dead endpoint. Compared: console, every request the model
+  received, every simulator call.
 
 A failure here means behaviour changed. If the change is deliberate, re-record
 with `python tools/record_golden.py` and say why in the phase record. Never
@@ -34,17 +44,19 @@ import sys
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path[:0] = [os.path.join(ROOT, "baseline"), os.path.join(ROOT, "tests")]
+sys.path[:0] = [os.path.join(ROOT, "baseline"), os.path.join(ROOT, "scripts"),
+                os.path.join(ROOT, "tests")]
 
 import open_loop_agent as agent  # noqa: E402  (path set above)
 import airsim_fake  # noqa: E402
+import run_missions as runner  # noqa: E402
 
 GOLDEN = os.path.join(ROOT, "tests", "golden")
 
 
-def _load(name: str) -> list[dict]:
+def _load(name: str, part: str = "cases"):
     with open(os.path.join(GOLDEN, name), encoding="utf-8") as handle:
-        return json.load(handle)["cases"]
+        return json.load(handle)[part]
 
 
 def _first_difference(want, got, path="result"):
@@ -107,6 +119,39 @@ class PlanningGoldenTests(unittest.TestCase):
                                   _first_difference(case["result"], got))
 
 
+class RunnerGoldenTests(unittest.TestCase):
+    """Every recorded runner invocation prints, writes and flies the same."""
+
+    def test_every_case(self):
+        cases = _load("runner.json")
+        replies = _load("runner.json", "replies")
+        self.assertGreaterEqual(len(cases), 10)
+        for case in cases:
+            with self.subTest(case=case["id"]):
+                got = json.loads(json.dumps(
+                    airsim_fake.run_scenario(agent, runner, case, replies)))
+                self.assertIsNone(_first_difference(case["result"], got),
+                                  _first_difference(case["result"], got))
+
+
+class FlyChatGoldenTests(unittest.TestCase):
+    """Every recorded sandbox session prints, asks and flies the same."""
+
+    def test_every_case(self):
+        sys.path.insert(0, os.path.join(ROOT, "tools"))
+        import record_golden
+        cases = _load("fly_chat.json")
+        replies = _load("fly_chat.json", "replies")
+        self.assertGreaterEqual(len(cases), 4)
+        fly_chat = record_golden.load_fly_chat()
+        for case in cases:
+            with self.subTest(case=case["id"]):
+                got = json.loads(json.dumps(
+                    record_golden.run_fly_chat_case(case, replies, fly_chat)))
+                self.assertIsNone(_first_difference(case["result"], got),
+                                  _first_difference(case["result"], got))
+
+
 class HarnessSanityTests(unittest.TestCase):
     """The goldens are only as good as the fake. Pin what they must contain."""
 
@@ -121,6 +166,21 @@ class HarnessSanityTests(unittest.TestCase):
         planning = {c["id"] for c in _load("planning.json")}
         for name in ("not-json", "unknown-action", "unreachable", "positive-z"):
             self.assertIn(f"synthetic:{name}", planning)
+
+    def test_the_runner_paths_are_covered(self):
+        results = {c["id"]: c["result"] for c in _load("runner.json")}
+        series = results["flight:protocol-order-then-wrong-order"]
+        self.assertEqual([r["exit"] for r in series], [0, 0, 0, 1])
+        self.assertEqual([len(r["rows"]) for r in series[:3]], [24, 3, 3])
+        self.assertIn("REFUSING TO RUN", series[3]["stderr"])
+        self.assertTrue(any(l.startswith("STOPPED at M02")
+                            for l in results["flight:drone-appears-mid-series"][0]["stderr"]))
+        stuck = results["flight:land-stuck"][0]["rows"][0]["execution"]
+        self.assertFalse(stuck["completed"])
+        dead = results["flight:rejected-plan-and-dead-endpoint"][0]
+        self.assertEqual([r["transport_error"] for r in dead["rows"]], [False, False, True])
+        self.assertTrue(all(r[0]["snapshot"] is None or r[0]["snapshot"]["package_complete"]
+                            for r in results.values()))
 
     def test_a_changed_call_is_caught(self):
         # Prove the comparison can fail: alter one argument of one recorded

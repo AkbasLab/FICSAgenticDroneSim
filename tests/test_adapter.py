@@ -179,6 +179,40 @@ class ControlAndReadTests(unittest.TestCase):
             rig.adapter.get_state("NoSuchDrone")
 
 
+class SandboxCallTests(unittest.TestCase):
+    """What tools/fly_chat.py did to AirSim directly, the adapter now does.
+
+    Expectations from `tests/golden/fly_chat.json`: the sandbox's calls,
+    recorded in step 5 before it was moved onto the adapter.
+    """
+
+    @staticmethod
+    def sandbox_calls() -> list:
+        with open(os.path.join(ROOT, "tests", "golden", "fly_chat.json"), encoding="utf-8") as f:
+            case = json.load(f)["cases"][0]
+        assert case["id"] == "sandbox:one-drone-every-command"
+        return case["result"]["calls"]["main"]
+
+    def test_has_control_reads_the_api_control_flag(self):
+        _, call = first(self.sandbox_calls(), "isApiControlEnabled")
+        rig = _Rig()
+        self.assertIs(rig.adapter.has_control("Drone1"), False)
+        self.assertEqual(rig.calls, [call])
+
+    def test_bringing_one_down_is_take_control_land_release(self):
+        # :land on a hovering drone: control, land, then hand back.
+        calls = self.sandbox_calls()
+        i, _ = first(calls, "landAsync")
+        expected = calls[i - 2:i + 3]
+        self.assertEqual([c[0] for c in expected], ["enableApiControl", "armDisarm", "landAsync",
+                                                    "armDisarm", "enableApiControl"])
+        rig = _Rig()
+        rig.adapter.take_control("Drone1")
+        rig.adapter.execute_skill("Drone1", SkillCommand.land(expected[2][2]["timeout_sec"]))
+        rig.adapter.release("Drone1")
+        self.assertEqual(rig.calls, expected)
+
+
 class SceneTests(unittest.TestCase):
 
     def test_reset_and_confirm(self):
