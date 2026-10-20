@@ -73,7 +73,14 @@ def render(config: dict) -> str:
         f"per mission, {protocol['map']}, traffic "
         f"{'on' if protocol.get('traffic') else 'off'}, "
         f"temperature {protocol['options']['temperature']}, "
-        f"`num_gpu {protocol['options']['num_gpu']}` (the GPU belongs to the simulator).",
+        f"`num_ctx {protocol['options'].get('num_ctx', 'unset')}`, "
+        f"`num_gpu {protocol['options']['num_gpu']}` "
+        # The reason depends on the value: 0 keeps the model off a GPU the
+        # simulator owns (the laptop); anything else offloads to the model
+        # server's own GPU. A fixed phrase here went stale when the study
+        # moved to Vega.
+        + ("(the GPU belongs to the simulator)." if protocol["options"]["num_gpu"] == 0
+           else "(every layer on the model server's GPU)."),
         "",
         "> [!warning] Do not edit an instruction after results are recorded",
         "> A changed instruction under an unchanged id silently invalidates every "
