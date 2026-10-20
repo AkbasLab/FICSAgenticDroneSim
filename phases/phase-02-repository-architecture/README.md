@@ -39,7 +39,8 @@ they must still pass, unedited, when the refactor is done.
 | Golden recorder | [`tools/record_golden.py`](../../tools/record_golden.py) | **Done** 2026-10-20 |
 | Goldens: execution (16 cases), planning (44 cases) | [`tests/golden/`](../../tests/golden/) | **Recorded** from `v0.1-open-loop-baseline` |
 | Regression test | [`tests/test_golden.py`](../../tests/test_golden.py) | **Passing** against the baseline |
-| `VehicleAdapter` + core types, AirSim adapter | `agentic_uav/core/`, `agentic_uav/simulator/` | Not started |
+| `VehicleAdapter` + `SceneAdapter`, core types, AirSim adapter | [`agentic_uav/core/`](../../agentic_uav/core/), [`agentic_uav/simulator/`](../../agentic_uav/simulator/) | **Done** 2026-10-20; not yet used by the agent |
+| Adapter tests, expectations taken from the goldens | [`tests/test_adapter.py`](../../tests/test_adapter.py) | **Passing**, 21 tests |
 | Execution on the adapter | `agentic_uav/control/` | Not started |
 | `MissionPlanner` + Ollama and replay planners | `agentic_uav/planners/` | Not started |
 | Runner and logging moved | `agentic_uav/experiments/` | Not started |
@@ -52,6 +53,7 @@ one without the goldens being re-recorded.
 1. **Recording harness and goldens.** Done; see the record.
 2. **`VehicleAdapter` and core types** (`VehicleState`, `SkillCommand`,
    `SkillResult`), with an AirSim adapter that wraps exactly today's calls.
+   Done; see the record.
 3. **Move execution onto the adapter.** `DroneRunner`'s step dispatch becomes
    the executor. AirSim is touched only inside the adapter.
 4. **`MissionPlanner`**, with an Ollama planner (Llama and Mistral both run
@@ -98,10 +100,52 @@ planning cases. The landing threshold 3 → 9 m broke exactly the two
 stuck-landing cases, the only ones it reaches. Restored, everything passed
 again. Recorded twice from scratch, the two recordings were identical.
 
+### 2026-10-20 — the adapter, built from the goldens
+
+`agentic_uav/` now exists with two packages. Nothing in the agent uses them
+yet; that is step 3.
+
+* **`core/models.py`**: `Position`, `VehicleState`, `CollisionInfo`,
+  `SkillKind`, `SkillCommand`, `SkillResult`. Plain frozen dataclasses,
+  coordinates left in AirSim's NED, because converting to "height above
+  ground" needs the measured ground and hiding that sign is how Phase 1's
+  altitudes came out 29 m wrong.
+* **`simulator/adapter.py`**: two protocols. `VehicleAdapter` has AUV-03's
+  `get_state`, `execute_skill` and `stop`, plus the four things the baseline
+  actually does: `get_pose`, the ground-truth pose it records where a flight
+  ended from, distinct from the state estimate; `get_collision`; and
+  `take_control` and `release`. `SceneAdapter`: `confirm_connection`,
+  `reset`, `list_vehicles`, `add_vehicle`, `place_vehicle`.
+* **`simulator/airsim_adapter.py`**: `AirSimAdapter` implements both on one
+  connection. Every method is the baseline's call or pair of calls: same
+  arguments, same order, `.join()` where it joined, default timeouts left
+  out where the baseline left them out, exceptions passed through untouched.
+
+**Skills are primitive by design**: take off, move to z, velocity, hover, move
+to position, land. The baseline's decisions stay out of the adapter: braking
+with a hover after a velocity leg, altitudes relative to the measured ground,
+and verifying that `land` landed. So moving execution onto the adapter in step
+3 cannot move a decision with it.
+
+**Tested against the evidence, not against expectations.** `tests/test_adapter.py`
+takes each expected call from `tests/golden/execution.json`: what the tagged
+baseline sent for takeoff, the cruise climb, the landing descent, a velocity
+leg, `fly_to`, `land`, arm, release, the three reads, and M10's spawn and
+placement of three drones. It then asserts the adapter sends exactly that.
+21 tests, all passing.
+
+**One limit of the fake, recorded rather than hidden.** It fills in AirSim's
+default timeout when a call omits it (20 s for takeoff, unbounded for moves),
+so a test cannot tell "omitted" from "passed the default". In AirSim the two
+are the same call. The adapter omits them exactly where the baseline did.
+
 ## Decisions
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-10-20 | **Skills are simulator primitives; the agent's decisions stay in the agent** | A `fly_straight` skill that braked, or a `land` that verified itself, would carry baseline decisions into the adapter, where a mock in Phase 3 would have to copy them or silently differ. Primitive skills keep one place for each decision. |
+| 2026-10-20 | **The adapter protocol is wider than AUV-03's sketch, and says so** | The baseline reads a ground-truth pose, collisions, and hands control over and back. Leaving those out of the protocol would mean the agent reaching past it to AirSim, which is what 2.2 forbids. |
+| 2026-10-20 | **Scene management is its own protocol** | Resetting the world and spawning vehicles belong to the scenario, not to a drone. A flight thread never needs them; the runner does. |
 | 2026-10-20 | **Pin behaviour with a recording fake before moving any code** | AUV-03 asks for "a behavioural regression test". A live flight cannot be that test: it needs the simulator and Vega, takes an hour, and varies by centimetres. Recorded call sequences compare exactly, in under a second, on any machine. The live block stays, as the final check rather than the only one. |
 | 2026-10-20 | **One simulator connection per vehicle, not one shared** | AUV-03 says the AirSim RPC server is "hostile to concurrent clients", so one adapter should own the connection. Phase 1 measured the opposite: a *shared* client fails (`IOLoop is already running`, `BufferError`), and one connection per thread works on every flight since. The adapter follows the measurement. |
 | 2026-10-20 | **`MissionPlanner.plan(instruction)` now; `decide(context)` waits for Phase 5** | The baseline plans once, open loop. AUV-03's `decide(context) -> AgentDecision` belongs to a persistent agent that consults the world, and making the baseline fit it would add behaviour, which 2.3 forbids. The persistent agent brings `decide` when it exists. |
