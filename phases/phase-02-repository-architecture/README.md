@@ -23,9 +23,16 @@ Mirrored from `AUV-22 — Phase Objectives Checklist`.
 > All original baseline examples run through the new modular structure
 > **without changing their expected behaviour.**
 
-**Met:** no · **Evidence:** `tests/test_golden.py` against `tests/golden/`,
-recorded from `v0.1-open-loop-baseline` before any code moved. A live block,
-flown by the user and compared with `v6-polled`, closes it.
+**Met:** no · **Evidence:** `tests/test_golden.py` against `tests/golden/`:
+execution and planning recorded from `v0.1-open-loop-baseline` before any code
+moved, runner and fly_chat from step 4 before those moved. A live block, flown
+by the user and compared with `v6-polled`, closes it.
+
+Checked 2026-10-20 after step 5, with the current harness run against the
+tagged baseline itself (`git archive v0.1-open-loop-baseline`): execution,
+planning and fly_chat match it; runner differs only in the code snapshot's
+manifest, which gained `agentic_uav_sha256` in step 3 by design. Every console
+line, row, summary, log record and AirSim call of the runner matches the tag.
 
 AUV-03 calls this "a pure refactor with a behavioural regression test". The
 goldens are that test. They pass today, against the untouched baseline, and
