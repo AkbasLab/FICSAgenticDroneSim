@@ -221,7 +221,7 @@ the code that flew it are in `phases/phase-01-baseline-freeze/results/`:
 | M01 | ✔ 3/3 | 3/3 | ✔ | 0 | 0.8 (35.6 cold) | 21.7 | 3/3 | 0 | |
 | M02 | ✔ 3/3 | 3/3 | ✔ | 0 | 0.9 | 17.7 | 3/3 | 0 | |
 | M03 | ✔ 3/3 | 3/3 | ✔ | 0 | 1.5 | 27.4 | 3/3 | 0 | |
-| M04 | ✔ 3/3 | 3/3 | ✔ | 0 | 1.9 | 22.8 | 3/3 | 0 | |
+| M04 | ✔ 3/3 | 3/3 | ✔ | 0 | 1.9 | 22.8 | 3/3 | 0 | `fly_to(0, 0, z: 0)`: returns at ground level, by design (`fba0c98`) |
 | M05 | ✔ 3/3 | 3/3 | ✔ | 0 | 1.3 | 22.2 | 3/3 | 0 | landing decided by polled terrain contact |
 | M06 | ✔ 3/3 | 3/3 | ✔ | 0 | 1.6 | 20.7 | 3/3 | 0 | |
 | M07 | ✔ 3/3 | 3/3 | ✔ | 0 | 1.2 | 23.7 | 3/3 | 0 | reordering handled |
@@ -252,7 +252,7 @@ row is roughly a coin toss. Quote the rate, not the 3/3. Evidence:
 plans matched v6 to within 0.10 s and 3 cm. A complete 30-run repeat block
 landed 30/30. On a second Vega job, M09's Drone1 answered with an extra
 `"z": 0` on `fly_to`. It still scored correct, but flew home at ground level
-and finished 3.3 s sooner. Temperature 0 is deterministic per server instance,
+and finished 3.3 s sooner. That is what M04 does on every run (below). Temperature 0 is deterministic per server instance,
 not across instances.
 
 ### `llama3.2:3b` — Block A, superseded

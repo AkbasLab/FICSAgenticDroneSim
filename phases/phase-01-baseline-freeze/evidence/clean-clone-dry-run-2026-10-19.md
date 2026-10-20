@@ -216,10 +216,15 @@ was detected, raised and recorded rather than reported as a landing.
 19. **That `z: 0` flew Drone1 home at ground level.** `fly_to` z is relative
     to `ground_z`, so `z: 0` is 0 m AGL: the return leg ran at **0.01 m**
     instead of ~8 m, flight 3.3 s shorter. Nothing was in the way on M09's
-    path, so it landed, but this is the unbounded `fly_to` z (decided in
-    `fba0c98`) appearing in a real model output for the first time. A
-    different mission, or the same one in traffic, would put the aircraft
-    into whatever is at ground level.
+    path, so it landed.
+
+    *Corrected 2026-10-20:* this first said `z: 0` was appearing in a real
+    model output "for the first time". It is not. M04 has sent
+    `fly_to(0, 0, z: 0)` on every run, v6 included, and flies home at 0.15 m.
+    That is the case `fba0c98` weighed on 2026-10-19 before deciding to leave
+    z unbounded and document the consequence. What is new here is narrower: a
+    second mission does it too, but only on one server instance (finding 18).
+    It is evidence for that decision's cost, not a new defect.
 
 ---
 

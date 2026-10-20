@@ -95,7 +95,7 @@ M10 (four drones):        3 /  3      COMPLETE; contacts recorded, see below
 >   rate, not the 3/3.
 > * **Temperature 0 is deterministic per server instance only.** On a second
 >   Vega job, M09's Drone1 added `"z": 0` to its `fly_to`, which still scored
->   correct but flew home at ground level.
+>   correct but flew home at ground level, as M04 does on every run.
 >
 > The clone's 97 flown runs are verification, not study data, and are not
 > in this repository. The record is
