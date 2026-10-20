@@ -805,17 +805,15 @@ def write_settings(count: int, exact: bool = False) -> tuple[str, bool]:
 
     **A larger roster is left alone.** If the file already declares at least
     `count` drones in the expected shape, nothing is written and `changed` is
-    False -- so a simulator booted with four drones flies one-, two- and
-    four-drone missions without a restart between them.
+    False.
 
-    That matters because changing the roster is expensive: AirSim reads this
-    file only at process start, so every change costs a simulator restart. With
-    a fixed fleet declared once, mission scripts stop touching it at all.
-
-    The unused drones sit on the ground where they spawned. They are extra
-    actors in the world -- a real condition change, not a free lunch -- so a
-    series should be flown at one fleet size throughout, and the fleet size is
-    recorded per run.
+    That does NOT mean a simulator booted with four drones can fly a one-drone
+    mission. The unused drones sit where they spawned, SPACING metres apart
+    along +X -- directly on a forward mission's flight path -- and a flight
+    into them is recorded as an obstacle collision. `ensure_vehicles` refuses
+    that case. The protocol therefore keeps the declared roster at ONE and
+    spawns extra drones at runtime, flying missions in increasing drone count
+    and restarting the simulator before going back down.
 
     The file is only rewritten when it cannot serve the request: too few
     vehicles, or a shape that does not match what build_settings produces.
@@ -1702,22 +1700,46 @@ def connect(host: str = "127.0.0.1", port: int = AIRSIM_PORT):
     return client
 
 
+class ForeignVehicleError(RuntimeError):
+    """The scene holds drones this flight does not use. See ensure_vehicles."""
+
+
+def foreign_vehicles(present: list[str], names: list[str]) -> list[str]:
+    """Vehicles in the scene that are not part of this flight, sorted.
+
+    Pure, so the rule can be tested without a simulator.
+    """
+    wanted = set(names)
+    return sorted(v for v in present if v not in wanted)
+
+
 def ensure_vehicles(client, names: list[str]) -> dict[str, Any]:
-    """Make sure every named drone exists in the RUNNING simulator.
+    """Make sure every named drone exists in the RUNNING simulator -- and no other.
 
     Drones declared in settings.json are created at process start, so changing
     that file means restarting. `simAddVehicle` adds one to a simulator that is
-    already running, which removes the restart entirely: ask for four drones
-    against a one-drone simulator and the other three appear.
+    already running: ask for four drones against a one-drone simulator and the
+    other three appear. Going UP in drone count therefore needs no restart.
 
-    Two consequences of spawning this way, both acceptable here:
+    Going DOWN does. Consequences of spawning this way:
 
     * **No cameras.** A runtime drone gets no camera configuration. This agent
       never reads an image -- it is blind by design -- so it costs nothing. A
       later phase that wants vision must declare those vehicles in
       settings.json instead.
-    * **Not persistent.** They vanish when the simulator restarts, and are
-      simply re-added on the next run.
+    * **They outlive the mission.** A runtime drone stays in the scene until
+      the simulator restarts. `client.reset()` does not remove it; it puts it
+      back at its spawn pose, and AirSim 1.8.1's Python API has no call that
+      removes a vehicle. The same holds for drones declared in settings.json.
+
+    That second point is why this REFUSES when the scene holds a drone the
+    flight does not use. Drones sit along +X at SPACING metres, which is the
+    direction every forward mission flies, so a leftover Drone2 is parked 4 m
+    in front of Drone1. Measured 2026-10-19, flying M01-M09 after M10 without a
+    restart: 17 of 27 runs hit the leftover drones, flights stretched to
+    61-201 s, and aircraft were left pinned or hanging up to 11 m above ground.
+    Nothing warned, and the contacts were recorded as ordinary obstacles. The
+    only fix is a simulator restart, so the error says so.
 
     Spawned along X at SPACING metres, matching the layout settings.json uses,
     because nothing in this stack avoids collisions.
@@ -1725,6 +1747,14 @@ def ensure_vehicles(client, names: list[str]) -> dict[str, Any]:
     import airsim
 
     existing = list(client.listVehicles())
+    extra = foreign_vehicles(existing, names)
+    if extra:
+        raise ForeignVehicleError(
+            f"the scene holds {', '.join(extra)}, which this flight does not use "
+            f"(it flies {', '.join(names)}). Leftover drones sit on the +X "
+            f"flight path and are hit as obstacles, and nothing can remove them "
+            f"short of a simulator restart. Restart the simulator, and fly "
+            f"missions in increasing drone count.")
     added: list[str] = []
 
     for index, name in enumerate(names):
@@ -1792,8 +1822,9 @@ def fly_plans(client, records: list[PlanRecord], host: str = "127.0.0.1",
     not be the same experiment, and nobody would notice until the numbers
     disagreed.
     """
-    # Create any drone this mission needs that the simulator does not have.
-    # Runs here, after any reset, because a reset can drop runtime vehicles.
+    # Create any drone this mission needs that the simulator does not have, and
+    # refuse if it holds one the mission does not use. Runs here, after any
+    # reset, so it sees the scene the flight will actually start in.
     ensure_vehicles(client, [r.drone for r in records])
 
     outcomes: list[dict[str, Any]] = []

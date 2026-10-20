@@ -129,9 +129,26 @@ directly comparable.
 > first thing to suspect, and the comparison to make is a re-run with traffic
 > off.
 
-Restart the simulator between multi-drone missions. Single-drone missions may
-run back to back; note that only the **first plan of a session** pays the
-prompt-cache cost, so record whether each run was cold or warm.
+**Fly in increasing drone count, and restart the simulator before going back
+down.** Keep `settings.json` at one declared drone. Extra drones are spawned at
+runtime when a mission needs them, so M01–M08, then M09, then M10 fly in one
+simulator session with no restart. But a spawned drone stays in the scene
+until the simulator restarts — `client.reset()` returns it to its spawn pose
+rather than removing it — and spawn poses lie along +X, on every forward
+mission's flight path. So **any mission flown after one that used more drones
+flies into the leftovers.**
+
+> **Changed 2026-10-20.** This previously read "restart the simulator between
+> multi-drone missions; single-drone missions may run back to back", which
+> never said that single-drone missions after a multi-drone one need a restart
+> too. Measured 2026-10-19 from a clean clone: M01–M09 flown after M10 without
+> a restart, **17 of 27 runs hit the leftover drones** and were recorded as
+> ordinary obstacle collisions. `v6-polled` was unaffected only because it
+> flew M10 last. `run_missions.py` now checks the whole series against the
+> scene before the first takeoff and refuses an order that breaks this rule.
+
+Note that only the **first plan of a session** pays the prompt-cache cost, so
+record whether each run was cold or warm.
 
 ### What to record per run
 

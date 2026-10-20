@@ -165,8 +165,14 @@ for f in futures:
 > ```
 >
 > Runtime vehicles get **no cameras** and do not survive a restart. They do
-> survive `reset()`. Declare a persistent fleet in `settings.json` if you need
-> cameras; otherwise spawning at runtime removes the restart entirely.
+> survive `reset()`, which puts them back at their spawn pose — and the Python
+> API has no call that removes one. Declare a persistent fleet in
+> `settings.json` if you need cameras; otherwise spawning at runtime removes
+> the restart for going **up** in drone count, never for coming back down.
+> A drone left in the scene is an obstacle for every later flight that does
+> not use it: measured 2026-10-19, 17 of 27 single- and two-drone runs flown
+> after a four-drone mission hit the leftovers. `ensure_vehicles` and
+> `run_missions.py` refuse that case.
 
 ### Two different ways to stop time
 

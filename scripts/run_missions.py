@@ -20,10 +20,13 @@ Outputs, both under phases/phase-01-baseline-freeze/results/:
     <set>-<model>-<timestamp>.jsonl   one record per run: plan, latency, score
     <set>-<model>-<timestamp>.md      the summary table, ready to paste
 
-Flight runs (without --plan-only) need the simulator up and are **not**
-automated end to end: multi-drone missions rewrite settings.json and require a
-simulator restart, which a script should not be doing behind your back. The
-runner tells you when it reaches one.
+Flight runs (without --plan-only) need the simulator up, with ONE drone
+declared in settings.json. Extra drones are spawned at runtime as missions need
+them, and stay in the scene until the simulator restarts -- on the flight path
+of any mission that uses fewer. So fly in increasing drone count (M01-M08, then
+M09, then M10) and restart the simulator before flying fewer drones again. The
+runner checks the whole series against the scene before the first takeoff and
+refuses an order that would break this.
 
 Scoring
 -------
@@ -135,6 +138,29 @@ def current_roster(agent) -> list[str]:
             return list(_json.load(handle).get("Vehicles", {}))
     except (OSError, ValueError):
         return []
+
+
+def series_conflicts(present: list[str],
+                     missions: list[dict[str, Any]]) -> list[tuple[str, list[str]]]:
+    """Missions in this series that would fly with somebody else's drone in the scene.
+
+    Walks the series in flight order. `present` is what the simulator holds
+    before the first run; each mission then leaves its own drones behind,
+    because a vehicle outlives its mission until the simulator restarts (see
+    `ensure_vehicles`). Returns (mission id, leftover drones) for every mission
+    that would meet one, in order -- empty means the series is safe to fly.
+
+    Pure, so the ordering rule is testable without a simulator.
+    """
+    scene = set(present)
+    conflicts = []
+    for mission in missions:
+        names = [f"Drone{i + 1}" for i in range(mission.get("drones", 1))]
+        extra = sorted(v for v in scene if v not in names)
+        if extra:
+            conflicts.append((mission["id"], extra))
+        scene.update(names)
+    return conflicts
 
 
 def describe(row: dict[str, Any], attempt: int, repeats: int) -> str:
@@ -521,15 +547,17 @@ def main() -> int:
 
     client = None
     if not args.plan_only:
-        # Mixed drone counts in one pass are fine now. Vehicles a mission needs
-        # are spawned into the running simulator by ensure_vehicles(), so M09
-        # (two drones) and M10 (four) can follow M01-M08 (one) without a
-        # restart between them.
+        # Mixed drone counts in one pass are fine IN INCREASING ORDER. Vehicles
+        # a mission needs are spawned into the running simulator by
+        # ensure_vehicles(), so M09 (two drones) and M10 (four) can follow
+        # M01-M08 (one) without a restart between them. The reverse cannot:
+        # spawned drones stay, so going back down needs a restart, and the
+        # pre-flight check below refuses it.
         #
         # This previously refused a mixed set and demanded a settings.json edit
-        # plus a restart per block. That was wrong: simAddVehicle adds vehicles
-        # to a running simulator, which was documented in this project's own
-        # reference set the whole time.
+        # plus a restart per block. That was wrong going up: simAddVehicle adds
+        # vehicles to a running simulator, which was documented in this
+        # project's own reference set the whole time.
         needed = sorted({m.get("drones", 1) for m in missions})
         count = max(needed)
         roster = current_roster(agent)
@@ -540,6 +568,29 @@ def main() -> int:
         import airsim
         client = airsim.MultirotorClient(ip="127.0.0.1", port=41451)
         client.confirmConnection()
+
+        # PRE-FLIGHT: no mission may fly with another mission's drones parked
+        # in the scene. They outlive their mission until a restart and sit on
+        # the +X flight path. Measured 2026-10-19: M01-M09 flown after M10
+        # without a restart, 17 of 27 runs flew into them, and every one was
+        # recorded as an ordinary obstacle collision.
+        #
+        # Checked for the WHOLE series before the first takeoff, in the order
+        # it will fly, so a bad order fails now rather than at run 25.
+        # ensure_vehicles() enforces the same rule per flight as a backstop.
+        present = list(client.listVehicles())
+        conflicts = series_conflicts(present, missions)
+        if conflicts:
+            print("", file=sys.stderr)
+            print("REFUSING TO RUN", file=sys.stderr)
+            print(f"scene holds: {', '.join(sorted(present))}", file=sys.stderr)
+            for mission_id, extra in conflicts:
+                print(f"  {mission_id} would fly with {', '.join(extra)} "
+                      f"parked on its flight path", file=sys.stderr)
+            print("Leftover drones cannot be removed short of a restart. "
+                  "Restart the simulator, and fly missions in increasing "
+                  "drone count (M01-M08, then M09, then M10).", file=sys.stderr)
+            return 1
 
     mode = "planning only" if args.plan_only else f"FLYING, {count} drone(s)"
     print(f"set     : {config['set']['name']} v{config['set']['version']}")
@@ -552,10 +603,9 @@ def main() -> int:
     # ONE stem per invocation, fixed before the first run, timestamped so a
     # re-run never overwrites an earlier one.
     #
-    # One file per block ON PURPOSE: M01-M08, M09 and M10 each need their own
-    # simulator session for the roster, and keeping their logs separate means
-    # each file is short enough to read. A merged log would be one long file
-    # covering three sessions.
+    # One file per block ON PURPOSE: M01-M08, M09 and M10 are usually flown as
+    # separate invocations, and keeping their logs separate means each file is
+    # short enough to read.
     #
     # An earlier version stamped the live file at the start and wrote a second
     # file at the end, producing two files holding the same 24 runs under
@@ -596,8 +646,23 @@ def main() -> int:
                 row = run_one(agent, mission, model, attempt, conditions,
                               endpoint, options)
             else:
-                row = fly_one(agent, client, mission, model, attempt, conditions,
-                              endpoint, options)
+                try:
+                    row = fly_one(agent, client, mission, model, attempt,
+                                  conditions, endpoint, options)
+                except agent.ForeignVehicleError as exc:
+                    # The pre-flight check should make this unreachable; it
+                    # fires if something else spawned a drone mid-series.
+                    # Stop, keeping every run already written: nothing after
+                    # this point would be clean data.
+                    print("", file=sys.stderr)
+                    print(f"STOPPED at {mission['id']} {attempt}/{repeats}: {exc}",
+                          file=sys.stderr)
+                    if rows:
+                        md_path = os.path.join(args.out, stem + ".md")
+                        with io.open(md_path, "w", encoding="utf-8",
+                                     newline="\n") as handle:
+                            handle.write(summarise(rows, config, model))
+                    return 1
             rows.append(row)
 
             # Append as we go. A crash or a hung flight three hours into a set
