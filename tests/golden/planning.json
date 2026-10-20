@@ -1,0 +1,5561 @@
+{
+ "cases": [
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11434",
+   "first_seen": "baseline_v1-llama3.2_3b-20260928-212436-blockA-M01-M08.jsonl",
+   "id": "M01/Drone1#1",
+   "instruction": "fly forward for 5 seconds",
+   "model": "llama3.2:3b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 0,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"fly_straight\", \"duration\": 5}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11434",
+     "error": null,
+     "instruction": "fly forward for 5 seconds",
+     "model": "llama3.2:3b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "fly_straight",
+       "duration": 5
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"fly_straight\", \"duration\": 5}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "fly forward for 5 seconds",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.2:3b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 0,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11434"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11434",
+   "first_seen": "baseline_v1-llama3.2_3b-20260928-212436-blockA-M01-M08.jsonl",
+   "id": "M02/Drone1#2",
+   "instruction": "hover for 3 seconds then land",
+   "model": "llama3.2:3b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 0,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"hover\", \"duration\": 3}, {\"action\": \"land\"}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11434",
+     "error": null,
+     "instruction": "hover for 3 seconds then land",
+     "model": "llama3.2:3b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "hover",
+       "duration": 3
+      },
+      {
+       "action": "land"
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"hover\", \"duration\": 3}, {\"action\": \"land\"}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "hover for 3 seconds then land",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.2:3b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 0,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11434"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11434",
+   "first_seen": "baseline_v1-llama3.2_3b-20260928-212436-blockA-M01-M08.jsonl",
+   "id": "M03/Drone1#3",
+   "instruction": "go up to 15 meters, fly forward for 5 seconds, then land",
+   "model": "llama3.2:3b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 0,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -15}, {\"action\": \"fly_straight\", \"duration\": 5}, {\"action\": \"land\"}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11434",
+     "error": null,
+     "instruction": "go up to 15 meters, fly forward for 5 seconds, then land",
+     "model": "llama3.2:3b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "set_altitude",
+       "z": -15.0
+      },
+      {
+       "action": "fly_straight",
+       "duration": 5
+      },
+      {
+       "action": "land"
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -15}, {\"action\": \"fly_straight\", \"duration\": 5}, {\"action\": \"land\"}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "go up to 15 meters, fly forward for 5 seconds, then land",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.2:3b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 0,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11434"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11434",
+   "first_seen": "baseline_v1-llama3.2_3b-20260928-212436-blockA-M01-M08.jsonl",
+   "id": "M04/Drone1#4",
+   "instruction": "fly forward for 5 seconds then return home and land",
+   "model": "llama3.2:3b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 0,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"fly_straight\", \"duration\": 5}, {\"action\": \"fly_to\", \"x\": 0, \"y\": 0}, {\"action\": \"land\"}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11434",
+     "error": null,
+     "instruction": "fly forward for 5 seconds then return home and land",
+     "model": "llama3.2:3b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "fly_straight",
+       "duration": 5
+      },
+      {
+       "action": "fly_to",
+       "x": 0,
+       "y": 0,
+       "z": -8.0
+      },
+      {
+       "action": "land"
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"fly_straight\", \"duration\": 5}, {\"action\": \"fly_to\", \"x\": 0, \"y\": 0}, {\"action\": \"land\"}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "fly forward for 5 seconds then return home and land",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.2:3b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 0,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11434"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11434",
+   "first_seen": "baseline_v1-llama3.2_3b-20260928-212436-blockA-M01-M08.jsonl",
+   "id": "M05/Drone1#5",
+   "instruction": "fly forward for 3 seconds, then do the exact same thing again",
+   "model": "llama3.2:3b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 0,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"fly_straight\", \"duration\": 3}, {\"action\": \"fly_straight\", \"duration\": 3}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11434",
+     "error": null,
+     "instruction": "fly forward for 3 seconds, then do the exact same thing again",
+     "model": "llama3.2:3b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "fly_straight",
+       "duration": 3
+      },
+      {
+       "action": "fly_straight",
+       "duration": 3
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"fly_straight\", \"duration\": 3}, {\"action\": \"fly_straight\", \"duration\": 3}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "fly forward for 3 seconds, then do the exact same thing again",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.2:3b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 0,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11434"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11434",
+   "first_seen": "baseline_v1-llama3.2_3b-20260928-212436-blockA-M01-M08.jsonl",
+   "id": "M06/Drone1#6",
+   "instruction": "hover in place for 2 seconds, three times in a row",
+   "model": "llama3.2:3b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 0,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"hover\", \"duration\": 2}, {\"action\": \"hover\", \"duration\": 2}, {\"action\": \"hover\", \"duration\": 2}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11434",
+     "error": null,
+     "instruction": "hover in place for 2 seconds, three times in a row",
+     "model": "llama3.2:3b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "hover",
+       "duration": 2
+      },
+      {
+       "action": "hover",
+       "duration": 2
+      },
+      {
+       "action": "hover",
+       "duration": 2
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"hover\", \"duration\": 2}, {\"action\": \"hover\", \"duration\": 2}, {\"action\": \"hover\", \"duration\": 2}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "hover in place for 2 seconds, three times in a row",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.2:3b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 0,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11434"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11434",
+   "first_seen": "baseline_v1-llama3.2_3b-20260928-212436-blockA-M01-M08.jsonl",
+   "id": "M07/Drone1#7",
+   "instruction": "before flying forward for 5 seconds, hover in place for 2 seconds",
+   "model": "llama3.2:3b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 0,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"hover\", \"duration\": 2}, {\"action\": \"fly_straight\", \"duration\": 5}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11434",
+     "error": null,
+     "instruction": "before flying forward for 5 seconds, hover in place for 2 seconds",
+     "model": "llama3.2:3b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "hover",
+       "duration": 2
+      },
+      {
+       "action": "fly_straight",
+       "duration": 5
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"hover\", \"duration\": 2}, {\"action\": \"fly_straight\", \"duration\": 5}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "before flying forward for 5 seconds, hover in place for 2 seconds",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.2:3b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 0,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11434"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11434",
+   "first_seen": "baseline_v1-llama3.2_3b-20260928-212436-blockA-M01-M08.jsonl",
+   "id": "M08/Drone1#8",
+   "instruction": "go up a bit, look around for a moment, then come back down safely",
+   "model": "llama3.2:3b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 0,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -10}, {\"action\": \"hover\", \"duration\": 1}, {\"action\": \"fly_to\", \"x\": 0, \"y\": 0, \"z\": -20}, {\"action\": \"land\"}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11434",
+     "error": null,
+     "instruction": "go up a bit, look around for a moment, then come back down safely",
+     "model": "llama3.2:3b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "set_altitude",
+       "z": -10.0
+      },
+      {
+       "action": "hover",
+       "duration": 1
+      },
+      {
+       "action": "fly_to",
+       "x": 0,
+       "y": 0,
+       "z": -20.0
+      },
+      {
+       "action": "land"
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -10}, {\"action\": \"hover\", \"duration\": 1}, {\"action\": \"fly_to\", \"x\": 0, \"y\": 0, \"z\": -20}, {\"action\": \"land\"}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "go up a bit, look around for a moment, then come back down safely",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.2:3b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 0,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11434"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11434",
+   "first_seen": "baseline_v1-llama3.2_3b-20260928-212436-blockA-M01-M08.jsonl",
+   "id": "M08/Drone1#9",
+   "instruction": "go up a bit, look around for a moment, then come back down safely",
+   "model": "llama3.2:3b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 0,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -10}, {\"action\": \"hover\", \"duration\": 1}, {\"action\": \"set_altitude\", \"z\": -20}, {\"action\": \"land\"}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11434",
+     "error": null,
+     "instruction": "go up a bit, look around for a moment, then come back down safely",
+     "model": "llama3.2:3b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "set_altitude",
+       "z": -10.0
+      },
+      {
+       "action": "hover",
+       "duration": 1
+      },
+      {
+       "action": "set_altitude",
+       "z": -20.0
+      },
+      {
+       "action": "land"
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -10}, {\"action\": \"hover\", \"duration\": 1}, {\"action\": \"set_altitude\", \"z\": -20}, {\"action\": \"land\"}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "go up a bit, look around for a moment, then come back down safely",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.2:3b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 0,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11434"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11434",
+   "first_seen": "baseline_v1-llama3.2_3b-20260929-000255-smoke-M01.jsonl",
+   "id": "M01/Drone1#10",
+   "instruction": "fly forward for 5 seconds",
+   "model": "llama3.2:3b",
+   "options": {
+    "num_gpu": 0,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"fly_straight\", \"duration\": 5}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11434",
+     "error": null,
+     "instruction": "fly forward for 5 seconds",
+     "model": "llama3.2:3b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "fly_straight",
+       "duration": 5
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"fly_straight\", \"duration\": 5}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "fly forward for 5 seconds",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.2:3b",
+       "options": {
+        "num_gpu": 0,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11434"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261005-233824.jsonl",
+   "id": "M01/Drone1#11",
+   "instruction": "fly forward for 5 seconds",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"fly_straight\", \"duration\": 5}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "fly forward for 5 seconds",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "fly_straight",
+       "duration": 5
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"fly_straight\", \"duration\": 5}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "fly forward for 5 seconds",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261005-233824.jsonl",
+   "id": "M07/Drone1#12",
+   "instruction": "before flying forward for 5 seconds, hover in place for 2 seconds",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"hover\", \"duration\": 2}, {\"action\": \"fly_straight\", \"duration\": 5}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "before flying forward for 5 seconds, hover in place for 2 seconds",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "hover",
+       "duration": 2
+      },
+      {
+       "action": "fly_straight",
+       "duration": 5
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"hover\", \"duration\": 2}, {\"action\": \"fly_straight\", \"duration\": 5}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "before flying forward for 5 seconds, hover in place for 2 seconds",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261005-233824.jsonl",
+   "id": "M08/Drone1#13",
+   "instruction": "go up a bit, look around for a moment, then come back down safely",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -25}, {\"action\": \"hover\", \"duration\": 5}, {\"action\": \"set_altitude\", \"z\": -20}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "go up a bit, look around for a moment, then come back down safely",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "set_altitude",
+       "z": -25.0
+      },
+      {
+       "action": "hover",
+       "duration": 5
+      },
+      {
+       "action": "set_altitude",
+       "z": -20.0
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -25}, {\"action\": \"hover\", \"duration\": 5}, {\"action\": \"set_altitude\", \"z\": -20}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "go up a bit, look around for a moment, then come back down safely",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261006-175302-v2-M02-M08.jsonl",
+   "id": "M02/Drone1#14",
+   "instruction": "hover for 3 seconds then land",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"hover\", \"duration\": 3}, {\"action\": \"land\"}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "hover for 3 seconds then land",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "hover",
+       "duration": 3
+      },
+      {
+       "action": "land"
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"hover\", \"duration\": 3}, {\"action\": \"land\"}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "hover for 3 seconds then land",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261006-175302-v2-M02-M08.jsonl",
+   "id": "M03/Drone1#15",
+   "instruction": "go up to 15 meters, fly forward for 5 seconds, then land",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -15}, {\"action\": \"fly_straight\", \"duration\": 5}, {\"action\": \"land\"}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "go up to 15 meters, fly forward for 5 seconds, then land",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "set_altitude",
+       "z": -15.0
+      },
+      {
+       "action": "fly_straight",
+       "duration": 5
+      },
+      {
+       "action": "land"
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -15}, {\"action\": \"fly_straight\", \"duration\": 5}, {\"action\": \"land\"}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "go up to 15 meters, fly forward for 5 seconds, then land",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261006-175302-v2-M02-M08.jsonl",
+   "id": "M04/Drone1#16",
+   "instruction": "fly forward for 5 seconds then return home and land",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"fly_straight\", \"duration\": 5}, {\"action\": \"fly_to\", \"x\": 0, \"y\": 0, \"z\": 0}, {\"action\": \"land\"}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "fly forward for 5 seconds then return home and land",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "fly_straight",
+       "duration": 5
+      },
+      {
+       "action": "fly_to",
+       "x": 0,
+       "y": 0,
+       "z": 0.0
+      },
+      {
+       "action": "land"
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"fly_straight\", \"duration\": 5}, {\"action\": \"fly_to\", \"x\": 0, \"y\": 0, \"z\": 0}, {\"action\": \"land\"}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "fly forward for 5 seconds then return home and land",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261006-175302-v2-M02-M08.jsonl",
+   "id": "M05/Drone1#17",
+   "instruction": "fly forward for 3 seconds, then do the exact same thing again",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"fly_straight\", \"duration\": 3}, {\"action\": \"fly_straight\", \"duration\": 3}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "fly forward for 3 seconds, then do the exact same thing again",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "fly_straight",
+       "duration": 3
+      },
+      {
+       "action": "fly_straight",
+       "duration": 3
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"fly_straight\", \"duration\": 3}, {\"action\": \"fly_straight\", \"duration\": 3}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "fly forward for 3 seconds, then do the exact same thing again",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261006-175302-v2-M02-M08.jsonl",
+   "id": "M06/Drone1#18",
+   "instruction": "hover in place for 2 seconds, three times in a row",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"hover\", \"duration\": 2}, {\"action\": \"hover\", \"duration\": 2}, {\"action\": \"hover\", \"duration\": 2}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "hover in place for 2 seconds, three times in a row",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "hover",
+       "duration": 2
+      },
+      {
+       "action": "hover",
+       "duration": 2
+      },
+      {
+       "action": "hover",
+       "duration": 2
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"hover\", \"duration\": 2}, {\"action\": \"hover\", \"duration\": 2}, {\"action\": \"hover\", \"duration\": 2}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "hover in place for 2 seconds, three times in a row",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261006-182201-v2-M09.jsonl",
+   "id": "M09/Drone1#19",
+   "instruction": "go up to 25 meters, fly forward for 6 seconds, then return home and land",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -25}, {\"action\": \"fly_straight\", \"duration\": 6}, {\"action\": \"fly_to\", \"x\": 0, \"y\": 0}, {\"action\": \"land\"}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "go up to 25 meters, fly forward for 6 seconds, then return home and land",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "set_altitude",
+       "z": -25.0
+      },
+      {
+       "action": "fly_straight",
+       "duration": 6
+      },
+      {
+       "action": "fly_to",
+       "x": 0,
+       "y": 0,
+       "z": -8.0
+      },
+      {
+       "action": "land"
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -25}, {\"action\": \"fly_straight\", \"duration\": 6}, {\"action\": \"fly_to\", \"x\": 0, \"y\": 0}, {\"action\": \"land\"}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "go up to 25 meters, fly forward for 6 seconds, then return home and land",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone2",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261006-182201-v2-M09.jsonl",
+   "id": "M09/Drone2#20",
+   "instruction": "go up to 12 meters, fly right for 5 seconds, hover for 2 seconds, then land",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -12}, {\"action\": \"fly_right\", \"duration\": 5}, {\"action\": \"hover\", \"duration\": 2}, {\"action\": \"land\"}]}",
+   "result": {
+    "record": {
+     "drone": "Drone2",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "go up to 12 meters, fly right for 5 seconds, hover for 2 seconds, then land",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "set_altitude",
+       "z": -12.0
+      },
+      {
+       "action": "fly_right",
+       "duration": 5
+      },
+      {
+       "action": "hover",
+       "duration": 2
+      },
+      {
+       "action": "land"
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -12}, {\"action\": \"fly_right\", \"duration\": 5}, {\"action\": \"hover\", \"duration\": 2}, {\"action\": \"land\"}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "go up to 12 meters, fly right for 5 seconds, hover for 2 seconds, then land",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261006-184158-v2-M10.jsonl",
+   "id": "M10/Drone1#21",
+   "instruction": "go up to 30 meters, fly forward for 5 seconds, then land",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -30}, {\"action\": \"fly_straight\", \"duration\": 5}, {\"action\": \"land\"}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "go up to 30 meters, fly forward for 5 seconds, then land",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "set_altitude",
+       "z": -30.0
+      },
+      {
+       "action": "fly_straight",
+       "duration": 5
+      },
+      {
+       "action": "land"
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -30}, {\"action\": \"fly_straight\", \"duration\": 5}, {\"action\": \"land\"}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "go up to 30 meters, fly forward for 5 seconds, then land",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone2",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261006-184158-v2-M10.jsonl",
+   "id": "M10/Drone2#22",
+   "instruction": "go up to 24 meters, fly right for 5 seconds, then land",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -24}, {\"action\": \"fly_right\", \"duration\": 5}, {\"action\": \"land\"}]}",
+   "result": {
+    "record": {
+     "drone": "Drone2",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "go up to 24 meters, fly right for 5 seconds, then land",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "set_altitude",
+       "z": -24.0
+      },
+      {
+       "action": "fly_right",
+       "duration": 5
+      },
+      {
+       "action": "land"
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -24}, {\"action\": \"fly_right\", \"duration\": 5}, {\"action\": \"land\"}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "go up to 24 meters, fly right for 5 seconds, then land",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone3",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261006-184158-v2-M10.jsonl",
+   "id": "M10/Drone3#23",
+   "instruction": "go up to 18 meters, fly backward for 5 seconds, then land",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -18}, {\"action\": \"fly_backward\", \"duration\": 5}, {\"action\": \"land\"}]}",
+   "result": {
+    "record": {
+     "drone": "Drone3",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "go up to 18 meters, fly backward for 5 seconds, then land",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "set_altitude",
+       "z": -18.0
+      },
+      {
+       "action": "fly_backward",
+       "duration": 5
+      },
+      {
+       "action": "land"
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -18}, {\"action\": \"fly_backward\", \"duration\": 5}, {\"action\": \"land\"}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "go up to 18 meters, fly backward for 5 seconds, then land",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone4",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261006-184158-v2-M10.jsonl",
+   "id": "M10/Drone4#24",
+   "instruction": "go up to 12 meters, fly left for 5 seconds, then land",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -12}, {\"action\": \"fly_left\", \"duration\": 5}, {\"action\": \"land\"}]}",
+   "result": {
+    "record": {
+     "drone": "Drone4",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "go up to 12 meters, fly left for 5 seconds, then land",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "set_altitude",
+       "z": -12.0
+      },
+      {
+       "action": "fly_left",
+       "duration": 5
+      },
+      {
+       "action": "land"
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -12}, {\"action\": \"fly_left\", \"duration\": 5}, {\"action\": \"land\"}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "go up to 12 meters, fly left for 5 seconds, then land",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261019-180549-v5-polled.jsonl",
+   "id": "M01/Drone1#25",
+   "instruction": "fly forward for 5 seconds",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 98304,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"fly_straight\", \"duration\": 5}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "fly forward for 5 seconds",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "fly_straight",
+       "duration": 5
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"fly_straight\", \"duration\": 5}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "fly forward for 5 seconds",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 98304,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261019-180549-v5-polled.jsonl",
+   "id": "M02/Drone1#26",
+   "instruction": "hover for 3 seconds then land",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 98304,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"hover\", \"duration\": 3}, {\"action\": \"land\"}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "hover for 3 seconds then land",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "hover",
+       "duration": 3
+      },
+      {
+       "action": "land"
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"hover\", \"duration\": 3}, {\"action\": \"land\"}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "hover for 3 seconds then land",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 98304,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261019-180549-v5-polled.jsonl",
+   "id": "M03/Drone1#27",
+   "instruction": "go up to 15 meters, fly forward for 5 seconds, then land",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 98304,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -15}, {\"action\": \"fly_straight\", \"duration\": 5}, {\"action\": \"land\"}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "go up to 15 meters, fly forward for 5 seconds, then land",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "set_altitude",
+       "z": -15.0
+      },
+      {
+       "action": "fly_straight",
+       "duration": 5
+      },
+      {
+       "action": "land"
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -15}, {\"action\": \"fly_straight\", \"duration\": 5}, {\"action\": \"land\"}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "go up to 15 meters, fly forward for 5 seconds, then land",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 98304,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261019-180549-v5-polled.jsonl",
+   "id": "M04/Drone1#28",
+   "instruction": "fly forward for 5 seconds then return home and land",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 98304,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"fly_straight\", \"duration\": 5}, {\"action\": \"fly_to\", \"x\": 0, \"y\": 0, \"z\": 0}, {\"action\": \"land\"}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "fly forward for 5 seconds then return home and land",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "fly_straight",
+       "duration": 5
+      },
+      {
+       "action": "fly_to",
+       "x": 0,
+       "y": 0,
+       "z": 0.0
+      },
+      {
+       "action": "land"
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"fly_straight\", \"duration\": 5}, {\"action\": \"fly_to\", \"x\": 0, \"y\": 0, \"z\": 0}, {\"action\": \"land\"}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "fly forward for 5 seconds then return home and land",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 98304,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261019-180549-v5-polled.jsonl",
+   "id": "M05/Drone1#29",
+   "instruction": "fly forward for 3 seconds, then do the exact same thing again",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 98304,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"fly_straight\", \"duration\": 3}, {\"action\": \"fly_straight\", \"duration\": 3}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "fly forward for 3 seconds, then do the exact same thing again",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "fly_straight",
+       "duration": 3
+      },
+      {
+       "action": "fly_straight",
+       "duration": 3
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"fly_straight\", \"duration\": 3}, {\"action\": \"fly_straight\", \"duration\": 3}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "fly forward for 3 seconds, then do the exact same thing again",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 98304,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261019-180549-v5-polled.jsonl",
+   "id": "M06/Drone1#30",
+   "instruction": "hover in place for 2 seconds, three times in a row",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 98304,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"hover\", \"duration\": 2}, {\"action\": \"hover\", \"duration\": 2}, {\"action\": \"hover\", \"duration\": 2}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "hover in place for 2 seconds, three times in a row",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "hover",
+       "duration": 2
+      },
+      {
+       "action": "hover",
+       "duration": 2
+      },
+      {
+       "action": "hover",
+       "duration": 2
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"hover\", \"duration\": 2}, {\"action\": \"hover\", \"duration\": 2}, {\"action\": \"hover\", \"duration\": 2}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "hover in place for 2 seconds, three times in a row",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 98304,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261019-180549-v5-polled.jsonl",
+   "id": "M07/Drone1#31",
+   "instruction": "before flying forward for 5 seconds, hover in place for 2 seconds",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 98304,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"hover\", \"duration\": 2}, {\"action\": \"fly_straight\", \"duration\": 5}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "before flying forward for 5 seconds, hover in place for 2 seconds",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "hover",
+       "duration": 2
+      },
+      {
+       "action": "fly_straight",
+       "duration": 5
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"hover\", \"duration\": 2}, {\"action\": \"fly_straight\", \"duration\": 5}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "before flying forward for 5 seconds, hover in place for 2 seconds",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 98304,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261019-180549-v5-polled.jsonl",
+   "id": "M08/Drone1#32",
+   "instruction": "go up a bit, look around for a moment, then come back down safely",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 98304,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -25}, {\"action\": \"hover\", \"duration\": 5}, {\"action\": \"set_altitude\", \"z\": -20}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "go up a bit, look around for a moment, then come back down safely",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "set_altitude",
+       "z": -25.0
+      },
+      {
+       "action": "hover",
+       "duration": 5
+      },
+      {
+       "action": "set_altitude",
+       "z": -20.0
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -25}, {\"action\": \"hover\", \"duration\": 5}, {\"action\": \"set_altitude\", \"z\": -20}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "go up a bit, look around for a moment, then come back down safely",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 98304,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261019-183553-v6-polled.jsonl",
+   "id": "M09/Drone1#33",
+   "instruction": "go up to 25 meters, fly forward for 6 seconds, then return home and land",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 98304,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -25}, {\"action\": \"fly_straight\", \"duration\": 6}, {\"action\": \"fly_to\", \"x\": 0, \"y\": 0}, {\"action\": \"land\"}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "go up to 25 meters, fly forward for 6 seconds, then return home and land",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "set_altitude",
+       "z": -25.0
+      },
+      {
+       "action": "fly_straight",
+       "duration": 6
+      },
+      {
+       "action": "fly_to",
+       "x": 0,
+       "y": 0,
+       "z": -8.0
+      },
+      {
+       "action": "land"
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -25}, {\"action\": \"fly_straight\", \"duration\": 6}, {\"action\": \"fly_to\", \"x\": 0, \"y\": 0}, {\"action\": \"land\"}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "go up to 25 meters, fly forward for 6 seconds, then return home and land",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 98304,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone2",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261019-183553-v6-polled.jsonl",
+   "id": "M09/Drone2#34",
+   "instruction": "go up to 12 meters, fly right for 5 seconds, hover for 2 seconds, then land",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 98304,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -12}, {\"action\": \"fly_right\", \"duration\": 5}, {\"action\": \"hover\", \"duration\": 2}, {\"action\": \"land\"}]}",
+   "result": {
+    "record": {
+     "drone": "Drone2",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "go up to 12 meters, fly right for 5 seconds, hover for 2 seconds, then land",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "set_altitude",
+       "z": -12.0
+      },
+      {
+       "action": "fly_right",
+       "duration": 5
+      },
+      {
+       "action": "hover",
+       "duration": 2
+      },
+      {
+       "action": "land"
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -12}, {\"action\": \"fly_right\", \"duration\": 5}, {\"action\": \"hover\", \"duration\": 2}, {\"action\": \"land\"}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "go up to 12 meters, fly right for 5 seconds, hover for 2 seconds, then land",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 98304,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261019-183805-v6-polled.jsonl",
+   "id": "M10/Drone1#35",
+   "instruction": "go up to 30 meters, fly forward for 5 seconds, then land",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 98304,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -30}, {\"action\": \"fly_straight\", \"duration\": 5}, {\"action\": \"land\"}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "go up to 30 meters, fly forward for 5 seconds, then land",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "set_altitude",
+       "z": -30.0
+      },
+      {
+       "action": "fly_straight",
+       "duration": 5
+      },
+      {
+       "action": "land"
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -30}, {\"action\": \"fly_straight\", \"duration\": 5}, {\"action\": \"land\"}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "go up to 30 meters, fly forward for 5 seconds, then land",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 98304,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone2",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261019-183805-v6-polled.jsonl",
+   "id": "M10/Drone2#36",
+   "instruction": "go up to 24 meters, fly right for 5 seconds, then land",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 98304,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -24}, {\"action\": \"fly_right\", \"duration\": 5}, {\"action\": \"land\"}]}",
+   "result": {
+    "record": {
+     "drone": "Drone2",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "go up to 24 meters, fly right for 5 seconds, then land",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "set_altitude",
+       "z": -24.0
+      },
+      {
+       "action": "fly_right",
+       "duration": 5
+      },
+      {
+       "action": "land"
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -24}, {\"action\": \"fly_right\", \"duration\": 5}, {\"action\": \"land\"}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "go up to 24 meters, fly right for 5 seconds, then land",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 98304,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone3",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261019-183805-v6-polled.jsonl",
+   "id": "M10/Drone3#37",
+   "instruction": "go up to 18 meters, fly backward for 5 seconds, then land",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 98304,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -18}, {\"action\": \"fly_backward\", \"duration\": 5}, {\"action\": \"land\"}]}",
+   "result": {
+    "record": {
+     "drone": "Drone3",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "go up to 18 meters, fly backward for 5 seconds, then land",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "set_altitude",
+       "z": -18.0
+      },
+      {
+       "action": "fly_backward",
+       "duration": 5
+      },
+      {
+       "action": "land"
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -18}, {\"action\": \"fly_backward\", \"duration\": 5}, {\"action\": \"land\"}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "go up to 18 meters, fly backward for 5 seconds, then land",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 98304,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone4",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "baseline_v1-llama3.3_70b-20261019-183805-v6-polled.jsonl",
+   "id": "M10/Drone4#38",
+   "instruction": "go up to 12 meters, fly left for 5 seconds, then land",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 98304,
+    "num_gpu": 999,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -12}, {\"action\": \"fly_left\", \"duration\": 5}, {\"action\": \"land\"}]}",
+   "result": {
+    "record": {
+     "drone": "Drone4",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "go up to 12 meters, fly left for 5 seconds, then land",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": [
+      {
+       "action": "set_altitude",
+       "z": -12.0
+      },
+      {
+       "action": "fly_left",
+       "duration": 5
+      },
+      {
+       "action": "land"
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": -12}, {\"action\": \"fly_left\", \"duration\": 5}, {\"action\": \"land\"}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "go up to 12 meters, fly left for 5 seconds, then land",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 98304,
+        "num_gpu": 999,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "synthetic",
+   "id": "synthetic:not-json",
+   "instruction": "fly forward for 5 seconds",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 0,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "this is not json",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": "Expecting value: line 1 column 1 (char 0)",
+     "instruction": "fly forward for 5 seconds",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": null,
+     "raw_output": "this is not json",
+     "transport_error": false,
+     "valid": false
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "fly forward for 5 seconds",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 0,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "synthetic",
+   "id": "synthetic:unknown-action",
+   "instruction": "fly forward for 5 seconds",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 0,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"teleport\", \"x\": 1, \"y\": 2}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": "step 1: unknown action 'teleport'",
+     "instruction": "fly forward for 5 seconds",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": null,
+     "raw_output": "{\"plan\": [{\"action\": \"teleport\", \"x\": 1, \"y\": 2}]}",
+     "transport_error": false,
+     "valid": false
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "fly forward for 5 seconds",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 0,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "synthetic",
+   "id": "synthetic:duration-too-long",
+   "instruction": "fly forward for 5 seconds",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 0,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"hover\", \"duration\": 500}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": "step 1: duration 500s exceeds the 60.0s limit",
+     "instruction": "fly forward for 5 seconds",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": null,
+     "raw_output": "{\"plan\": [{\"action\": \"hover\", \"duration\": 500}]}",
+     "transport_error": false,
+     "valid": false
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "fly forward for 5 seconds",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 0,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "synthetic",
+   "id": "synthetic:positive-z",
+   "instruction": "fly forward for 5 seconds",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 0,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": 30}, {\"action\": \"land\"}]}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": null,
+     "instruction": "fly forward for 5 seconds",
+     "model": "llama3.3:70b",
+     "normalised": [
+      "step 1: z=30 treated as -30 (NED, negative is up)"
+     ],
+     "plan": [
+      {
+       "action": "set_altitude",
+       "z": -30.0
+      },
+      {
+       "action": "land"
+      }
+     ],
+     "raw_output": "{\"plan\": [{\"action\": \"set_altitude\", \"z\": 30}, {\"action\": \"land\"}]}",
+     "transport_error": false,
+     "valid": true
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "fly forward for 5 seconds",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 0,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "synthetic",
+   "id": "synthetic:empty-plan",
+   "instruction": "fly forward for 5 seconds",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 0,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "reply": "{\"plan\": []}",
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": "'plan' is not a non-empty array",
+     "instruction": "fly forward for 5 seconds",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": null,
+     "raw_output": "{\"plan\": []}",
+     "transport_error": false,
+     "valid": false
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "fly forward for 5 seconds",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 0,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  },
+  {
+   "drone": "Drone1",
+   "endpoint": "http://127.0.0.1:11435",
+   "first_seen": "synthetic",
+   "id": "synthetic:unreachable",
+   "instruction": "fly forward for 5 seconds",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 4096,
+    "num_gpu": 0,
+    "num_predict": 512,
+    "num_thread": 12,
+    "temperature": 0
+   },
+   "raise_exc": "ConnectionError",
+   "reply": null,
+   "result": {
+    "record": {
+     "drone": "Drone1",
+     "endpoint": "http://127.0.0.1:11435",
+     "error": "ConnectionError: [WinError 10061] No connection could be made",
+     "instruction": "fly forward for 5 seconds",
+     "model": "llama3.3:70b",
+     "normalised": [],
+     "plan": null,
+     "raw_output": "",
+     "transport_error": true,
+     "valid": false
+    },
+    "request": [
+     {
+      "chat": {
+       "format": {
+        "properties": {
+         "plan": {
+          "items": {
+           "properties": {
+            "action": {
+             "enum": [
+              "fly_to",
+              "fly_straight",
+              "fly_backward",
+              "fly_left",
+              "fly_right",
+              "hover",
+              "set_altitude",
+              "land"
+             ],
+             "type": "string"
+            },
+            "duration": {
+             "type": "number"
+            },
+            "x": {
+             "type": "number"
+            },
+            "y": {
+             "type": "number"
+            },
+            "z": {
+             "type": "number"
+            }
+           },
+           "required": [
+            "action"
+           ],
+           "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+         }
+        },
+        "required": [
+         "plan"
+        ],
+        "type": "object"
+       },
+       "messages": [
+        {
+         "content": "You convert a plain-English drone instruction into a flight plan.\n\nReply with JSON only: {\"plan\": [ ... ]} -- an array of steps, in execution order.\n\nAvailable actions, and their parameters:\n  fly_to        x, y, z    fly to an absolute coordinate\n  fly_straight  duration   forward, relative to the drone's heading\n  fly_backward  duration   backward\n  fly_left      duration   strafe left\n  fly_right     duration   strafe right\n  hover         duration   hold position\n  set_altitude  z          climb or descend\n  land                     controlled descent and landing\n\nRules:\n- duration is in seconds. Speed is fixed at 5.0 m/s and cannot be changed.\n- z is altitude in NED: NEGATIVE IS UP. 20 metres above ground is z = -20.\n- Emit one step per requested manoeuvre, in the order they must be executed,\n  which is not always the order they are mentioned.\n- \"return home\" is fly_to with x = 0, y = 0.\n- Do not invent actions. Do not add steps that were not asked for.\n",
+         "role": "system"
+        },
+        {
+         "content": "fly left for 2 seconds, then climb to 30 meters",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"fly_left\", \"duration\": 2}, {\"action\": \"set_altitude\", \"z\": -30}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "after hovering for 4 seconds, fly backward for 6 seconds",
+         "role": "user"
+        },
+        {
+         "content": "{\"plan\": [{\"action\": \"hover\", \"duration\": 4}, {\"action\": \"fly_backward\", \"duration\": 6}]}",
+         "role": "assistant"
+        },
+        {
+         "content": "fly forward for 5 seconds",
+         "role": "user"
+        }
+       ],
+       "model": "llama3.3:70b",
+       "options": {
+        "num_ctx": 4096,
+        "num_gpu": 0,
+        "num_predict": 512,
+        "num_thread": 12,
+        "temperature": 0
+       }
+      },
+      "host": "http://127.0.0.1:11435"
+     }
+    ]
+   }
+  }
+ ],
+ "meta": {
+  "agent_sha256": "f30f45d5f55df492",
+  "note": "Phase 2 characterisation goldens. See tools/record_golden.py.",
+  "recorded_from": "phase-01-complete"
+ }
+}

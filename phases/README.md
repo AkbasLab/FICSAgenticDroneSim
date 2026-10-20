@@ -39,7 +39,7 @@ disk are not study data, for reasons that are easy to forget.
 |---|---|---|---|
 | **0** | [Research contribution](phase-00-research-contribution/) | Team can explain the four architectures in one minute | Deliverable done · exit untested |
 | **1** | [Baseline freeze](phase-01-baseline-freeze/) | A new student clones, follows the docs, reproduces the baseline unaided | **Complete** 2026-10-20, at the minimum standard (clean-clone test); `v0.1-open-loop-baseline` |
-| 2 | Repository architecture | Baseline examples run through the modular structure unchanged | Not started |
+| **2** | [Repository architecture](phase-02-repository-architecture/) | Baseline examples run through the modular structure unchanged | **In progress** — behaviour pinned by goldens |
 | 3 | Flight-skill layer | Four drones take off, navigate, hold, return, land — each skill returning a structured result | Not started |
 | 4 | Search-and-relay mission | A scripted, non-agentic controller completes the canonical mission | Not started |
 | 5 | Persistent single agent | One agent completes a search task with no preflight action list | Not started |

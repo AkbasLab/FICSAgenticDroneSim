@@ -1,0 +1,6748 @@
+{
+ "cases": [
+  {
+   "first_seen": "baseline_v1-llama3.2_3b-20260928-212436-blockA-M01-M08.jsonl",
+   "id": "M01#1",
+   "mission": "M01",
+   "plans": {
+    "Drone1": [
+     {
+      "action": "fly_straight",
+      "duration": 5
+     }
+    ]
+   },
+   "result": {
+    "calls": {
+     "Drone1": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        5.0,
+        0.0,
+        0.0,
+        5
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ]
+     ],
+     "main": [
+      [
+       "reset",
+       [],
+       {}
+      ],
+      [
+       "confirmConnection",
+       [],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ]
+     ]
+    },
+    "error": null,
+    "outcomes": [
+     {
+      "collision": {
+       "available": true,
+       "has_collided": false,
+       "is_ground": false,
+       "new_this_flight": false,
+       "object": ""
+      },
+      "completed": true,
+      "drone": "Drone1",
+      "executed": [
+       "fly_straight"
+      ],
+      "failure": null,
+      "final_position": {
+       "x": 25.0,
+       "y": 0.0,
+       "z": 29.25
+      },
+      "flight_seconds": 3.3,
+      "ground_settled": true,
+      "ground_z": 29.25,
+      "landed_evidence": "height or contact at teardown",
+      "landed_on_ground": true,
+      "planned": [
+       "fly_straight"
+      ],
+      "step_altitudes_agl": [
+       {
+        "after": "take_off",
+        "agl": 8.0
+       },
+       {
+        "after": "fly_straight",
+        "agl": 8.0,
+        "asked_agl": null
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "first_seen": "baseline_v1-llama3.2_3b-20260928-212436-blockA-M01-M08.jsonl",
+   "id": "M02#1",
+   "mission": "M02",
+   "plans": {
+    "Drone1": [
+     {
+      "action": "hover",
+      "duration": 3
+     },
+     {
+      "action": "land"
+     }
+    ]
+   },
+   "result": {
+    "calls": {
+     "Drone1": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ]
+     ],
+     "main": [
+      [
+       "reset",
+       [],
+       {}
+      ],
+      [
+       "confirmConnection",
+       [],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ]
+     ]
+    },
+    "error": null,
+    "outcomes": [
+     {
+      "collision": {
+       "available": true,
+       "has_collided": false,
+       "is_ground": false,
+       "new_this_flight": false,
+       "object": ""
+      },
+      "completed": true,
+      "drone": "Drone1",
+      "executed": [
+       "hover",
+       "land"
+      ],
+      "failure": null,
+      "final_position": {
+       "x": 0.0,
+       "y": 0.0,
+       "z": 29.25
+      },
+      "flight_seconds": 6.3,
+      "ground_settled": true,
+      "ground_z": 29.25,
+      "landed_evidence": "height or contact at teardown",
+      "landed_on_ground": true,
+      "planned": [
+       "hover",
+       "land"
+      ],
+      "step_altitudes_agl": [
+       {
+        "after": "take_off",
+        "agl": 8.0
+       },
+       {
+        "after": "hover",
+        "agl": 8.0,
+        "asked_agl": null
+       },
+       {
+        "after": "land",
+        "agl": 0.0,
+        "asked_agl": null
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "first_seen": "baseline_v1-llama3.2_3b-20260928-212436-blockA-M01-M08.jsonl",
+   "id": "M03#1",
+   "mission": "M03",
+   "plans": {
+    "Drone1": [
+     {
+      "action": "set_altitude",
+      "z": -15.0
+     },
+     {
+      "action": "fly_straight",
+      "duration": 5
+     },
+     {
+      "action": "land"
+     }
+    ]
+   },
+   "result": {
+    "calls": {
+     "Drone1": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        14.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        5.0,
+        0.0,
+        0.0,
+        5
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ]
+     ],
+     "main": [
+      [
+       "reset",
+       [],
+       {}
+      ],
+      [
+       "confirmConnection",
+       [],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ]
+     ]
+    },
+    "error": null,
+    "outcomes": [
+     {
+      "collision": {
+       "available": true,
+       "has_collided": false,
+       "is_ground": false,
+       "new_this_flight": false,
+       "object": ""
+      },
+      "completed": true,
+      "drone": "Drone1",
+      "executed": [
+       "set_altitude",
+       "fly_straight",
+       "land"
+      ],
+      "failure": null,
+      "final_position": {
+       "x": 25.0,
+       "y": 0.0,
+       "z": 29.25
+      },
+      "flight_seconds": 3.3,
+      "ground_settled": true,
+      "ground_z": 29.25,
+      "landed_evidence": "height or contact at teardown",
+      "landed_on_ground": true,
+      "planned": [
+       "set_altitude",
+       "fly_straight",
+       "land"
+      ],
+      "step_altitudes_agl": [
+       {
+        "after": "take_off",
+        "agl": 8.0
+       },
+       {
+        "after": "set_altitude",
+        "agl": 15.0,
+        "asked_agl": 15.0
+       },
+       {
+        "after": "fly_straight",
+        "agl": 15.0,
+        "asked_agl": null
+       },
+       {
+        "after": "land",
+        "agl": 0.0,
+        "asked_agl": null
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "first_seen": "baseline_v1-llama3.2_3b-20260928-212436-blockA-M01-M08.jsonl",
+   "id": "M04#1",
+   "mission": "M04",
+   "plans": {
+    "Drone1": [
+     {
+      "action": "fly_straight",
+      "duration": 5
+     },
+     {
+      "action": "fly_to",
+      "x": 0,
+      "y": 0,
+      "z": -8.0
+     },
+     {
+      "action": "land"
+     }
+    ]
+   },
+   "result": {
+    "calls": {
+     "Drone1": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        5.0,
+        0.0,
+        0.0,
+        5
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToPositionAsync",
+       [
+        0.0,
+        0.0,
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 90.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ]
+     ],
+     "main": [
+      [
+       "reset",
+       [],
+       {}
+      ],
+      [
+       "confirmConnection",
+       [],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ]
+     ]
+    },
+    "error": null,
+    "outcomes": [
+     {
+      "collision": {
+       "available": true,
+       "has_collided": false,
+       "is_ground": false,
+       "new_this_flight": false,
+       "object": ""
+      },
+      "completed": true,
+      "drone": "Drone1",
+      "executed": [
+       "fly_straight",
+       "fly_to",
+       "land"
+      ],
+      "failure": null,
+      "final_position": {
+       "x": 0.0,
+       "y": 0.0,
+       "z": 29.25
+      },
+      "flight_seconds": 3.3,
+      "ground_settled": true,
+      "ground_z": 29.25,
+      "landed_evidence": "height or contact at teardown",
+      "landed_on_ground": true,
+      "planned": [
+       "fly_straight",
+       "fly_to",
+       "land"
+      ],
+      "step_altitudes_agl": [
+       {
+        "after": "take_off",
+        "agl": 8.0
+       },
+       {
+        "after": "fly_straight",
+        "agl": 8.0,
+        "asked_agl": null
+       },
+       {
+        "after": "fly_to",
+        "agl": 8.0,
+        "asked_agl": null
+       },
+       {
+        "after": "land",
+        "agl": 0.0,
+        "asked_agl": null
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "first_seen": "baseline_v1-llama3.2_3b-20260928-212436-blockA-M01-M08.jsonl",
+   "id": "M05#1",
+   "mission": "M05",
+   "plans": {
+    "Drone1": [
+     {
+      "action": "fly_straight",
+      "duration": 3
+     },
+     {
+      "action": "fly_straight",
+      "duration": 3
+     }
+    ]
+   },
+   "result": {
+    "calls": {
+     "Drone1": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        5.0,
+        0.0,
+        0.0,
+        3
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        5.0,
+        0.0,
+        0.0,
+        3
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ]
+     ],
+     "main": [
+      [
+       "reset",
+       [],
+       {}
+      ],
+      [
+       "confirmConnection",
+       [],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ]
+     ]
+    },
+    "error": null,
+    "outcomes": [
+     {
+      "collision": {
+       "available": true,
+       "has_collided": false,
+       "is_ground": false,
+       "new_this_flight": false,
+       "object": ""
+      },
+      "completed": true,
+      "drone": "Drone1",
+      "executed": [
+       "fly_straight",
+       "fly_straight"
+      ],
+      "failure": null,
+      "final_position": {
+       "x": 30.0,
+       "y": 0.0,
+       "z": 29.25
+      },
+      "flight_seconds": 3.3,
+      "ground_settled": true,
+      "ground_z": 29.25,
+      "landed_evidence": "height or contact at teardown",
+      "landed_on_ground": true,
+      "planned": [
+       "fly_straight",
+       "fly_straight"
+      ],
+      "step_altitudes_agl": [
+       {
+        "after": "take_off",
+        "agl": 8.0
+       },
+       {
+        "after": "fly_straight",
+        "agl": 8.0,
+        "asked_agl": null
+       },
+       {
+        "after": "fly_straight",
+        "agl": 8.0,
+        "asked_agl": null
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "first_seen": "baseline_v1-llama3.2_3b-20260928-212436-blockA-M01-M08.jsonl",
+   "id": "M06#1",
+   "mission": "M06",
+   "plans": {
+    "Drone1": [
+     {
+      "action": "hover",
+      "duration": 2
+     },
+     {
+      "action": "hover",
+      "duration": 2
+     },
+     {
+      "action": "hover",
+      "duration": 2
+     }
+    ]
+   },
+   "result": {
+    "calls": {
+     "Drone1": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ]
+     ],
+     "main": [
+      [
+       "reset",
+       [],
+       {}
+      ],
+      [
+       "confirmConnection",
+       [],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ]
+     ]
+    },
+    "error": null,
+    "outcomes": [
+     {
+      "collision": {
+       "available": true,
+       "has_collided": false,
+       "is_ground": false,
+       "new_this_flight": false,
+       "object": ""
+      },
+      "completed": true,
+      "drone": "Drone1",
+      "executed": [
+       "hover",
+       "hover",
+       "hover"
+      ],
+      "failure": null,
+      "final_position": {
+       "x": 0.0,
+       "y": 0.0,
+       "z": 29.25
+      },
+      "flight_seconds": 9.3,
+      "ground_settled": true,
+      "ground_z": 29.25,
+      "landed_evidence": "height or contact at teardown",
+      "landed_on_ground": true,
+      "planned": [
+       "hover",
+       "hover",
+       "hover"
+      ],
+      "step_altitudes_agl": [
+       {
+        "after": "take_off",
+        "agl": 8.0
+       },
+       {
+        "after": "hover",
+        "agl": 8.0,
+        "asked_agl": null
+       },
+       {
+        "after": "hover",
+        "agl": 8.0,
+        "asked_agl": null
+       },
+       {
+        "after": "hover",
+        "agl": 8.0,
+        "asked_agl": null
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "first_seen": "baseline_v1-llama3.2_3b-20260928-212436-blockA-M01-M08.jsonl",
+   "id": "M07#1",
+   "mission": "M07",
+   "plans": {
+    "Drone1": [
+     {
+      "action": "hover",
+      "duration": 2
+     },
+     {
+      "action": "fly_straight",
+      "duration": 5
+     }
+    ]
+   },
+   "result": {
+    "calls": {
+     "Drone1": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        5.0,
+        0.0,
+        0.0,
+        5
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ]
+     ],
+     "main": [
+      [
+       "reset",
+       [],
+       {}
+      ],
+      [
+       "confirmConnection",
+       [],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ]
+     ]
+    },
+    "error": null,
+    "outcomes": [
+     {
+      "collision": {
+       "available": true,
+       "has_collided": false,
+       "is_ground": false,
+       "new_this_flight": false,
+       "object": ""
+      },
+      "completed": true,
+      "drone": "Drone1",
+      "executed": [
+       "hover",
+       "fly_straight"
+      ],
+      "failure": null,
+      "final_position": {
+       "x": 25.0,
+       "y": 0.0,
+       "z": 29.25
+      },
+      "flight_seconds": 5.3,
+      "ground_settled": true,
+      "ground_z": 29.25,
+      "landed_evidence": "height or contact at teardown",
+      "landed_on_ground": true,
+      "planned": [
+       "hover",
+       "fly_straight"
+      ],
+      "step_altitudes_agl": [
+       {
+        "after": "take_off",
+        "agl": 8.0
+       },
+       {
+        "after": "hover",
+        "agl": 8.0,
+        "asked_agl": null
+       },
+       {
+        "after": "fly_straight",
+        "agl": 8.0,
+        "asked_agl": null
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "first_seen": "baseline_v1-llama3.2_3b-20260928-212436-blockA-M01-M08.jsonl",
+   "id": "M08#1",
+   "mission": "M08",
+   "plans": {
+    "Drone1": [
+     {
+      "action": "set_altitude",
+      "z": -10.0
+     },
+     {
+      "action": "hover",
+      "duration": 1
+     },
+     {
+      "action": "fly_to",
+      "x": 0,
+      "y": 0,
+      "z": -20.0
+     },
+     {
+      "action": "land"
+     }
+    ]
+   },
+   "result": {
+    "calls": {
+     "Drone1": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        19.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToPositionAsync",
+       [
+        0.0,
+        0.0,
+        9.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 90.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ]
+     ],
+     "main": [
+      [
+       "reset",
+       [],
+       {}
+      ],
+      [
+       "confirmConnection",
+       [],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ]
+     ]
+    },
+    "error": null,
+    "outcomes": [
+     {
+      "collision": {
+       "available": true,
+       "has_collided": false,
+       "is_ground": false,
+       "new_this_flight": false,
+       "object": ""
+      },
+      "completed": true,
+      "drone": "Drone1",
+      "executed": [
+       "set_altitude",
+       "hover",
+       "fly_to",
+       "land"
+      ],
+      "failure": null,
+      "final_position": {
+       "x": 0.0,
+       "y": 0.0,
+       "z": 29.25
+      },
+      "flight_seconds": 4.3,
+      "ground_settled": true,
+      "ground_z": 29.25,
+      "landed_evidence": "height or contact at teardown",
+      "landed_on_ground": true,
+      "planned": [
+       "set_altitude",
+       "hover",
+       "fly_to",
+       "land"
+      ],
+      "step_altitudes_agl": [
+       {
+        "after": "take_off",
+        "agl": 8.0
+       },
+       {
+        "after": "set_altitude",
+        "agl": 10.0,
+        "asked_agl": 10.0
+       },
+       {
+        "after": "hover",
+        "agl": 10.0,
+        "asked_agl": null
+       },
+       {
+        "after": "fly_to",
+        "agl": 20.0,
+        "asked_agl": null
+       },
+       {
+        "after": "land",
+        "agl": 0.0,
+        "asked_agl": null
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "first_seen": "baseline_v1-llama3.2_3b-20260928-212436-blockA-M01-M08.jsonl",
+   "id": "M08#2",
+   "mission": "M08",
+   "plans": {
+    "Drone1": [
+     {
+      "action": "set_altitude",
+      "z": -10.0
+     },
+     {
+      "action": "hover",
+      "duration": 1
+     },
+     {
+      "action": "set_altitude",
+      "z": -20.0
+     },
+     {
+      "action": "land"
+     }
+    ]
+   },
+   "result": {
+    "calls": {
+     "Drone1": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        19.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        9.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ]
+     ],
+     "main": [
+      [
+       "reset",
+       [],
+       {}
+      ],
+      [
+       "confirmConnection",
+       [],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ]
+     ]
+    },
+    "error": null,
+    "outcomes": [
+     {
+      "collision": {
+       "available": true,
+       "has_collided": false,
+       "is_ground": false,
+       "new_this_flight": false,
+       "object": ""
+      },
+      "completed": true,
+      "drone": "Drone1",
+      "executed": [
+       "set_altitude",
+       "hover",
+       "set_altitude",
+       "land"
+      ],
+      "failure": null,
+      "final_position": {
+       "x": 0.0,
+       "y": 0.0,
+       "z": 29.25
+      },
+      "flight_seconds": 4.3,
+      "ground_settled": true,
+      "ground_z": 29.25,
+      "landed_evidence": "height or contact at teardown",
+      "landed_on_ground": true,
+      "planned": [
+       "set_altitude",
+       "hover",
+       "set_altitude",
+       "land"
+      ],
+      "step_altitudes_agl": [
+       {
+        "after": "take_off",
+        "agl": 8.0
+       },
+       {
+        "after": "set_altitude",
+        "agl": 10.0,
+        "asked_agl": 10.0
+       },
+       {
+        "after": "hover",
+        "agl": 10.0,
+        "asked_agl": null
+       },
+       {
+        "after": "set_altitude",
+        "agl": 20.0,
+        "asked_agl": 20.0
+       },
+       {
+        "after": "land",
+        "agl": 0.0,
+        "asked_agl": null
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "first_seen": "baseline_v1-llama3.3_70b-20261005-233824.jsonl",
+   "id": "M08#3",
+   "mission": "M08",
+   "plans": {
+    "Drone1": [
+     {
+      "action": "set_altitude",
+      "z": -25.0
+     },
+     {
+      "action": "hover",
+      "duration": 5
+     },
+     {
+      "action": "set_altitude",
+      "z": -20.0
+     }
+    ]
+   },
+   "result": {
+    "calls": {
+     "Drone1": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        4.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        9.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ]
+     ],
+     "main": [
+      [
+       "reset",
+       [],
+       {}
+      ],
+      [
+       "confirmConnection",
+       [],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ]
+     ]
+    },
+    "error": null,
+    "outcomes": [
+     {
+      "collision": {
+       "available": true,
+       "has_collided": false,
+       "is_ground": false,
+       "new_this_flight": false,
+       "object": ""
+      },
+      "completed": true,
+      "drone": "Drone1",
+      "executed": [
+       "set_altitude",
+       "hover",
+       "set_altitude"
+      ],
+      "failure": null,
+      "final_position": {
+       "x": 0.0,
+       "y": 0.0,
+       "z": 29.25
+      },
+      "flight_seconds": 8.3,
+      "ground_settled": true,
+      "ground_z": 29.25,
+      "landed_evidence": "height or contact at teardown",
+      "landed_on_ground": true,
+      "planned": [
+       "set_altitude",
+       "hover",
+       "set_altitude"
+      ],
+      "step_altitudes_agl": [
+       {
+        "after": "take_off",
+        "agl": 8.0
+       },
+       {
+        "after": "set_altitude",
+        "agl": 25.0,
+        "asked_agl": 25.0
+       },
+       {
+        "after": "hover",
+        "agl": 25.0,
+        "asked_agl": null
+       },
+       {
+        "after": "set_altitude",
+        "agl": 20.0,
+        "asked_agl": 20.0
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "first_seen": "baseline_v1-llama3.3_70b-20261006-175302-v2-M02-M08.jsonl",
+   "id": "M04#2",
+   "mission": "M04",
+   "plans": {
+    "Drone1": [
+     {
+      "action": "fly_straight",
+      "duration": 5
+     },
+     {
+      "action": "fly_to",
+      "x": 0,
+      "y": 0,
+      "z": 0.0
+     },
+     {
+      "action": "land"
+     }
+    ]
+   },
+   "result": {
+    "calls": {
+     "Drone1": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        5.0,
+        0.0,
+        0.0,
+        5
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToPositionAsync",
+       [
+        0.0,
+        0.0,
+        29.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 90.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ]
+     ],
+     "main": [
+      [
+       "reset",
+       [],
+       {}
+      ],
+      [
+       "confirmConnection",
+       [],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ]
+     ]
+    },
+    "error": null,
+    "outcomes": [
+     {
+      "collision": {
+       "available": true,
+       "has_collided": false,
+       "is_ground": false,
+       "new_this_flight": false,
+       "object": ""
+      },
+      "completed": true,
+      "drone": "Drone1",
+      "executed": [
+       "fly_straight",
+       "fly_to",
+       "land"
+      ],
+      "failure": null,
+      "final_position": {
+       "x": 0.0,
+       "y": 0.0,
+       "z": 29.25
+      },
+      "flight_seconds": 3.3,
+      "ground_settled": true,
+      "ground_z": 29.25,
+      "landed_evidence": "height or contact at teardown",
+      "landed_on_ground": true,
+      "planned": [
+       "fly_straight",
+       "fly_to",
+       "land"
+      ],
+      "step_altitudes_agl": [
+       {
+        "after": "take_off",
+        "agl": 8.0
+       },
+       {
+        "after": "fly_straight",
+        "agl": 8.0,
+        "asked_agl": null
+       },
+       {
+        "after": "fly_to",
+        "agl": 0.0,
+        "asked_agl": null
+       },
+       {
+        "after": "land",
+        "agl": 0.0,
+        "asked_agl": null
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "first_seen": "baseline_v1-llama3.3_70b-20261006-182201-v2-M09.jsonl",
+   "id": "M09#1",
+   "mission": "M09",
+   "plans": {
+    "Drone1": [
+     {
+      "action": "set_altitude",
+      "z": -25.0
+     },
+     {
+      "action": "fly_straight",
+      "duration": 6
+     },
+     {
+      "action": "fly_to",
+      "x": 0,
+      "y": 0,
+      "z": -8.0
+     },
+     {
+      "action": "land"
+     }
+    ],
+    "Drone2": [
+     {
+      "action": "set_altitude",
+      "z": -12.0
+     },
+     {
+      "action": "fly_right",
+      "duration": 5
+     },
+     {
+      "action": "hover",
+      "duration": 2
+     },
+     {
+      "action": "land"
+     }
+    ]
+   },
+   "result": {
+    "calls": {
+     "Drone1": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        4.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        5.0,
+        0.0,
+        0.0,
+        6
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToPositionAsync",
+       [
+        0.0,
+        0.0,
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 90.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ]
+     ],
+     "Drone2": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        17.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        0.0,
+        5.0,
+        0.0,
+        5
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone2"
+       ],
+       {}
+      ]
+     ],
+     "main": [
+      [
+       "reset",
+       [],
+       {}
+      ],
+      [
+       "confirmConnection",
+       [],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simAddVehicle",
+       [
+        "Drone2",
+        "SimpleFlight",
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          4.0,
+          0.0,
+          0.0
+         ]
+        }
+       ],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          4.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ]
+     ]
+    },
+    "error": null,
+    "outcomes": [
+     {
+      "collision": {
+       "available": true,
+       "has_collided": false,
+       "is_ground": false,
+       "new_this_flight": false,
+       "object": ""
+      },
+      "completed": true,
+      "drone": "Drone1",
+      "executed": [
+       "set_altitude",
+       "fly_straight",
+       "fly_to",
+       "land"
+      ],
+      "failure": null,
+      "final_position": {
+       "x": 0.0,
+       "y": 0.0,
+       "z": 29.25
+      },
+      "flight_seconds": 3.3,
+      "ground_settled": true,
+      "ground_z": 29.25,
+      "landed_evidence": "height or contact at teardown",
+      "landed_on_ground": true,
+      "planned": [
+       "set_altitude",
+       "fly_straight",
+       "fly_to",
+       "land"
+      ],
+      "step_altitudes_agl": [
+       {
+        "after": "take_off",
+        "agl": 8.0
+       },
+       {
+        "after": "set_altitude",
+        "agl": 25.0,
+        "asked_agl": 25.0
+       },
+       {
+        "after": "fly_straight",
+        "agl": 25.0,
+        "asked_agl": null
+       },
+       {
+        "after": "fly_to",
+        "agl": 8.0,
+        "asked_agl": null
+       },
+       {
+        "after": "land",
+        "agl": 0.0,
+        "asked_agl": null
+       }
+      ]
+     },
+     {
+      "collision": {
+       "available": true,
+       "has_collided": false,
+       "is_ground": false,
+       "new_this_flight": false,
+       "object": ""
+      },
+      "completed": true,
+      "drone": "Drone2",
+      "executed": [
+       "set_altitude",
+       "fly_right",
+       "hover",
+       "land"
+      ],
+      "failure": null,
+      "final_position": {
+       "x": 4.0,
+       "y": 25.0,
+       "z": 29.25
+      },
+      "flight_seconds": 5.3,
+      "ground_settled": true,
+      "ground_z": 29.25,
+      "landed_evidence": "height or contact at teardown",
+      "landed_on_ground": true,
+      "planned": [
+       "set_altitude",
+       "fly_right",
+       "hover",
+       "land"
+      ],
+      "step_altitudes_agl": [
+       {
+        "after": "take_off",
+        "agl": 8.0
+       },
+       {
+        "after": "set_altitude",
+        "agl": 12.0,
+        "asked_agl": 12.0
+       },
+       {
+        "after": "fly_right",
+        "agl": 12.0,
+        "asked_agl": null
+       },
+       {
+        "after": "hover",
+        "agl": 12.0,
+        "asked_agl": null
+       },
+       {
+        "after": "land",
+        "agl": 0.0,
+        "asked_agl": null
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "first_seen": "baseline_v1-llama3.3_70b-20261006-184158-v2-M10.jsonl",
+   "id": "M10#1",
+   "mission": "M10",
+   "plans": {
+    "Drone1": [
+     {
+      "action": "set_altitude",
+      "z": -30.0
+     },
+     {
+      "action": "fly_straight",
+      "duration": 5
+     },
+     {
+      "action": "land"
+     }
+    ],
+    "Drone2": [
+     {
+      "action": "set_altitude",
+      "z": -24.0
+     },
+     {
+      "action": "fly_right",
+      "duration": 5
+     },
+     {
+      "action": "land"
+     }
+    ],
+    "Drone3": [
+     {
+      "action": "set_altitude",
+      "z": -18.0
+     },
+     {
+      "action": "fly_backward",
+      "duration": 5
+     },
+     {
+      "action": "land"
+     }
+    ],
+    "Drone4": [
+     {
+      "action": "set_altitude",
+      "z": -12.0
+     },
+     {
+      "action": "fly_left",
+      "duration": 5
+     },
+     {
+      "action": "land"
+     }
+    ]
+   },
+   "result": {
+    "calls": {
+     "Drone1": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        -0.75,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        5.0,
+        0.0,
+        0.0,
+        5
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ]
+     ],
+     "Drone2": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        5.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        0.0,
+        5.0,
+        0.0,
+        5
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone2"
+       ],
+       {}
+      ]
+     ],
+     "Drone3": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        11.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        -5.0,
+        0.0,
+        0.0,
+        5
+       ],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone3"
+       ],
+       {}
+      ]
+     ],
+     "Drone4": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        17.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        0.0,
+        -5.0,
+        0.0,
+        5
+       ],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone4"
+       ],
+       {}
+      ]
+     ],
+     "main": [
+      [
+       "reset",
+       [],
+       {}
+      ],
+      [
+       "confirmConnection",
+       [],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simAddVehicle",
+       [
+        "Drone2",
+        "SimpleFlight",
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          4.0,
+          0.0,
+          0.0
+         ]
+        }
+       ],
+       {}
+      ],
+      [
+       "simAddVehicle",
+       [
+        "Drone3",
+        "SimpleFlight",
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          8.0,
+          0.0,
+          0.0
+         ]
+        }
+       ],
+       {}
+      ],
+      [
+       "simAddVehicle",
+       [
+        "Drone4",
+        "SimpleFlight",
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          12.0,
+          0.0,
+          0.0
+         ]
+        }
+       ],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          4.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          8.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          12.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ]
+     ]
+    },
+    "error": null,
+    "outcomes": [
+     {
+      "collision": {
+       "available": true,
+       "has_collided": false,
+       "is_ground": false,
+       "new_this_flight": false,
+       "object": ""
+      },
+      "completed": true,
+      "drone": "Drone1",
+      "executed": [
+       "set_altitude",
+       "fly_straight",
+       "land"
+      ],
+      "failure": null,
+      "final_position": {
+       "x": 25.0,
+       "y": 0.0,
+       "z": 29.25
+      },
+      "flight_seconds": 3.3,
+      "ground_settled": true,
+      "ground_z": 29.25,
+      "landed_evidence": "height or contact at teardown",
+      "landed_on_ground": true,
+      "planned": [
+       "set_altitude",
+       "fly_straight",
+       "land"
+      ],
+      "step_altitudes_agl": [
+       {
+        "after": "take_off",
+        "agl": 8.0
+       },
+       {
+        "after": "set_altitude",
+        "agl": 30.0,
+        "asked_agl": 30.0
+       },
+       {
+        "after": "fly_straight",
+        "agl": 30.0,
+        "asked_agl": null
+       },
+       {
+        "after": "land",
+        "agl": 0.0,
+        "asked_agl": null
+       }
+      ]
+     },
+     {
+      "collision": {
+       "available": true,
+       "has_collided": false,
+       "is_ground": false,
+       "new_this_flight": false,
+       "object": ""
+      },
+      "completed": true,
+      "drone": "Drone2",
+      "executed": [
+       "set_altitude",
+       "fly_right",
+       "land"
+      ],
+      "failure": null,
+      "final_position": {
+       "x": 4.0,
+       "y": 25.0,
+       "z": 29.25
+      },
+      "flight_seconds": 3.3,
+      "ground_settled": true,
+      "ground_z": 29.25,
+      "landed_evidence": "height or contact at teardown",
+      "landed_on_ground": true,
+      "planned": [
+       "set_altitude",
+       "fly_right",
+       "land"
+      ],
+      "step_altitudes_agl": [
+       {
+        "after": "take_off",
+        "agl": 8.0
+       },
+       {
+        "after": "set_altitude",
+        "agl": 24.0,
+        "asked_agl": 24.0
+       },
+       {
+        "after": "fly_right",
+        "agl": 24.0,
+        "asked_agl": null
+       },
+       {
+        "after": "land",
+        "agl": 0.0,
+        "asked_agl": null
+       }
+      ]
+     },
+     {
+      "collision": {
+       "available": true,
+       "has_collided": false,
+       "is_ground": false,
+       "new_this_flight": false,
+       "object": ""
+      },
+      "completed": true,
+      "drone": "Drone3",
+      "executed": [
+       "set_altitude",
+       "fly_backward",
+       "land"
+      ],
+      "failure": null,
+      "final_position": {
+       "x": -17.0,
+       "y": 0.0,
+       "z": 29.25
+      },
+      "flight_seconds": 3.3,
+      "ground_settled": true,
+      "ground_z": 29.25,
+      "landed_evidence": "height or contact at teardown",
+      "landed_on_ground": true,
+      "planned": [
+       "set_altitude",
+       "fly_backward",
+       "land"
+      ],
+      "step_altitudes_agl": [
+       {
+        "after": "take_off",
+        "agl": 8.0
+       },
+       {
+        "after": "set_altitude",
+        "agl": 18.0,
+        "asked_agl": 18.0
+       },
+       {
+        "after": "fly_backward",
+        "agl": 18.0,
+        "asked_agl": null
+       },
+       {
+        "after": "land",
+        "agl": 0.0,
+        "asked_agl": null
+       }
+      ]
+     },
+     {
+      "collision": {
+       "available": true,
+       "has_collided": false,
+       "is_ground": false,
+       "new_this_flight": false,
+       "object": ""
+      },
+      "completed": true,
+      "drone": "Drone4",
+      "executed": [
+       "set_altitude",
+       "fly_left",
+       "land"
+      ],
+      "failure": null,
+      "final_position": {
+       "x": 12.0,
+       "y": -25.0,
+       "z": 29.25
+      },
+      "flight_seconds": 3.3,
+      "ground_settled": true,
+      "ground_z": 29.25,
+      "landed_evidence": "height or contact at teardown",
+      "landed_on_ground": true,
+      "planned": [
+       "set_altitude",
+       "fly_left",
+       "land"
+      ],
+      "step_altitudes_agl": [
+       {
+        "after": "take_off",
+        "agl": 8.0
+       },
+       {
+        "after": "set_altitude",
+        "agl": 12.0,
+        "asked_agl": 12.0
+       },
+       {
+        "after": "fly_left",
+        "agl": 12.0,
+        "asked_agl": null
+       },
+       {
+        "after": "land",
+        "agl": 0.0,
+        "asked_agl": null
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "first_seen": "synthetic",
+   "id": "synthetic:land-stuck",
+   "mission": "M04",
+   "plans": {
+    "Drone1": [
+     {
+      "action": "fly_straight",
+      "duration": 5
+     },
+     {
+      "action": "fly_to",
+      "x": 0,
+      "y": 0,
+      "z": -8.0
+     },
+     {
+      "action": "land"
+     }
+    ]
+   },
+   "result": {
+    "calls": {
+     "Drone1": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        5.0,
+        0.0,
+        0.0,
+        5
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToPositionAsync",
+       [
+        0.0,
+        0.0,
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 90.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ]
+     ],
+     "main": [
+      [
+       "reset",
+       [],
+       {}
+      ],
+      [
+       "confirmConnection",
+       [],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ]
+     ]
+    },
+    "error": null,
+    "outcomes": [
+     {
+      "collision": {
+       "available": true,
+       "has_collided": false,
+       "is_ground": false,
+       "new_this_flight": false,
+       "object": ""
+      },
+      "completed": false,
+      "drone": "Drone1",
+      "executed": [
+       "fly_straight",
+       "fly_to"
+      ],
+      "failure": "PlanError: land did not descend: 8.00 m above ground (target 3.0 m). The aircraft is still flying.",
+      "final_position": {
+       "x": 0.0,
+       "y": 0.0,
+       "z": 21.25
+      },
+      "flight_seconds": 3.3,
+      "ground_settled": true,
+      "ground_z": 29.25,
+      "landed_evidence": "height or contact at teardown",
+      "landed_on_ground": false,
+      "planned": [
+       "fly_straight",
+       "fly_to",
+       "land"
+      ],
+      "step_altitudes_agl": [
+       {
+        "after": "take_off",
+        "agl": 8.0
+       },
+       {
+        "after": "fly_straight",
+        "agl": 8.0,
+        "asked_agl": null
+       },
+       {
+        "after": "fly_to",
+        "agl": 8.0,
+        "asked_agl": null
+       }
+      ]
+     }
+    ]
+   },
+   "stuck_land": [
+    "Drone1"
+   ]
+  },
+  {
+   "first_seen": "synthetic",
+   "id": "synthetic:M10-Drone3-land-stuck",
+   "mission": "M10",
+   "plans": {
+    "Drone1": [
+     {
+      "action": "set_altitude",
+      "z": -30.0
+     },
+     {
+      "action": "fly_straight",
+      "duration": 5
+     },
+     {
+      "action": "land"
+     }
+    ],
+    "Drone2": [
+     {
+      "action": "set_altitude",
+      "z": -24.0
+     },
+     {
+      "action": "fly_right",
+      "duration": 5
+     },
+     {
+      "action": "land"
+     }
+    ],
+    "Drone3": [
+     {
+      "action": "set_altitude",
+      "z": -18.0
+     },
+     {
+      "action": "fly_backward",
+      "duration": 5
+     },
+     {
+      "action": "land"
+     }
+    ],
+    "Drone4": [
+     {
+      "action": "set_altitude",
+      "z": -12.0
+     },
+     {
+      "action": "fly_left",
+      "duration": 5
+     },
+     {
+      "action": "land"
+     }
+    ]
+   },
+   "result": {
+    "calls": {
+     "Drone1": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        -0.75,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        5.0,
+        0.0,
+        0.0,
+        5
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone1"
+       ],
+       {}
+      ]
+     ],
+     "Drone2": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        5.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        0.0,
+        5.0,
+        0.0,
+        5
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone2"
+       ],
+       {}
+      ]
+     ],
+     "Drone3": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        11.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        -5.0,
+        0.0,
+        0.0,
+        5
+       ],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone3"
+       ],
+       {}
+      ]
+     ],
+     "Drone4": [
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        true
+       ],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "takeoffAsync",
+       [],
+       {
+        "timeout_sec": 20,
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        21.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        17.25,
+        5.0
+       ],
+       {
+        "timeout_sec": 3e+38,
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "moveByVelocityBodyFrameAsync",
+       [
+        0.0,
+        -5.0,
+        0.0,
+        5
+       ],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "hoverAsync",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "moveToZAsync",
+       [
+        28.25,
+        2.0
+       ],
+       {
+        "timeout_sec": 45.0,
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "landAsync",
+       [],
+       {
+        "timeout_sec": 20.0,
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "armDisarm",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "enableApiControl",
+       [
+        false
+       ],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "simGetCollisionInfo",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "simGetVehiclePose",
+       [
+        "Drone4"
+       ],
+       {}
+      ]
+     ],
+     "main": [
+      [
+       "reset",
+       [],
+       {}
+      ],
+      [
+       "confirmConnection",
+       [],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simAddVehicle",
+       [
+        "Drone2",
+        "SimpleFlight",
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          4.0,
+          0.0,
+          0.0
+         ]
+        }
+       ],
+       {}
+      ],
+      [
+       "simAddVehicle",
+       [
+        "Drone3",
+        "SimpleFlight",
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          8.0,
+          0.0,
+          0.0
+         ]
+        }
+       ],
+       {}
+      ],
+      [
+       "simAddVehicle",
+       [
+        "Drone4",
+        "SimpleFlight",
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          12.0,
+          0.0,
+          0.0
+         ]
+        }
+       ],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          0.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          4.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          8.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "simSetVehiclePose",
+       [
+        {
+         "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+         ],
+         "pose": [
+          12.0,
+          0.0,
+          0.0
+         ]
+        },
+        true
+       ],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone1"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone2"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone3"
+       }
+      ],
+      [
+       "getMultirotorState",
+       [],
+       {
+        "vehicle_name": "Drone4"
+       }
+      ]
+     ]
+    },
+    "error": null,
+    "outcomes": [
+     {
+      "collision": {
+       "available": true,
+       "has_collided": false,
+       "is_ground": false,
+       "new_this_flight": false,
+       "object": ""
+      },
+      "completed": true,
+      "drone": "Drone1",
+      "executed": [
+       "set_altitude",
+       "fly_straight",
+       "land"
+      ],
+      "failure": null,
+      "final_position": {
+       "x": 25.0,
+       "y": 0.0,
+       "z": 29.25
+      },
+      "flight_seconds": 3.3,
+      "ground_settled": true,
+      "ground_z": 29.25,
+      "landed_evidence": "height or contact at teardown",
+      "landed_on_ground": true,
+      "planned": [
+       "set_altitude",
+       "fly_straight",
+       "land"
+      ],
+      "step_altitudes_agl": [
+       {
+        "after": "take_off",
+        "agl": 8.0
+       },
+       {
+        "after": "set_altitude",
+        "agl": 30.0,
+        "asked_agl": 30.0
+       },
+       {
+        "after": "fly_straight",
+        "agl": 30.0,
+        "asked_agl": null
+       },
+       {
+        "after": "land",
+        "agl": 0.0,
+        "asked_agl": null
+       }
+      ]
+     },
+     {
+      "collision": {
+       "available": true,
+       "has_collided": false,
+       "is_ground": false,
+       "new_this_flight": false,
+       "object": ""
+      },
+      "completed": true,
+      "drone": "Drone2",
+      "executed": [
+       "set_altitude",
+       "fly_right",
+       "land"
+      ],
+      "failure": null,
+      "final_position": {
+       "x": 4.0,
+       "y": 25.0,
+       "z": 29.25
+      },
+      "flight_seconds": 3.3,
+      "ground_settled": true,
+      "ground_z": 29.25,
+      "landed_evidence": "height or contact at teardown",
+      "landed_on_ground": true,
+      "planned": [
+       "set_altitude",
+       "fly_right",
+       "land"
+      ],
+      "step_altitudes_agl": [
+       {
+        "after": "take_off",
+        "agl": 8.0
+       },
+       {
+        "after": "set_altitude",
+        "agl": 24.0,
+        "asked_agl": 24.0
+       },
+       {
+        "after": "fly_right",
+        "agl": 24.0,
+        "asked_agl": null
+       },
+       {
+        "after": "land",
+        "agl": 0.0,
+        "asked_agl": null
+       }
+      ]
+     },
+     {
+      "collision": {
+       "available": true,
+       "has_collided": false,
+       "is_ground": false,
+       "new_this_flight": false,
+       "object": ""
+      },
+      "completed": false,
+      "drone": "Drone3",
+      "executed": [
+       "set_altitude",
+       "fly_backward"
+      ],
+      "failure": "PlanError: land did not descend: 18.00 m above ground (target 3.0 m). The aircraft is still flying.",
+      "final_position": {
+       "x": -17.0,
+       "y": 0.0,
+       "z": 11.25
+      },
+      "flight_seconds": 3.3,
+      "ground_settled": true,
+      "ground_z": 29.25,
+      "landed_evidence": "height or contact at teardown",
+      "landed_on_ground": false,
+      "planned": [
+       "set_altitude",
+       "fly_backward",
+       "land"
+      ],
+      "step_altitudes_agl": [
+       {
+        "after": "take_off",
+        "agl": 8.0
+       },
+       {
+        "after": "set_altitude",
+        "agl": 18.0,
+        "asked_agl": 18.0
+       },
+       {
+        "after": "fly_backward",
+        "agl": 18.0,
+        "asked_agl": null
+       }
+      ]
+     },
+     {
+      "collision": {
+       "available": true,
+       "has_collided": false,
+       "is_ground": false,
+       "new_this_flight": false,
+       "object": ""
+      },
+      "completed": true,
+      "drone": "Drone4",
+      "executed": [
+       "set_altitude",
+       "fly_left",
+       "land"
+      ],
+      "failure": null,
+      "final_position": {
+       "x": 12.0,
+       "y": -25.0,
+       "z": 29.25
+      },
+      "flight_seconds": 3.3,
+      "ground_settled": true,
+      "ground_z": 29.25,
+      "landed_evidence": "height or contact at teardown",
+      "landed_on_ground": true,
+      "planned": [
+       "set_altitude",
+       "fly_left",
+       "land"
+      ],
+      "step_altitudes_agl": [
+       {
+        "after": "take_off",
+        "agl": 8.0
+       },
+       {
+        "after": "set_altitude",
+        "agl": 12.0,
+        "asked_agl": 12.0
+       },
+       {
+        "after": "fly_left",
+        "agl": 12.0,
+        "asked_agl": null
+       },
+       {
+        "after": "land",
+        "agl": 0.0,
+        "asked_agl": null
+       }
+      ]
+     }
+    ]
+   },
+   "stuck_land": [
+    "Drone3"
+   ]
+  },
+  {
+   "declared": [
+    "Drone1",
+    "Drone2",
+    "Drone3",
+    "Drone4"
+   ],
+   "first_seen": "synthetic",
+   "id": "synthetic:leftover-drones",
+   "mission": "M04",
+   "plans": {
+    "Drone1": [
+     {
+      "action": "fly_straight",
+      "duration": 5
+     },
+     {
+      "action": "fly_to",
+      "x": 0,
+      "y": 0,
+      "z": -8.0
+     },
+     {
+      "action": "land"
+     }
+    ]
+   },
+   "result": {
+    "calls": {
+     "main": [
+      [
+       "reset",
+       [],
+       {}
+      ],
+      [
+       "confirmConnection",
+       [],
+       {}
+      ],
+      [
+       "listVehicles",
+       [],
+       {}
+      ]
+     ]
+    },
+    "error": "ForeignVehicleError: the scene holds Drone2, Drone3, Drone4, which this flight does not use (it flies Drone1). Leftover drones sit on the +X flight path and are hit as obstacles, and nothing can remove them short of a simulator restart. Restart the simulator, and fly missions in increasing drone count.",
+    "outcomes": []
+   }
+  }
+ ],
+ "meta": {
+  "agent_sha256": "f30f45d5f55df492",
+  "note": "Phase 2 characterisation goldens. See tools/record_golden.py.",
+  "recorded_from": "phase-01-complete"
+ }
+}
