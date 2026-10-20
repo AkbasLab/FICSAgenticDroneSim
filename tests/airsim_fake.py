@@ -261,28 +261,69 @@ class FakeClient:
 
 # ----------------------------------------------------------- running a case
 
+def _clock_modules(agent: Any) -> list[Any]:
+    """Every module of the agent that reads the clock through `time`.
+
+    Since Phase 2 step 3 the flying code lives in `agentic_uav`, so the virtual
+    clock has to replace `time` there as well as in the agent itself.
+    """
+    found = [agent]
+    for name, module in list(sys.modules.items()):
+        if (name == "agentic_uav" or name.startswith("agentic_uav.")) \
+                and getattr(module, "time", None) is _real_time:
+            found.append(module)
+    return found
+
+
 @contextlib.contextmanager
 def patched(agent: Any, world: FakeWorld):
-    """Point the agent at the fake world and the virtual clock, then restore."""
+    """Point the agent at the fake world and the virtual clock, then restore.
+
+    Connections: every new simulator connection the agent opens is answered
+    with a recording fake. Before Phase 2 step 3 those came from
+    `agent.connect`; since then they come from `AirSimAdapter.connect`. Both
+    are patched, so the same harness records either version of the code.
+    """
     if getattr(agent, "SPACING", SPACING) != SPACING:
         raise AssertionError("airsim_fake.SPACING no longer matches the agent")
-    saved = (agent.connect, agent.time)
     main_thread = threading.main_thread()
 
-    def connect(host: str = "127.0.0.1", port: int = 41451) -> FakeClient:
+    def stream_for_caller() -> str:
         # The separation monitor connects from the main thread; flight threads
         # connect from their own. Only the flights are recorded.
-        stream = "discard" if threading.current_thread() is main_thread else "vehicle"
-        return FakeClient(world, stream)
+        return "discard" if threading.current_thread() is main_thread else "vehicle"
 
+    def connect(host: str = "127.0.0.1", port: int = 41451) -> FakeClient:
+        return FakeClient(world, stream_for_caller())
+
+    clock = VirtualTime()
+    clocked = _clock_modules(agent)
+    saved_time = [(m, m.time) for m in clocked]
+    saved_connect = agent.connect
     agent.connect = connect
-    agent.time = VirtualTime()
+    for module in clocked:
+        module.time = clock
+
+    adapter_cls, saved_adapter_connect = None, None
+    try:
+        from agentic_uav.simulator.airsim_adapter import AirSimAdapter as adapter_cls
+    except ImportError:
+        pass
+    if adapter_cls is not None:
+        saved_adapter_connect = adapter_cls.__dict__["connect"]
+        adapter_cls.connect = classmethod(
+            lambda cls, host="127.0.0.1", port=41451: cls(FakeClient(world, stream_for_caller())))
+
     agent.forget_ground_reference()
     try:
         with contextlib.redirect_stdout(io.StringIO()):
             yield FakeClient(world, "main")
     finally:
-        agent.connect, agent.time = saved
+        agent.connect = saved_connect
+        for module, original in saved_time:
+            module.time = original
+        if adapter_cls is not None:
+            adapter_cls.connect = saved_adapter_connect
         agent.forget_ground_reference()
 
 

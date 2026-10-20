@@ -53,6 +53,58 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
+# The research modules live beside `baseline/`. Run as a script, Python puts only
+# this file's folder on the path, so add the repository root.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+# PHASE 2: execution now lives in agentic_uav/, behind a VehicleAdapter. These
+# names are re-exported so every caller of this module -- the runner, the
+# sandbox, the tests -- keeps working unchanged.
+from agentic_uav.control import executor as _executor  # noqa: E402
+from agentic_uav.control.contacts import (  # noqa: E402,F401
+    CAMERA_OBJECTS,
+    GROUND_OBJECTS,
+    LANDING_CONTACT_WINDOW,
+    classify_contact,
+    is_ground,
+    landing_contact,
+)
+from agentic_uav.control.executor import (  # noqa: E402,F401
+    AIRBORNE_MARGIN,
+    CRUISE_ALTITUDE,
+    FLY_TO_TIMEOUT,
+    GROUND_SETTLE_TIMEOUT,
+    GROUND_SETTLE_TOLERANCE,
+    LAND_DESCENT_TIMEOUT,
+    LAND_TIMEOUT,
+    LANDED_AGL_MAX,
+    MOVE_SPEED,
+    TAKEOFF_SETTLE,
+    DroneRunner,
+)
+from agentic_uav.control.ground import (  # noqa: E402,F401
+    _GROUND_REFERENCE,
+    GROUND_BARRIER_TIMEOUT,
+    GROUND_REFERENCE_TOLERANCE,
+    GROUND_SPREAD_TOLERANCE,
+    GroundReferenceError,
+    check_ground_reference,
+    forget_ground_reference,
+    register_ground,
+    validate_grounds,
+)
+from agentic_uav.control.monitor import SeparationMonitor  # noqa: E402,F401
+from agentic_uav.core.errors import PlanError  # noqa: E402,F401
+from agentic_uav.simulator import scenario_manager as _scenario  # noqa: E402
+from agentic_uav.simulator.airsim_adapter import AirSimAdapter  # noqa: E402
+from agentic_uav.simulator.scenario_manager import (  # noqa: E402,F401
+    SPACING,
+    ForeignVehicleError,
+    foreign_vehicles,
+)
+
 # ----------------------------------------------------------------- constants
 
 MODEL = "llama3.2:3b"
@@ -140,184 +192,12 @@ OLLAMA_OPTIONS = {
     "num_thread": 12,
 }
 
-CRUISE_ALTITUDE = -8.0   # metres, NED: negative is up
-SPACING = 4.0            # metres between drones at spawn, on X
-MOVE_SPEED = 5.0         # m/s for every directional move
-TAKEOFF_SETTLE = 3.0     # seconds to let takeoff stabilise before the plan runs
-GROUND_SETTLE_TIMEOUT = 15.0   # seconds to wait for the drone to stop falling
-GROUND_SETTLE_TOLERANCE = 0.05 # metres of movement per sample that counts as still
 
 AIRSIM_PORT = 41451
 MAX_DURATION = 60.0      # seconds; a single leg longer than this is rejected
 MAX_ALTITUDE = -120.0    # metres NED; roughly the legal ceiling for small UAS
 MIN_ALTITUDE = -2.0      # metres NED; below this is effectively ground level
 
-# How far above its arming height the vehicle must be for teardown to treat it
-# as airborne and land it first. Disarming while airborne cuts the motors.
-AIRBORNE_MARGIN = 1.0    # metres
-
-# How close to the end of a flight a polled ground contact must be to count as
-# evidence of landing. Generous enough to cover the teardown descent and the
-# offset between the monitor's clock and one drone's flight, far enough from the
-# start to exclude the reset drop, which also touches the ground.
-LANDING_CONTACT_WINDOW = 8.0   # seconds
-
-# Bounds on `land`, because an unbounded one does not merely fail -- it strands an
-# armed aircraft in mid air and never returns. Seen three times on 2026-10-06.
-# A descent from 60 m at 2 m/s is 30 s, so 90 s cannot cut a legitimate one short.
-FLY_TO_TIMEOUT = 90.0         # seconds for one fly_to leg; 300 m at 5 m/s is 60 s
-LAND_DESCENT_TIMEOUT = 45.0   # seconds for the controlled descent
-LAND_TIMEOUT = 20.0           # seconds for landAsync itself
-LANDED_AGL_MAX = 3.0          # metres; above this, `land` did not land
-
-# How far a run's measured ground may differ from the first run's before the run
-# is refused. reset_world() returns every vehicle to the same pose, so the ground
-# under a given drone is a constant for the session; a disagreement means the
-# measurement is wrong, not that the ground moved.
-GROUND_REFERENCE_TOLERANCE = 2.0   # metres
-
-# How far two DIFFERENT drones' grounds may differ. They spawn SPACING metres
-# apart on one patch of terrain, so this is relief, not frame error. Wider than
-# the per-drone tolerance because the terrain genuinely varies: 29.25, 29.28 and
-# 27.29 were measured across the four M10 spawn points, a 1.99 m spread.
-GROUND_SPREAD_TOLERANCE = 5.0      # metres
-
-# Per-vehicle ground height, first measured wins. Guarded because DroneRunner
-# threads arm concurrently.
-_GROUND_REFERENCE: dict[str, float] = {}
-_GROUND_LOCK = threading.Lock()
-
-
-class GroundReferenceError(RuntimeError):
-    """Raised when a run's measured ground disagrees with the session's.
-
-    This exists because the failure it catches is silent. `arm()` infers the
-    ground from the aircraft standing still, and an aircraft held motionless in
-    mid air stands just as still as one on the ground -- observed reporting
-    "armed, ground z = -0.18" against a true 29.25, with ground_settled true.
-    Every altitude in the run is then offset by the error, and nothing in the
-    record contradicts it. Refusing the run is the point: the plan is already
-    recorded, and a flight measured against a wrong ground is worse than no
-    flight.
-    """
-
-
-# Raw readings for this run, before any of them is trusted. The barrier below
-# exists because a reading can only be judged against the others, and the others
-# are not known until every drone has armed.
-_GROUND_RAW: dict[str, float] = {}
-GROUND_BARRIER_TIMEOUT = 30.0   # seconds to wait for the other drones to arm
-
-
-def register_ground(name: str, ground_z: float) -> None:
-    """Record what `name` measured, without judging it yet."""
-    with _GROUND_LOCK:
-        _GROUND_RAW[name] = ground_z
-
-
-def validate_grounds(name: str) -> None:
-    """Refuse this run if `name`'s reading cannot be right.
-
-    Called after every drone in the run has registered, so the comparison is
-    against a complete set. An aircraft can only be AT or ABOVE the ground, and
-    in NED a larger z is lower, so the deepest reading in the scene is the best
-    evidence of where the ground is. A reading sitting well above it was taken in
-    mid air.
-
-    This refuses rather than substituting. The deepest reading belongs to another
-    drone over its own terrain, so it is not this drone's ground either -- it is
-    only proof that this drone's number is wrong. Flying a mission against a
-    guess would produce data that looks valid, which is the failure mode this
-    whole area of the code exists to prevent.
-    """
-    with _GROUND_LOCK:
-        readings = dict(_GROUND_RAW)
-    mine = readings.get(name)
-    if mine is None or len(readings) < 2:
-        return
-    deepest_name, deepest = max(readings.items(), key=lambda kv: kv[1])
-    if deepest - mine > GROUND_SPREAD_TOLERANCE:
-        raise GroundReferenceError(
-            f"{name}: measured ground z = {mine:.2f}, which is "
-            f"{deepest - mine:.2f} m above the ground {deepest_name} found in "
-            f"the same scene ({deepest:.2f}, tolerance "
-            f"{GROUND_SPREAD_TOLERANCE}). An aircraft cannot be below the "
-            f"ground, so this was measured in mid air. Refusing to fly: all "
-            f"readings this run were "
-            + ", ".join(f"{k}={v:.2f}" for k, v in sorted(readings.items()))
-        )
-
-
-def forget_ground_reference(name: str | None = None) -> None:
-    """Drop the cached ground, for one vehicle or all. For tests and restarts."""
-    with _GROUND_LOCK:
-        if name is None:
-            _GROUND_REFERENCE.clear()
-            _GROUND_RAW.clear()
-        else:
-            _GROUND_REFERENCE.pop(name, None)
-            _GROUND_RAW.pop(name, None)
-
-
-def check_ground_reference(name: str, ground_z: float) -> float:
-    """Record or verify the ground for `name`. Returns the session reference.
-
-    Checks against this drone's own history AND against the other drones in the
-    scene. The per-drone check alone has a hole: a drone's FIRST reading becomes
-    the reference and is never questioned. Measured 2026-10-06, two drones armed
-    seconds apart in the same world -- `Drone1 ground z = 29.25` and
-    `Drone3 ground z = -0.28`. Drone3's was its first, so it was accepted, and
-    Drone3 then flew its 18 m leg at about 50 m.
-
-    Drones spawn SPACING metres apart on one patch of ground, so their ground
-    heights differ by terrain relief, not by 29 m. The disagreement is the signal.
-    """
-    with _GROUND_LOCK:
-        reference = _GROUND_REFERENCE.get(name)
-        if reference is None:
-            others = {k: v for k, v in _GROUND_REFERENCE.items() if k != name}
-            # WHICH reading is wrong, not merely which arrived second. In NED a
-            # larger z is lower, and an aircraft can only ever be AT or ABOVE the
-            # ground -- so of two disagreeing readings the LARGER is nearer the
-            # true ground, and a too-small one belongs to an aircraft that never
-            # came down. Refusing the later arrival instead got this backwards in
-            # flight on 2026-10-06: Drone3 armed first with -0.23, became the
-            # reference, and Drone1's correct 29.25 was the one refused.
-            deepest = max(others.items(), key=lambda kv: kv[1], default=None)
-            if deepest is not None and deepest[1] - ground_z > GROUND_SPREAD_TOLERANCE:
-                raise GroundReferenceError(
-                    f"{name}: measured ground z = {ground_z:.2f}, which is "
-                    f"{deepest[1] - ground_z:.2f} m ABOVE the ground "
-                    f"{deepest[0]} found in the same scene ({deepest[1]:.2f}, "
-                    f"tolerance {GROUND_SPREAD_TOLERANCE}). An aircraft cannot "
-                    f"be below the ground, so this reading was taken in mid "
-                    f"air. Refusing to fly."
-                )
-            lowest = min(others.values(), default=None)
-            if lowest is not None and ground_z - lowest > GROUND_SPREAD_TOLERANCE:
-                # This reading is the lower one, so it is the credible one and the
-                # drones already registered are the suspects. Adopt it and correct
-                # them, loudly: a run already refused is better than one flown
-                # against a ground 29 m in the air.
-                stale = {k: v for k, v in _GROUND_REFERENCE.items()
-                         if ground_z - v > GROUND_SPREAD_TOLERANCE}
-                for k in stale:
-                    _GROUND_REFERENCE.pop(k, None)
-                print(f"  [ground] {name} found ground at {ground_z:.2f}; "
-                      f"discarding higher readings from "
-                      f"{', '.join(f'{k}={v:.2f}' for k, v in stale.items())}",
-                      flush=True)
-            _GROUND_REFERENCE[name] = ground_z
-            return ground_z
-    if abs(ground_z - reference) > GROUND_REFERENCE_TOLERANCE:
-        raise GroundReferenceError(
-            f"{name}: measured ground z = {ground_z:.2f}, but this session "
-            f"established {reference:.2f} ({abs(ground_z - reference):.2f} m "
-            f"apart, tolerance {GROUND_REFERENCE_TOLERANCE}). The aircraft was "
-            f"probably held in mid air while the ground was measured. Refusing "
-            f"to fly rather than record altitudes against a wrong ground."
-        )
-    return reference
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOG_PATH = os.path.join(REPO_ROOT, "runs", "agent-log.jsonl")
@@ -401,10 +281,6 @@ EXAMPLES = [
 
 # ------------------------------------------------------------------- results
 
-class PlanError(Exception):
-    """A plan that cannot be flown safely or at all."""
-
-
 @dataclass
 class PlanRecord:
     """One planning call, as it is logged."""
@@ -440,228 +316,6 @@ class PlanRecord:
             "transport_error": self.transport_error,
             "error": self.error,
             "normalised": self.normalised,
-        }
-
-
-# Object names AirSim reports for ground contact. Touching these on landing is
-# the mission working, not a fault, so they are classified separately.
-GROUND_OBJECTS = ("terrain", "ground", "landscape", "road", "sidewalk",
-                  # Town10HD's player start rests on this mesh. The aircraft was
-                  # measured sitting on it at 0.00 m AGL with contact reported,
-                  # so it is the floor however it is named.
-                  "sm_seam")
-
-
-def is_ground(object_name: str) -> bool:
-    """True if a collision object is the ground rather than an obstacle."""
-    lowered = (object_name or "").lower()
-    return any(marker in lowered for marker in GROUND_OBJECTS)
-
-
-# The free camera. It is an actor in the level and the drones collide with it,
-# which says nothing about the flight -- measured 2026-10-06, Drone3 reporting
-# 0.14 m of penetration against it mid-mission. A simulator artifact, counted
-# separately so it cannot inflate an obstacle count.
-CAMERA_OBJECTS = ("spectatorpawn", "cameraactor", "defaultpawn")
-
-
-def landing_contact(drone: str, flight_seconds: float,
-                    polled: Iterable[dict]) -> dict | None:
-    """The polled ground contact that shows `drone` finished on the ground.
-
-    Returns the contact, or None if there isn't one. Pure: no simulator, no
-    clock, so it can be tested.
-
-    A flight touches the ground twice. Once near the START, when `reset_world`
-    drops the aircraft at the map origin and it falls -- that proves nothing
-    about how the flight ended. And once at the END, on landing. Only the
-    second counts, which is what the window is for.
-    """
-    cutoff = flight_seconds - LANDING_CONTACT_WINDOW
-    late = [c for c in polled
-            if c.get("drone") == drone
-            and c.get("is_ground")
-            and c.get("last_at_s", -1) >= cutoff]
-    return late[-1] if late else None
-
-
-def classify_contact(object_name: str, drones: Iterable[str] = ()) -> str:
-    """One of "ground", "drone", "camera" or "obstacle".
-
-    Four categories rather than two, because "not ground" turned out to mean
-    four different things and only one of them is a flight defect:
-
-    - **ground** — the surface. `SM_seaM` is included by name: it is what the
-      aircraft rests on at Town10HD's player start, measured sitting on it at
-      0.00 m AGL with the physics engine reporting contact. Naming a map mesh in
-      a general predicate is unlovely, but calling the floor an obstacle is a
-      worse answer, and the alternative is a claim that every landing is a crash.
-    - **drone** — another aircraft. The thing M09 and M10 exist to measure, and
-      not an "obstacle" in the sense section 1.3 means.
-    - **camera** — the spectator pawn. An artifact of someone watching.
-    - **obstacle** — anything else: a building, a vehicle, a tree. The only
-      category that counts against a flight.
-    """
-    lowered = (object_name or "").lower()
-    if not lowered:
-        return "obstacle"
-    if any(d.lower() in lowered for d in drones):
-        return "drone"
-    if any(marker in lowered for marker in CAMERA_OBJECTS):
-        return "camera"
-    if is_ground(object_name):
-        return "ground"
-    return "obstacle"
-
-
-class SeparationMonitor:
-    """Samples inter-drone distance AND collisions while a mission flies.
-
-    Section 1.3 asks for "collision or proximity events". NEITHER is visible from
-    the start and end states: the closest approach happens in between, and
-    AirSim keeps only the most recent collision, which the landing overwrites.
-    Both have to be watched while the flight is happening.
-
-    Runs in its own thread at a fixed interval and keeps only the minimum
-    separation seen and when it happened -- enough to answer "did they come
-    dangerously close", without writing a position trace per sample.
-
-    There is no collision avoidance anywhere in this stack. Vertical staggering
-    and spawn spacing are the only separation M09 and M10 have, so this is the
-    measurement that says whether that was enough.
-    """
-
-    def __init__(self, client, names: list[str], interval: float = 0.1) -> None:
-        self.client = client
-        self.names = names
-        self.interval = interval
-        self.min_distance: float | None = None
-        self.min_at: float | None = None
-        # Per pair as well as overall. M10 reported a single 4.0 m minimum for a
-        # flight in which two drones interpenetrated by 0.115 m, because one
-        # overall figure cannot say WHICH pair was close, and the pair that
-        # collided was not the pair that set the minimum. Six pairs at four
-        # drones, and only one of them mattered.
-        self.pair_min: dict[str, float] = {}
-        self.pair_min_at: dict[str, float] = {}
-        # Collisions have to be polled for the same reason proximity does: the
-        # end state does not contain them. `simGetCollisionInfo` returns only the
-        # MOST RECENT collision, and every flight that lands ends touching the
-        # ground, so a single read after teardown can never see a mid-flight
-        # collision -- it has already been overwritten. Measured 2026-10-06: a
-        # 10 Hz trace caught Drone1 and Drone3 in contact in two of three M10
-        # runs, penetration to 0.152 m, while all three records said
-        # `collision: false`. The pre-fix M10 recorded that same contact only
-        # because the flight never landed.
-        self._by_pair: dict[tuple[str, str], dict[str, Any]] = {}
-        self._seen: set[tuple[str, Any]] = set()
-        self.samples = 0
-        self.errors = 0
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
-        self._started = 0.0
-
-    def _positions(self) -> dict[str, tuple[float, float, float]]:
-        found = {}
-        for name in self.names:
-            state = self.client.getMultirotorState(vehicle_name=name)
-            p = state.kinematics_estimated.position
-            found[name] = (p.x_val, p.y_val, p.z_val)
-        return found
-
-    def _collisions(self) -> None:
-        """Record every distinct collision, once each, as it happens."""
-        for name in self.names:
-            info = self.client.simGetCollisionInfo(vehicle_name=name)
-            if not getattr(info, "has_collided", False):
-                continue
-            stamp = getattr(info, "time_stamp", None)
-            if (name, stamp) in self._seen:
-                continue
-            self._seen.add((name, stamp))
-            obj = getattr(info, "object_name", "") or ""
-            at = round(time.time() - self._started, 2)
-            pen = round(float(getattr(info, "penetration_depth", 0.0)), 3)
-            # Collapsed per (drone, object). Sustained contact produces a new
-            # timestamp every poll: one stalled flight on 2026-10-06 recorded
-            # 3256 events, which would bury the record it is meant to inform.
-            # First seen, last seen, how many and the worst penetration say
-            # everything those 3256 rows said.
-            existing = self._by_pair.get((name, obj))
-            if existing is None:
-                self._by_pair[(name, obj)] = {
-                    "drone": name,
-                    "object": obj,
-                    "kind": classify_contact(obj, self.names),
-                    "is_ground": is_ground(obj),
-                    "events": 1,
-                    "first_at_s": at,
-                    "last_at_s": at,
-                    "max_penetration_depth": pen,
-                }
-            else:
-                existing["events"] += 1
-                existing["last_at_s"] = at
-                existing["max_penetration_depth"] = max(
-                    existing["max_penetration_depth"], pen)
-
-    @property
-    def contacts(self) -> list[dict[str, Any]]:
-        """One row per (drone, object) pair, in the order first seen."""
-        return sorted(self._by_pair.values(), key=lambda c: c["first_at_s"])
-
-    def _run(self) -> None:
-        while not self._stop.is_set():
-            try:
-                self._collisions()
-                positions = self._positions()
-                self.samples += 1
-                names = list(positions)
-                for i in range(len(names)):
-                    for j in range(i + 1, len(names)):
-                        a, b = positions[names[i]], positions[names[j]]
-                        distance = math.dist(a, b)
-                        at = round(time.time() - self._started, 1)
-                        pair = f"{names[i]}-{names[j]}"
-                        if distance < self.pair_min.get(pair, float("inf")):
-                            self.pair_min[pair] = distance
-                            self.pair_min_at[pair] = at
-                        if self.min_distance is None or distance < self.min_distance:
-                            self.min_distance = distance
-                            self.min_at = at
-            except Exception:
-                # A sampling failure must never disturb a flight; count it so a
-                # monitor that silently failed cannot look like a clean run.
-                self.errors += 1
-            self._stop.wait(self.interval)
-
-    def start(self) -> None:
-        # Runs for a single drone too. Separation needs two, but collisions need
-        # only one, and a single-drone mission was previously unpolled -- so the
-        # 24 single-drone runs flown on 2026-10-06 cannot support a collision
-        # claim either.
-        if not self.names:
-            return
-        self._started = time.time()
-        self._thread = threading.Thread(target=self._run, daemon=True)
-        self._thread.start()
-
-    def stop(self) -> dict[str, Any]:
-        self._stop.set()
-        if self._thread:
-            self._thread.join(timeout=5.0)
-        return {
-            "measured": self._thread is not None,
-            "samples": self.samples,
-            "sample_errors": self.errors,
-            "min_separation_m": None if self.min_distance is None else round(self.min_distance, 2),
-            "min_separation_at_s": self.min_at,
-            "interval_s": self.interval,
-            "per_pair_min_m": {k: round(v, 2) for k, v in sorted(self.pair_min.items())},
-            "per_pair_min_at_s": dict(sorted(self.pair_min_at.items())),
-            "collisions_polled": self.contacts,
-            "drone_collisions": [c for c in self.contacts if c["kind"] == "drone"],
-            "obstacle_collisions": [c for c in self.contacts if c["kind"] == "obstacle"],
         }
 
 
@@ -1090,544 +744,35 @@ def plan_for(instruction: str, drone: str, model: str = MODEL,
 
 # ----------------------------------------------------------------- execution
 
-class DroneRunner:
-    """Flies one validated plan to completion. No decisions are taken here.
-
-    THIS CLASS IS THE OPEN LOOP. It receives a finished plan and executes it
-    step by step, never consulting the model, never re-examining the world, and
-    never abandoning a step because circumstances changed. Adding any of that
-    would make it a different architecture -- which is what Phase 5 onward is
-    for, in a different directory.
-
-    One instance per drone, one thread per instance. The AirSim client is
-    SHARED across instances, which is the open question recorded in
-    phases/phase-01-baseline-freeze/: msgpack-rpc multiplexes one socket and is
-    not documented as thread-safe. If multi-drone runs misbehave, give each
-    runner its own client before suspecting anything else.
-    """
-
-    def __init__(self, client, name: str, barrier: Any = None) -> None:
-        self.client = client
-        self.name = name          # must match a vehicle in settings.json
-        # Set by fly_plans for a multi-drone run: every drone measures its ground,
-        # then waits here, then all of them are judged against the complete set.
-        # Without it the first drone to arm sets the reference unchallenged, and a
-        # bad first reading flies a whole mission -- measured 2026-10-06, Drone3
-        # arming at -0.18 before Drone1 found 29.25.
-        self.barrier = barrier
-        self.ground_z = 0.0       # filled in by arm(), used by land()
-        self.ground_settled = False   # did the drone stop falling before
-                                      # arm() read the ground? see arm()
-        # AirSim keeps the last collision across flights, so the timestamp seen
-        # at arm time is the baseline for "did anything hit during THIS run".
-        self._collision_at_arm: Any = None
-
-    def _say(self, message: str) -> None:
-        # flush=True because several threads print concurrently; without it the
-        # interleaving is buffered into nonsense.
-        print(f"[{self.name}] {message}", flush=True)
-
-    def collisions(self) -> dict[str, Any]:
-        """Collision state for this vehicle, as AirSim reports it.
-
-        Required by the plan: section 1.3 asks for "collision or proximity
-        events" per run, and nothing recorded them until now.
-
-        AirSim keeps only the MOST RECENT collision, not a tally, and it
-        persists across flights -- so the raw flag alone says nothing about
-        *this* run. `time_stamp` is compared against the value read at arm time
-        to decide whether the collision is new.
-
-        Ground contact is separated from obstacle contact, because **every
-        landing registers a terrain collision**: the first live capture returned
-        `Town10HD_Terrain_Ground_64` with zero penetration depth, which is a
-        drone sitting on the ground having landed correctly. Counting that as a
-        collision would make the metric meaningless.
-        """
-        try:
-            info = self.client.simGetCollisionInfo(vehicle_name=self.name)
-        except Exception as exc:
-            return {"available": False, "error": f"{type(exc).__name__}: {exc}"}
-
-        collided = bool(getattr(info, "has_collided", False))
-        stamp = getattr(info, "time_stamp", None)
-        name = getattr(info, "object_name", "") if collided else ""
-
-        record: dict[str, Any] = {
-            "available": True,
-            "has_collided": collided,
-            # Did this happen during this flight, or is it left over from the
-            # previous one? AirSim does not clear it between runs.
-            "new_this_flight": bool(collided and stamp != self._collision_at_arm),
-            "object": name,
-            "is_ground": is_ground(name),
-        }
-        if collided:
-            position = getattr(info, "impact_point", None)
-            record.update({
-                "penetration_depth": round(float(getattr(info, "penetration_depth", 0.0)), 3),
-                "time_stamp": stamp,
-                "impact_point": None if position is None else {
-                    "x": round(position.x_val, 2),
-                    "y": round(position.y_val, 2),
-                    "z": round(position.z_val, 2),
-                },
-            })
-        return record
-
-    def arm(self) -> None:
-        """Take control of the vehicle and record where the ground is."""
-        import airsim  # noqa: F401  (kept local so --plan-only needs no install)
-
-        # WAIT FOR THE DRONE TO STOP FALLING BEFORE BELIEVING THE GROUND.
-        #
-        # THIS MUST HAPPEN BEFORE enableApiControl. An unpowered drone falls to
-        # the ground and stops there, which is the number we want. An ARMED one
-        # does not: SimpleFlight catches it and holds it wherever it was. So
-        # waiting after arming measures a hover, not the ground -- it reports
-        # "settled" with complete confidence and is 17 m wrong. Measured
-        # 2026-09-29: armed mid-fall at z=12.17, the controller arrested the
-        # fall and held 12.20 indefinitely, 17.0 m above a ground at 29.25.
-        #
-        # Recorded before takeoff because this build has NO TERRAIN COLLISION:
-        # the drone passes through the ground, so landing cannot wait for a
-        # physical touchdown and must descend to a remembered height instead.
-        # That makes this one number decide where every landing ends, and for
-        # most of this project it has been wrong.
-        #
-        # client.reset() drops the drone at the player start, which sits about
-        # 25 m above the terrain, and it falls. reset_world() waited a fixed
-        # 2.0 s, which is not enough, so this line read a position taken in mid
-        # air. Measured 2026-09-29 over three M01 runs: ground_z of 12.07,
-        # 12.17 and 12.12 against a true ground of 29.25 -- an 18 m error,
-        # consistent every run because the fall is deterministic. Landing then
-        # descended to ground_z - 1.0 and stopped 18 m above the ground, which
-        # is the drone "hovering in the air" seen throughout this project.
-        # Block A recorded 10.87-11.02, the same error, so its 24 flights
-        # ended in mid air too.
-        #
-        # So sample until the drone stops moving rather than trusting a delay.
-        # The timeout means this can never hang; if it expires the value is
-        # used anyway but flagged, because a silently wrong number is what
-        # caused the problem in the first place.
-        #
-        # This is also the only simulator state the agent reads, and it never
-        # reaches the model. The agent is blind by design.
-        self.ground_settled = False
-        previous = self.client.getMultirotorState(
-            vehicle_name=self.name).kinematics_estimated.position.z_val
-        deadline = time.time() + GROUND_SETTLE_TIMEOUT
-        while time.time() < deadline:
-            time.sleep(0.3)
-            current = self.client.getMultirotorState(
-                vehicle_name=self.name).kinematics_estimated.position.z_val
-            if abs(current - previous) < GROUND_SETTLE_TOLERANCE:
-                previous = current
-                self.ground_settled = True
-                break
-            previous = current
-        self.ground_z = previous
-
-        # Cross-check against the session, and ADOPT what it returns. The settle
-        # loop cannot tell an aircraft resting on the ground from one held
-        # motionless above it, so this is the only thing standing between a bad
-        # reading and a whole run of altitudes measured against it.
-        #
-        # Adopting the return matters when another drone has already found a
-        # lower ground: this run then uses that one instead of its own. It does
-        # NOT help when the bad reading arms first -- measured 2026-10-06, Drone3
-        # arming with -0.18 before Drone1 found 29.25, and flying its whole
-        # mission against it. Only `land`'s own verification catches that, which
-        # it did: the run failed loudly rather than being recorded as valid. A
-        # barrier that armed every drone before fixing the ground would close it
-        # properly, and is not written yet.
-        register_ground(self.name, self.ground_z)
-        if self.barrier is not None:
-            # Wait for the others to measure. A broken or timed-out barrier is not
-            # fatal on its own: validate_grounds below still compares whatever was
-            # registered, and the per-drone history check still applies.
-            try:
-                self.barrier.wait(timeout=GROUND_BARRIER_TIMEOUT)
-            except Exception:
-                pass
-        validate_grounds(self.name)
-        self.ground_z = check_ground_reference(self.name, self.ground_z)
-
-        # Only now take control, with the drone at rest on the ground.
-        self.client.enableApiControl(True, vehicle_name=self.name)
-        self.client.armDisarm(True, vehicle_name=self.name)
-        try:
-            self._collision_at_arm = self.client.simGetCollisionInfo(
-                vehicle_name=self.name
-            ).time_stamp
-        except Exception:
-            self._collision_at_arm = None
-        self._say(f"armed, ground z = {self.ground_z:.2f}"
-                  + ("" if self.ground_settled else "  [DID NOT SETTLE]"))
-
-    def take_off(self) -> None:
-        """Lift off and settle at cruise height before the plan begins."""
-        self.client.takeoffAsync(vehicle_name=self.name).join()
-        # Every altitude is relative to the GROUND, not to z=0. Town10HD's
-        # ground sits at NED z = +29.25, so a bare moveToZAsync(-8) climbs to
-        # 37.5 m rather than 8 m. Measured 2026-10-06; see the phase log.
-        self.client.moveToZAsync(
-            self.ground_z + CRUISE_ALTITUDE, MOVE_SPEED, vehicle_name=self.name).join()
-        # Settle before executing: a velocity command issued mid-climb produces
-        # a curve rather than the straight leg the plan describes.
-        time.sleep(TAKEOFF_SETTLE)
-
-    def _velocity(self, vx: float, vy: float, duration: float) -> None:
-        """Fly a body-frame velocity leg at a HELD altitude, then stop.
-
-        Body frame means vx is forward RELATIVE TO THE DRONE'S HEADING, not
-        north. Since nothing in this agent ever yaws, the two coincide here --
-        but a future change that adds turning will make them diverge.
-
-        Vertical drift during a leg is a known, UNFIXED defect, and its cause is
-        NOT this call. vz = 0 commands zero vertical velocity rather than a held
-        height, which costs about a metre -- measured 2026-10-06 on one drone,
-        same 5 s leg from 18 m: backward +1.24 m, forward +1.40 m.
-
-        But M10's Drone3 gains +14.6 m on this same leg, three runs running, and
-        THAT IS NOT DRIFT -- do not try to fix it here. Traced at 10 Hz: the
-        aircraft holds 19.9-20.0 m for three seconds and then goes 19.96 ->
-        32.62 between t+18.06 and t+18.50. 12.7 m in 0.44 s, about 29 m/s, at a
-        commanded 5 m/s, arriving at Drone1's altitude while its x continues
-        smoothly. One discontinuity, not a climb.
-
-        It needs backward flight AND other vehicles present: flying Drone3
-        forward in the same four-drone layout gives 1.85 m and zero contacts,
-        and one drone flying backward alone gives 1.24 m. Cause unknown.
-
-        Two things known, for whoever picks this up:
-
-        - `moveByVelocityZBodyFrameAsync`, holding the current z, was tried and
-          made it worse: Drone3 still climbed to 31.42 m and the run hung in
-          `land`, Drone1 released at 31.18 m and falling. Reverted.
-        - `moveByVelocityZAsync` in the WORLD frame measured better on both axes
-          than this call: +0.16 m of drift against +1.24 m, and 23.58 m travelled
-          against 15.57 m for a leg asking 25. Body-frame velocity under-travels
-          to 62% of the commanded distance, which nothing scores. World frame is
-          equivalent here only because nothing in this agent yaws.
-
-        That hypothesis -- no settle after `set_altitude`, so the leg inherits
-        climb momentum -- was TESTED and is insufficient: no settle drifts
-        +1.85 m with -4.17 m/s at the leg start, a 3 s settle drifts +1.06 m.
-        Worth 0.8 m of the 14 m, so worth doing on its own merits and not the
-        cause.
-
-        The whole four-drone case reproduces through `fly_plans` with hand-built
-        PlanRecords and no model -- Drone3 drifting 14.06 m against 14.6 -- so
-        bisecting this needs a simulator and nothing else.
-
-        See the phase log for 2026-10-06.
-        """
-        self.client.moveByVelocityBodyFrameAsync(
-            vx, vy, 0.0, duration, vehicle_name=self.name
-        ).join()
-        # Velocity commands do not brake -- they expire and the aircraft coasts.
-        # Without this hover, every leg overshoots by however far momentum
-        # carries it, and the overshoot compounds across a multi-step plan.
-        self.client.hoverAsync(vehicle_name=self.name).join()
-
-    def step(self, step: dict[str, Any]) -> None:
-        """Execute one validated plan step.
-
-        One branch per action. Adding an action means adding a branch HERE as
-        well as to ACTIONS, PLAN_SCHEMA, SYSTEM_PROMPT and validate() -- five
-        places, or the model will emit something this method cannot fly.
-
-        Every call is synchronous (`.join()`): within one drone the plan is a
-        sequence, and concurrency happens between drones, not inside one.
-        """
-        action = step["action"]
-        if action == "fly_straight":
-            self._velocity(MOVE_SPEED, 0.0, step["duration"])
-        elif action == "fly_backward":
-            self._velocity(-MOVE_SPEED, 0.0, step["duration"])
-        elif action == "fly_right":
-            self._velocity(0.0, MOVE_SPEED, step["duration"])
-        elif action == "fly_left":
-            self._velocity(0.0, -MOVE_SPEED, step["duration"])
-        elif action == "hover":
-            self.client.hoverAsync(vehicle_name=self.name).join()
-            time.sleep(step["duration"])
-        elif action == "set_altitude":
-            # ground_z-relative: the plan says "30 m up", which means 30 m above
-            # the ground the drone armed on, not 30 m above the map origin.
-            self.client.moveToZAsync(
-                self.ground_z + step["z"], MOVE_SPEED, vehicle_name=self.name).join()
-        elif action == "fly_to":
-            # BOUNDED, for the same reason `land` is. An unbounded
-            # moveToPositionAsync against an obstacle does not fail -- it waits
-            # forever, holding the worker thread, which holds the main thread,
-            # which makes Ctrl-C impossible because the interrupt cannot be
-            # delivered into a blocked RPC call. Observed 2026-10-09: two drones
-            # pinned against a hotel at 5 m/s, and the only exit was killing the
-            # simulator.
-            #
-            # The timeout is generous: a 300 m leg at MOVE_SPEED is 60 s, so this
-            # cannot cut short a journey that was going to arrive.
-            self.client.moveToPositionAsync(
-                float(step["x"]), float(step["y"]),
-                self.ground_z + float(step.get("z", CRUISE_ALTITUDE)),
-                MOVE_SPEED, timeout_sec=FLY_TO_TIMEOUT, vehicle_name=self.name,
-            ).join()
-        elif action == "land":
-            # Descend to just above the remembered ground height first, slowly
-            # (2 m/s rather than MOVE_SPEED), then hand over to landAsync. Going
-            # straight to landAsync from cruise means a fast descent onto a
-            # surface the physics does not model.
-            self.client.moveToZAsync(
-                self.ground_z - 1.0, 2.0, timeout_sec=LAND_DESCENT_TIMEOUT,
-                vehicle_name=self.name
-            ).join()
-            self.client.landAsync(
-                timeout_sec=LAND_TIMEOUT, vehicle_name=self.name).join()
-            # VERIFY, and raise if it did not land. Both calls above can return
-            # having moved the aircraft nowhere: measured 2026-10-06, moveToZAsync
-            # running 27.1 s and returning with the aircraft still at 54.17 m when
-            # asked for 1 m, then landAsync returning in 0.2 s from the same
-            # place, after which control was released and the aircraft was left
-            # airborne.
-            #
-            # Raising matters more than it looks. Teardown skips its own landing
-            # when the plan's last step was a successful `land` -- `skip_landing`
-            # is passed exactly then -- so a `land` that reports success without
-            # landing disables the one safeguard against releasing control in
-            # mid air. Failing here makes teardown do its job.
-            agl = self._agl()
-            if agl is not None and agl > LANDED_AGL_MAX:
-                raise PlanError(
-                    f"land did not descend: {agl:.2f} m above ground "
-                    f"(target {LANDED_AGL_MAX} m). The aircraft is still flying.")
-        else:  # unreachable: validate() rejects unknown actions
-            raise PlanError(f"unhandled action {action!r}")
-
-    def fly(self, steps: list[dict[str, Any]]) -> dict[str, Any]:
-        """Arm, take off, execute the whole plan, then land and release control.
-
-        Returns an execution record: which steps ran, which failed, and how long
-        it took. The plan record says what the model produced; this says what the
-        aircraft did, and 1.3 needs both -- a correct plan that fails in flight
-        is not a successful mission.
-
-        This is the thread body. It never raises: an exception here would die
-        inside a worker thread where nobody sees it, leaving the vehicle armed
-        and under API control with no way to fly it manually. So failures are
-        caught, reported, and teardown runs in `finally` regardless.
-
-        Teardown lands the aircraft if it is still airborne -- see
-        `_land_and_release`. That landing is NOT a plan step and is not scored.
-
-        The plan is executed to the end. A step that fails does NOT cancel the
-        rest -- open loop means exactly that, and pretending otherwise would
-        quietly make this a different architecture.
-        """
-        started = time.time()
-        executed: list[str] = []
-        altitudes: list[dict[str, Any]] = []
-        failure: str | None = None
-        try:
-            self.arm()
-            self.take_off()
-            altitudes.append({"after": "take_off", "agl": self._agl()})
-            for position, step in enumerate(steps, start=1):
-                self._say(f"{position}/{len(steps)} {step['action']}")
-                self.step(step)
-                executed.append(step["action"])
-                # Read immediately: moveToZAsync has joined, so this is the
-                # height the step actually achieved, against the height asked
-                # for. A set_altitude step records both and they must agree.
-                altitudes.append({
-                    "after": step["action"],
-                    "agl": self._agl(),
-                    "asked_agl": (round(-float(step["z"]), 2)
-                                  if step["action"] == "set_altitude" else None),
-                })
-            # A plan without a final land leaves the drone airborne. Hover to
-            # stop it drifting on whatever velocity the last step left behind;
-            # teardown then brings it down.
-            if steps[-1]["action"] != "land":
-                self._say("plan ended without land; holding")
-                self.client.hoverAsync(vehicle_name=self.name).join()
-        except Exception as exc:
-            failure = f"{type(exc).__name__}: {exc}"
-            self._say(f"FAILED: {failure}")
-        finally:
-            # If the plan's last step was a successful `land`, the aircraft is
-            # already coming down and teardown must not land it again. Trusting
-            # the plan beats polling the vehicle: `landAsync` returns before
-            # AirSim updates `landed_state`, so a state check right here reports
-            # "flying" for an aircraft that is metres off the ground and
-            # descending.
-            ended_landed = bool(executed) and executed[-1] == "land" and failure is None
-            self._land_and_release(skip_landing=ended_landed)
-
-        # Read once, after teardown, and used twice: to decide whether the
-        # aircraft is on the ground, and in the record. Calling it twice would
-        # risk the two disagreeing.
-        collision = self.collisions()
-
-        # Where the aircraft actually finished. Recorded because for most of
-        # this project every flight ended roughly 17 m above the ground and
-        # nothing in the data showed it -- the run said "completed", the plan
-        # was correct, and the only witness was somebody watching the screen.
-        # A record that cannot show a drone hovering in mid air is not evidence.
-        try:
-            final = self.client.simGetVehiclePose(self.name).position
-            final_position = {"x": round(final.x_val, 2),
-                              "y": round(final.y_val, 2),
-                              "z": round(final.z_val, 2)}
-            # TWO WAYS TO BE ON THE GROUND, because one of them is not enough.
-            #
-            # The height test compares against ground_z, which was read where
-            # the drone ARMED. That is only the right reference if the terrain
-            # is flat between there and wherever it came down, and Town10HD is
-            # not. Measured 2026-10-06: a landed drone rests about 1.2 m above
-            # its arming ground_z, so a 1.5 m window leaves only 0.3 m of
-            # margin -- and M05, which flies 25 m out, landed on terrain 0.8 m
-            # higher and read 1.99 m. Three perfectly good flights were flagged
-            # as not having landed.
-            #
-            # So the simulator's own terrain contact is accepted as proof. If
-            # the physics engine says the aircraft is touching ground, it has
-            # landed, whatever a height taken 25 m away suggests. is_ground()
-            # already separates terrain from obstacles, which is what makes
-            # this safe: hitting a building would not satisfy it.
-            touching_ground = bool(collision.get("has_collided")
-                                   and collision.get("is_ground"))
-            landed_on_ground = abs(final.z_val - self.ground_z) < 1.5 or touching_ground
-        except Exception:
-            final_position, landed_on_ground = None, None
-
-        return {
-            "drone": self.name,
-            "planned": [s["action"] for s in steps],
-            "executed": executed,
-            # Completed means every step ran, not that the outcome was correct.
-            "completed": len(executed) == len(steps) and failure is None,
-            "failure": failure,
-            "flight_seconds": round(time.time() - started, 1),
-            "ground_z": round(self.ground_z, 2),
-            "step_altitudes_agl": altitudes,
-            "final_position": final_position,
-            # True if the aircraft ended near its own ground height OR the
-            # simulator reports it touching terrain. See the note above.
-            "landed_on_ground": landed_on_ground,
-            # False means the drone was still moving when the ground was
-            # read, so every altitude in this run is suspect.
-            "ground_settled": self.ground_settled,
-            # Read after teardown so a collision during the landing is caught.
-            "collision": collision,
-        }
-
-    def _agl(self) -> float | None:
-        """Height above the arming ground, in metres. None if unreadable.
-
-        Recorded after every step because the record could previously show where
-        a flight ENDED but never how high it went, which is exactly how an
-        altitude error of 29.25 m survived 30 runs and four sessions: every plan
-        was correct, every flight completed, and no field disagreed.
-        """
-        try:
-            z = self.client.getMultirotorState(
-                vehicle_name=self.name).kinematics_estimated.position.z_val
-            return round(self.ground_z - z, 2)
-        except Exception:
-            return None
-
-    def _is_airborne(self) -> bool:
-        """True if the vehicle still needs landing before control is released.
-
-        Asks AirSim for its landed state first. A height comparison alone is
-        unreliable here: `landAsync` returns before the aircraft has fully
-        settled, so a plan ending in `land` looked airborne to a z-check and got
-        landed a second time -- harmless, but it added a redundant descent to
-        every mission that lands, and would have appeared in every 1.3 run and
-        every recording.
-        """
-        try:
-            state = self.client.getMultirotorState(vehicle_name=self.name)
-        except Exception:
-            # If the state cannot be read, assume airborne: attempting a landing
-            # that was not needed is harmless, skipping one that was is not.
-            return True
-
-        # HEIGHT IS AUTHORITATIVE, not LandedState. AirSim reports
-        # LandedState = Landed for a motionless vehicle regardless of height:
-        # measured 2026-10-06 with the aircraft hovering at 29.43 m above the
-        # terrain and reporting Landed, and again on an M01 run that released
-        # control at 9.32 m and dropped the aircraft. That is the same failure
-        # `_land_and_release` was written to prevent, reintroduced by trusting
-        # the field.
-        #
-        # The redundant-descent problem that motivated LandedState is already
-        # handled by `skip_landing`, which the caller passes when the plan's own
-        # last step was a successful `land` -- so height can be trusted here
-        # without bringing it back. NED: more negative is higher.
-        if state.kinematics_estimated.position.z_val < self.ground_z - AIRBORNE_MARGIN:
-            return True
-
-        # Low enough to be down. Defer to LandedState if it disagrees, since a
-        # needless landing is harmless and a skipped one is not.
-        landed_state = getattr(state, "landed_state", None)
-        return landed_state is not None and landed_state != 0
-
-    def _land_and_release(self, skip_landing: bool = False) -> None:
-        """Bring the aircraft down, then hand control back.
-
-        `skip_landing` is passed when the plan itself ended with a successful
-        `land`, so the descent is already under way.
-
-        THIS IS TEARDOWN, NOT PART OF THE PLAN. It runs after the plan has
-        finished, or after it failed, and it is not scored: the plan is what the
-        model produced, and landing safely afterwards is the harness's job.
-
-        It exists because disarming cuts the motors. Doing that while the
-        aircraft is hovering -- which is exactly how a plan without a final
-        `land` ends -- drops it out of the sky. Found on the first real flight:
-        M01 took off, flew its leg, held position, and then fell when control
-        was released.
-        """
-        try:
-            if not skip_landing and self._is_airborne():
-                self._say("teardown: landing before releasing control")
-                self.step({"action": "land"})
-        except Exception as exc:
-            # Report and continue to the release: leaving the vehicle armed and
-            # under API control is worse than an ungraceful landing.
-            self._say(f"teardown landing failed: {type(exc).__name__}: {exc}")
-
-        # Best effort, and silent if it fails: if the connection is already gone
-        # there is nothing useful to do, and raising here would mask whatever
-        # failure was reported above.
-        try:
-            self.client.armDisarm(False, vehicle_name=self.name)
-            self.client.enableApiControl(False, vehicle_name=self.name)
-            self._say("control released")
-        except Exception:
-            pass
-
 
 # ---------------------------------------------------------------- flying them
 
 def reset_world(client, settle: float = 2.0) -> None:
-    """Return every vehicle to its start pose.
+    """Return every vehicle to its start pose. See scenario_manager.reset_world.
 
-    Without this, each run begins wherever the previous one ended -- M01 flies
-    25 m forward and lands there, so the next mission arms from a different
-    place, at a different ground height, over different terrain. Observed in
-    practice: `ground z` moved from 29.25 to 27.27 between runs.
-
-    For a one-off flight that hardly matters. For 1.3, where three repeats of a
-    mission are meant to be the same mission, it is the difference between
-    repeats and a drift.
+    Kept here, taking a raw AirSim client, so callers written before Phase 2 --
+    the runner and the sandbox -- work unchanged.
     """
-    client.reset()
-    time.sleep(settle)                 # physics needs a moment to settle
-    client.confirmConnection()
+    _scenario.reset_world(AirSimAdapter(client), settle)
+
+
+def ensure_vehicles(client, names: list[str]) -> dict[str, Any]:
+    """Spawn what is missing, refuse leftovers. See scenario_manager.ensure_vehicles."""
+    return _scenario.ensure_vehicles(AirSimAdapter(client), names)
+
+
+def fly_plans(client, records: list[PlanRecord], host: str = "127.0.0.1",
+              port: int = AIRSIM_PORT) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Fly one plan per drone, concurrently. See executor.fly_plans.
+
+    `DroneRunner` and `MOVE_SPEED` are read from THIS module at call time, so
+    replacing either here still takes effect -- tools/fly_chat.py swaps in its
+    own runner and changes the speed that way.
+    """
+    return _executor.fly_plans(
+        AirSimAdapter(client), records,
+        connect=lambda: AirSimAdapter.connect(host, port),
+        runner_class=DroneRunner, speed=MOVE_SPEED)
 
 
 def file_digest(path: str) -> str | None:
@@ -1676,9 +821,32 @@ def provenance() -> dict[str, Any]:
         "dirty": dirty,
         "agent": os.path.basename(__file__),
         "agent_sha256": file_digest(os.path.abspath(__file__)),
+        # Since Phase 2 the flying code is in agentic_uav/, so the entry point's
+        # digest alone no longer identifies what flew. One digest over the
+        # whole package, file names included, does.
+        "agentic_uav_sha256": package_digest(),
         "python": sys.version.split()[0],
         "ollama_endpoint": OLLAMA_ENDPOINT,
     }
+
+
+def package_digest() -> str | None:
+    """SHA-256 over every agentic_uav module, names and contents, short form."""
+    import glob
+    import hashlib
+
+    root = os.path.join(_REPO_ROOT, "agentic_uav")
+    paths = sorted(glob.glob(os.path.join(root, "**", "*.py"), recursive=True))
+    if not paths:
+        return None
+    digest = hashlib.sha256()
+    for path in paths:
+        digest.update(os.path.relpath(path, _REPO_ROOT).replace(os.sep, "/").encode())
+        digest.update(b"\0")
+        with open(path, "rb") as handle:
+            digest.update(handle.read())
+        digest.update(b"\0")
+    return digest.hexdigest()[:16]
 
 
 def connect(host: str = "127.0.0.1", port: int = AIRSIM_PORT):
@@ -1692,226 +860,11 @@ def connect(host: str = "127.0.0.1", port: int = AIRSIM_PORT):
     other, and neither flew.
 
     Connections are cheap. Threads are not worth sharing them for.
+
+    Returns the raw AirSim client, for callers written before Phase 2 (the
+    sandbox). The connection itself is opened by the adapter.
     """
-    import airsim
-
-    client = airsim.MultirotorClient(ip=host, port=port)
-    client.confirmConnection()
-    return client
-
-
-class ForeignVehicleError(RuntimeError):
-    """The scene holds drones this flight does not use. See ensure_vehicles."""
-
-
-def foreign_vehicles(present: list[str], names: list[str]) -> list[str]:
-    """Vehicles in the scene that are not part of this flight, sorted.
-
-    Pure, so the rule can be tested without a simulator.
-    """
-    wanted = set(names)
-    return sorted(v for v in present if v not in wanted)
-
-
-def ensure_vehicles(client, names: list[str]) -> dict[str, Any]:
-    """Make sure every named drone exists in the RUNNING simulator -- and no other.
-
-    Drones declared in settings.json are created at process start, so changing
-    that file means restarting. `simAddVehicle` adds one to a simulator that is
-    already running: ask for four drones against a one-drone simulator and the
-    other three appear. Going UP in drone count therefore needs no restart.
-
-    Going DOWN does. Consequences of spawning this way:
-
-    * **No cameras.** A runtime drone gets no camera configuration. This agent
-      never reads an image -- it is blind by design -- so it costs nothing. A
-      later phase that wants vision must declare those vehicles in
-      settings.json instead.
-    * **They outlive the mission.** A runtime drone stays in the scene until
-      the simulator restarts. `client.reset()` does not remove it; it puts it
-      back at its spawn pose, and AirSim 1.8.1's Python API has no call that
-      removes a vehicle. The same holds for drones declared in settings.json.
-
-    That second point is why this REFUSES when the scene holds a drone the
-    flight does not use. Drones sit along +X at SPACING metres, which is the
-    direction every forward mission flies, so a leftover Drone2 is parked 4 m
-    in front of Drone1. Measured 2026-10-19, flying M01-M09 after M10 without a
-    restart: 17 of 27 runs hit the leftover drones, flights stretched to
-    61-201 s, and aircraft were left pinned or hanging up to 11 m above ground.
-    Nothing warned, and the contacts were recorded as ordinary obstacles. The
-    only fix is a simulator restart, so the error says so.
-
-    Spawned along X at SPACING metres, matching the layout settings.json uses,
-    because nothing in this stack avoids collisions.
-    """
-    import airsim
-
-    existing = list(client.listVehicles())
-    extra = foreign_vehicles(existing, names)
-    if extra:
-        raise ForeignVehicleError(
-            f"the scene holds {', '.join(extra)}, which this flight does not use "
-            f"(it flies {', '.join(names)}). Leftover drones sit on the +X "
-            f"flight path and are hit as obstacles, and nothing can remove them "
-            f"short of a simulator restart. Restart the simulator, and fly "
-            f"missions in increasing drone count.")
-    added: list[str] = []
-
-    for index, name in enumerate(names):
-        if name in existing:
-            continue
-        pose = airsim.Pose(
-            airsim.Vector3r(index * SPACING, 0.0, 0.0),
-            airsim.to_quaternion(0.0, 0.0, 0.0),
-        )
-        if not client.simAddVehicle(name, "SimpleFlight", pose):
-            raise RuntimeError(f"simulator refused to add {name}")
-        added.append(name)
-
-    if added:
-        time.sleep(1.5)                      # let them register and settle
-        now = list(client.listVehicles())
-        missing = [n for n in names if n not in now]
-        if missing:
-            raise RuntimeError(f"added {added} but {missing} are still absent")
-        print(f"spawned at runtime: {', '.join(added)}")
-
-    # simAddVehicle IGNORES the pose it is given: every runtime drone appears at
-    # the player start, stacked on top of whatever is already there. Measured
-    # directly -- asked for x=12, got x=0. Two drones spawned this way came
-    # within 0.08 m of each other in flight, and nothing in this stack avoids
-    # collisions.
-    #
-    # So place them explicitly afterwards. Every drone is positioned, not only
-    # the new ones, because a drone that exists may have been left wherever a
-    # previous flight ended.
-    placed = []
-    for index, name in enumerate(names):
-        want = airsim.Pose(
-            airsim.Vector3r(index * SPACING, 0.0, 0.0),
-            airsim.to_quaternion(0.0, 0.0, 0.0),
-        )
-        client.simSetVehiclePose(want, ignore_collision=True, vehicle_name=name)
-        placed.append(name)
-    time.sleep(1.5)                          # let them fall to the ground
-
-    # Verify, because a silent failure here puts drones on top of each other.
-    layout = {}
-    for index, name in enumerate(names):
-        position = client.getMultirotorState(vehicle_name=name).kinematics_estimated.position
-        layout[name] = (round(position.x_val, 2), round(position.y_val, 2))
-        if abs(position.x_val - index * SPACING) > 1.0:
-            raise RuntimeError(
-                f"{name} should be at x={index * SPACING} but is at "
-                f"x={position.x_val:.2f}; refusing to fly drones that may be stacked"
-            )
-
-    if len(names) > 1:
-        print("spawn layout: " + "  ".join(f"{n}{xy}" for n, xy in layout.items()))
-
-    return {"present": existing, "added": added, "layout": layout}
-
-
-def fly_plans(client, records: list[PlanRecord], host: str = "127.0.0.1",
-              port: int = AIRSIM_PORT) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Fly one validated plan per drone, concurrently. Returns (outcomes, separation).
-
-    Shared by the interactive agent and the mission runner ON PURPOSE. If the
-    two flew missions differently -- a different thread model, a different
-    monitor, a different teardown -- then scored runs and hand-flown runs would
-    not be the same experiment, and nobody would notice until the numbers
-    disagreed.
-    """
-    # Create any drone this mission needs that the simulator does not have, and
-    # refuse if it holds one the mission does not use. Runs here, after any
-    # reset, so it sees the scene the flight will actually start in.
-    ensure_vehicles(client, [r.drone for r in records])
-
-    outcomes: list[dict[str, Any]] = []
-    lock = threading.Lock()
-
-    def run(record: PlanRecord) -> None:
-        # ITS OWN CONNECTION. See connect(): a shared client fails with
-        # IOLoop and BufferError exceptions under concurrent use, and both
-        # drones stay on the ground.
-        own = connect(host, port)
-        outcome = DroneRunner(own, record.drone, barrier).fly(record.plan)
-        with lock:                     # list.append is atomic, but be explicit
-            outcomes.append(outcome)
-
-    # Runs for every mission, not just multi-drone ones: proximity needs two
-    # drones but collisions need one, and collisions are only visible while they
-    # are happening. Started before the threads so the climb is covered.
-    #
-    # ALWAYS its own connection, even for a single drone. It polls at 10 Hz while
-    # the flight threads issue commands, and sharing one msgpack-rpc socket
-    # across threads is the open question this file has carried since 2026-09-24.
-    # Not something to find out about through a rare, unreproducible failure.
-    # One barrier for the whole run, so no drone takes off before every drone's
-    # ground reading is in. See DroneRunner.arm.
-    barrier = threading.Barrier(len(records)) if len(records) > 1 else None
-
-    monitor = SeparationMonitor(connect(host, port), [r.drone for r in records])
-    monitor.start()
-
-    threads = [threading.Thread(target=run, args=(r,)) for r in records]
-    for thread in threads:
-        thread.start()
-    # Join every thread before returning: exiting with drones still flying
-    # leaves them armed and under API control.
-    for thread in threads:
-        thread.join()
-
-    separation = monitor.stop()
-
-    # ---------------------------------------------------- landing, re-decided
-    #
-    # `landed_on_ground` is computed inside fly() from ONE post-teardown read of
-    # simGetCollisionInfo, and that read is timing-dependent: AirSim clears
-    # has_collided once contact ends, so whether the flag is still set when
-    # fly() looks is luck.
-    #
-    # It matters for exactly one mission. M05 flies 25 m out, where the terrain
-    # is about 0.8 m higher than where it armed, so it comes to rest 2.01 m
-    # above its arming ground_z and fails the 1.5 m height test. Its landing
-    # therefore rests entirely on contact evidence.
-    #
-    # Measured: identical flights, 22.2 s and a final height of 27.24 in both,
-    # reported landed on 2026-10-09 and NOT landed on 2026-10-19. The 9 October
-    # block's "24/24 landed" was true by coincidence rather than by measurement.
-    #
-    # The 10 Hz poll does not have the problem -- it caught the terrain contact
-    # at t+21.94 of a 22.2 s flight -- so the landing check now uses it. The
-    # single read is kept as the first test, because when it fires it is
-    # correct; the poll only ever adds evidence, never removes it.
-    polled = separation.get("collisions_polled") or []
-    for outcome in outcomes:
-        outcome["landed_evidence"] = "height or contact at teardown"
-        if outcome["landed_on_ground"]:
-            continue
-        contact = landing_contact(outcome["drone"], outcome["flight_seconds"],
-                                  polled)
-        if contact:
-            outcome["landed_on_ground"] = True
-            outcome["landed_evidence"] = (
-                "polled ground contact with %s at t+%.2fs"
-                % (contact["object"], contact["last_at_s"]))
-
-    # A separation figure only exists when there were two drones to measure
-    # between. The monitor runs for a single drone as well, because collisions
-    # need polling and proximity simply does not apply -- so `measured` being
-    # true says the thread ran, not that there is a distance to report.
-    # Printing it unconditionally gave "closest approach: None m at t+Nones" on
-    # every single-drone run, which is 24 of the 30 in the mission set.
-    if separation.get("min_separation_m") is not None:
-        print(f"\nclosest approach: {separation['min_separation_m']} m "
-              f"at t+{separation['min_separation_at_s']}s "
-              f"({separation['samples']} samples)")
-    elif separation["measured"]:
-        contacts = len(separation.get("collisions_polled") or [])
-        print(f"\nmonitored {separation['samples']} samples, "
-              f"{contacts} contact(s); one drone, so no separation to report")
-    return outcomes, separation
+    return AirSimAdapter.connect(host, port).client
 
 
 # ---------------------------------------------------------------------- main
@@ -1995,12 +948,9 @@ def main() -> int:
         print("\n--plan-only: not flying.")
         return 0
 
-    # AirSim is imported only on the flight path, so --plan-only works in an
-    # environment where airsim is not installed at all.
-    import airsim
-
-    client = airsim.MultirotorClient(ip=args.host, port=args.port)
-    client.confirmConnection()
+    # AirSim is imported only on the flight path (inside the adapter), so
+    # --plan-only works in an environment where airsim is not installed at all.
+    client = connect(args.host, args.port)
 
     # Manual gate: the RPC port opens well before the map finishes loading, and
     # arming into a half-loaded world produces failures that look like bugs.

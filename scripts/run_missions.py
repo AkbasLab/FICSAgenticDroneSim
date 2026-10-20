@@ -100,7 +100,12 @@ def snapshot_code(agent, out_dir: str, stem: str, config_path: str) -> dict[str,
 
     This is `AUV-14` §14.2 (experiment manifest) arriving early, because the
     question "which agent produced this number" is already live.
+
+    SINCE PHASE 2 THE FLYING CODE IS IN `agentic_uav/`, so every module of the
+    package is archived too, under `agentic_uav/` in the snapshot. Without it
+    the snapshot would hold a thin entry point and not the code that flew.
     """
+    import glob
     import shutil
 
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -109,12 +114,16 @@ def snapshot_code(agent, out_dir: str, stem: str, config_path: str) -> dict[str,
         "run_missions.py": os.path.abspath(__file__),
         os.path.basename(config_path): os.path.abspath(config_path),
     }
+    for path in sorted(glob.glob(os.path.join(repo, "agentic_uav", "**", "*.py"), recursive=True)):
+        sources[os.path.relpath(path, repo).replace(os.sep, "/")] = path
 
     folder = os.path.join(out_dir, stem + "-code")
     os.makedirs(folder, exist_ok=True)
     digests = {}
     for name, source in sources.items():
-        shutil.copy2(source, os.path.join(folder, name))
+        target = os.path.join(folder, *name.split("/"))
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        shutil.copy2(source, target)
         digests[name] = agent.file_digest(source)
 
     manifest = dict(agent.provenance(), files=digests, snapshot=os.path.basename(folder))

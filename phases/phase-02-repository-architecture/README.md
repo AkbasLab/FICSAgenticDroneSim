@@ -41,7 +41,7 @@ they must still pass, unedited, when the refactor is done.
 | Regression test | [`tests/test_golden.py`](../../tests/test_golden.py) | **Passing** against the baseline |
 | `VehicleAdapter` + `SceneAdapter`, core types, AirSim adapter | [`agentic_uav/core/`](../../agentic_uav/core/), [`agentic_uav/simulator/`](../../agentic_uav/simulator/) | **Done** 2026-10-20; not yet used by the agent |
 | Adapter tests, expectations taken from the goldens | [`tests/test_adapter.py`](../../tests/test_adapter.py) | **Passing**, 21 tests |
-| Execution on the adapter | `agentic_uav/control/` | Not started |
+| Execution on the adapter | [`agentic_uav/control/`](../../agentic_uav/control/), [`simulator/scenario_manager.py`](../../agentic_uav/simulator/scenario_manager.py) | **Done** 2026-10-20; goldens pass unedited |
 | `MissionPlanner` + Ollama and replay planners | `agentic_uav/planners/` | Not started |
 | Runner and logging moved | `agentic_uav/experiments/` | Not started |
 
@@ -55,7 +55,8 @@ one without the goldens being re-recorded.
    `SkillResult`), with an AirSim adapter that wraps exactly today's calls.
    Done; see the record.
 3. **Move execution onto the adapter.** `DroneRunner`'s step dispatch becomes
-   the executor. AirSim is touched only inside the adapter.
+   the executor. AirSim is touched only inside the adapter. Done; see the
+   record.
 4. **`MissionPlanner`**, with an Ollama planner (Llama and Mistral both run
    through it) and a replay planner that returns recorded replies.
 5. **Move the runner, monitor and logging into `agentic_uav/experiments/`.**
@@ -139,10 +140,75 @@ default timeout when a call omits it (20 s for takeoff, unbounded for moves),
 so a test cannot tell "omitted" from "passed the default". In AirSim the two
 are the same call. The adapter omits them exactly where the baseline did.
 
+### 2026-10-20 — execution moved onto the adapter; the goldens pass unedited
+
+Everything that flies left `baseline/open_loop_agent.py`, which went from
+2,021 lines to about 970:
+
+| Moved | To |
+|---|---|
+| `DroneRunner`, `fly_plans`, the flight constants | `agentic_uav/control/executor.py` |
+| the session ground reference and its guards | `agentic_uav/control/ground.py` |
+| `is_ground`, `classify_contact`, `landing_contact` | `agentic_uav/control/contacts.py` |
+| `SeparationMonitor` | `agentic_uav/control/monitor.py` |
+| `reset_world`, `ensure_vehicles`, the leftover-drone check | `agentic_uav/simulator/scenario_manager.py` |
+| `PlanError` | `agentic_uav/core/errors.py` |
+
+**Moved by script, not by hand.** Each block was cut by line range, with its
+first and last line asserted. The only edits were the client-to-adapter
+substitutions, each asserted to occur exactly as often as expected. Comments
+and docstrings, which are this project's record of why each line exists, moved
+word for word. The one exception: `DroneRunner`'s docstring no longer calls
+the client "SHARED", which had been wrong since the per-thread fix.
+
+**The agent keeps its interface.** It re-exports every moved name, and
+`reset_world`, `ensure_vehicles` and `fly_plans` remain as thin wrappers that
+take a raw AirSim client. So `run_missions.py`, `fly_chat.py` and the existing
+tests run unchanged. `connect()` and `main()` now open their connection
+through the adapter, and the agent imports AirSim nowhere.
+
+**The sandbox's monkey-patching had to keep working.** `tools/fly_chat.py`
+changes the flight speed by assigning `agent.MOVE_SPEED`, and swaps in its own
+runner by assigning `agent.DroneRunner`. Moving the code naively would have
+silently disconnected both: the sandbox would have flown at 5 m/s whatever was
+typed. So `DroneRunner` takes `speed` as a parameter, and `fly_plans` takes
+`runner_class` and `speed`. The agent's wrapper reads both from its own module
+at call time.
+
+**Only the harness's patch points changed, never the goldens.** Connections
+now come from `AirSimAdapter.connect`, and the clock is read in the new
+modules, so `tests/airsim_fake.py` patches those as well. `git diff
+tests/golden` is empty, and `tools/record_golden.py --check` reports the
+goldens match.
+
+**Proved to be testing the new code.** Mutations aimed at the moved code:
+
+| Mutation | Cases failing |
+|---|---|
+| `agent.MOVE_SPEED` 5.0 → 4.9 (the sandbox's speed path) | 15, every case that flies |
+| `executor.LANDED_AGL_MAX` 3 → 9 | 2, the stuck landings |
+| `agent.DroneRunner` replaced by a hold-position runner (the sandbox's path) | 7, exactly the plans without `land` |
+| `AirSimAdapter.stop` made a no-op | 12 |
+
+**The code snapshot follows the code.** `run_missions.snapshot_code` archived
+`open_loop_agent.py`, the runner and the config. After this step that would be
+a thin entry point, not the code that flew. It now archives every
+`agentic_uav` module too, 16 files, and `provenance()` records
+`agentic_uav_sha256`, one digest over the package. This is an addition to the
+record, not a behaviour change, so the goldens do not cover it. It was checked
+directly.
+
+**Still calling AirSim directly, by design for now:** `run_missions.py` (its
+connection and the leftover-drone preflight) and `fly_chat.py`'s status and
+land-all helpers. Both move in step 5.
+
 ## Decisions
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-10-20 | **Move code by script with asserted boundaries, not by retyping** | 900 lines carrying the project's reasoning in their comments. A script that asserts each block's first and last line, and each substitution's count, either moves them exactly or stops. Retyping risks a silent change that the goldens might not reach, for example in a comment-adjacent constant. |
+| 2026-10-20 | **Speed and runner class are parameters of the executor** | The sandbox depends on replacing them, and a module constant read inside `agentic_uav` would silently ignore its replacement. Parameters make the dependency visible, and the study passes the defaults. |
+| 2026-10-20 | **The agent keeps thin wrappers that take a raw client** | Changing the runner, the sandbox and the tests in the same step as moving the code would mix two kinds of change. They move to adapters in step 5, on their own. |
 | 2026-10-20 | **Skills are simulator primitives; the agent's decisions stay in the agent** | A `fly_straight` skill that braked, or a `land` that verified itself, would carry baseline decisions into the adapter, where a mock in Phase 3 would have to copy them or silently differ. Primitive skills keep one place for each decision. |
 | 2026-10-20 | **The adapter protocol is wider than AUV-03's sketch, and says so** | The baseline reads a ground-truth pose, collisions, and hands control over and back. Leaving those out of the protocol would mean the agent reaching past it to AirSim, which is what 2.2 forbids. |
 | 2026-10-20 | **Scene management is its own protocol** | Resetting the world and spawning vehicles belong to the scenario, not to a drone. A flight thread never needs them; the runner does. |
@@ -157,9 +223,11 @@ are the same call. The adapter omits them exactly where the baseline did.
 - **Which module owns teardown?** `_land_and_release` is half execution, half
   safety policy. Phase 2 moves it with execution, unchanged. Whether it
   becomes part of the `safety_guardian` is a Phase 3 or Phase 16 question.
-- **The `DroneRunner` docstring still calls the client SHARED.** That is wrong
-  since the per-thread fix. It is corrected when the class moves (step 3),
-  not before, so step 1 changes no agent code at all.
+- ~~**The `DroneRunner` docstring still calls the client SHARED.**~~
+  **Corrected in step 3**, when the class moved.
+- **`run_missions.py` and `fly_chat.py` still call AirSim directly** for
+  connection setup, the leftover-drone preflight and the sandbox's status and
+  land-all helpers. Step 5.
 
 ---
 
