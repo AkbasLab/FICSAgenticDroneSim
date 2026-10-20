@@ -12,10 +12,16 @@
 # (f255c0fa...), and the shipped one is what every result was measured with.
 # This file used to pin carla==0.9.16, which made conda fetch the PyPI build
 # silently. Found by a clean-clone dry run on 2026-10-19.
+#
+# CONDA-FORGE ONLY. Every conda package in the measured environment came from
+# conda-forge. The export also listed `defaults`, which makes
+# `conda env create` stop at Anaconda's Terms of Service gate on a fresh
+# Miniconda (found from a GitHub clone on 2026-10-20). Removed, so the file
+# builds without accepting anything.
 name: carlaAir
 channels:
   - conda-forge
-  - defaults
+  - nodefaults
 dependencies:
   - bzip2=1.0.8
   - ca-certificates=2026.7.22

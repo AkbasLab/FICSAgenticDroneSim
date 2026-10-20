@@ -116,12 +116,19 @@ OneDrive Known Folder Move enabled — the Windows 11 default — that is
 | | |
 |---|---|
 | Path | `C:\Users\<user>\OneDrive\Documents\AirSim\settings.json` |
-| SHA-256 | `59e6d9b7a7135c200333737d94ff5f884693f24615610947a6f5c64078d97fec` |
+| SHA-256 | `ea20fe8bbc6bc544e82a50b7f3e401549de85eabde3a8b0770c4ef93d0107c08` (900 bytes, CRLF) |
 | SettingsVersion | 1.2 |
 | SimMode | `Multirotor` |
-| Vehicles | `Drone1` |
+| Vehicles | `Drone1`, with `"AutoCreate": true` |
 | VehicleType | `SimpleFlight` |
 | Cameras | `"0"` and `"front_center"`, both 1280 × 960 |
+
+> **Corrected 2026-10-20.** This table recorded `59e6d9b7…`, the file as it
+> stood on 2026-09-24. The file was rewritten on 2026-09-28 at 22:58, when the
+> roster went to two drones for a camera experiment and back to one. It has not
+> changed since, so every valid block (6 and 19 October) flew with the file
+> hashed above. The settings in the table were the same in both versions. The
+> stale hash was found by the clean-clone dry run (finding 15).
 
 `SimMode: Multirotor` is what suppresses the car-or-drone dialog at launch.
 Omitting the key restores it.

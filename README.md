@@ -94,7 +94,8 @@ model.
 
 ## Where the project is
 
-**Phase 1 — freezing and documenting the baseline.**
+**Phase 1 is complete** (2026-10-20): the open-loop baseline is frozen and
+tagged `v0.1-open-loop-baseline`. **Phase 2, repository architecture, is next.**
 
 Each phase keeps its own record in [`phases/`](phases/): objectives, the exit
 criterion and whether it is actually met, deliverables, decisions taken, and the
@@ -104,7 +105,7 @@ Objectives Checklist`; each phase also has a detail note `AUV-01` … `AUV-23`.
 
 | Stage | Phases | State |
 |---|---|---|
-| 0 · Foundations | 0–1 | Phase 0 complete; Phase 1 in progress |
+| 0 · Foundations | 0–1 | Phase 0 deliverable done; **Phase 1 complete** |
 | 1 · Platform | 2–4 | Not started |
 | 2 · One agent | 5–6 | Not started |
 | 3 · The team | 7–9 | Not started |
@@ -210,12 +211,11 @@ change rather than four separate codebases.
 ## Status, provenance and licensing
 
 > **This project is under active development.** Interfaces will change without
-> notice until Phase 2 settles the module structure. The Phase 1 baseline has
-> been flown in full on `llama3.3:70b` (block `v6-polled`, 30 runs). Phase 1
-> itself stays open until its exit criterion, reproduction by someone else, is
-> met. See [`docs/BASELINE_MISSIONS.md`](docs/BASELINE_MISSIONS.md) for the
-> results and [`phases/RUN_LEDGER.md`](phases/RUN_LEDGER.md) for which blocks
-> are valid.
+> notice until Phase 2 settles the module structure. The Phase 1 baseline is
+> frozen at `v0.1-open-loop-baseline`: flown in full on `llama3.3:70b` (block
+> `v6-polled`, 30 runs) and reproduced from a clean clone. See
+> [`docs/BASELINE_MISSIONS.md`](docs/BASELINE_MISSIONS.md) for the results and
+> [`phases/RUN_LEDGER.md`](phases/RUN_LEDGER.md) for which blocks are valid.
 >
 > **Licence: MIT**, held by the Flexible & Intelligent Complex Systems (FICS)
 > Research Group — see [`LICENSE`](LICENSE). This matches the licence on the

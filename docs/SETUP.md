@@ -99,13 +99,28 @@ window where `conda init` ran.
 
 ## 5. The Python environment
 
+From the repository root:
+
 ```powershell
-conda env create -f environment.yml
+$env:CONDA_DEFAULT_CHANNELS = "https://conda.anaconda.org/conda-forge"; conda env create -f environment.yml
+```
+
+```powershell
 conda activate carlaAir
 ```
 
-Python is **3.10.21**, built from conda-forge with `--override-channels`,
-deliberately avoiding the Anaconda commercial Terms of Service gate.
+Python is **3.10.21**, built entirely from conda-forge, deliberately avoiding
+the Anaconda commercial Terms of Service gate.
+
+> **Why the first line sets a variable.** A fresh Miniconda's own `.condarc`
+> adds the `defaults` channel to every command, and `conda env create` has no
+> `--override-channels`. So even a conda-forge-only `environment.yml` stops at
+> `CondaToSNonInteractiveError` for `repo.anaconda.com`. Setting
+> `CONDA_DEFAULT_CHANNELS` for this window points `defaults` at conda-forge,
+> so nothing needs accepting and your conda configuration is not changed. It
+> lasts until you close the window. Verified from a GitHub clone on
+> 2026-10-20: the environment built this way, plus the CARLA wheel below, has
+> exactly the package set of the measured one.
 
 ### CARLA: install the wheel from the archive, not from PyPI
 

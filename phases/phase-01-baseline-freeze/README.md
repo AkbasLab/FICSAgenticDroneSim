@@ -1,7 +1,7 @@
 # Phase 1 — Freeze and document the baseline
 
 **Stage:** 0 · Foundations · **Vault note:** `AUV-02 — Baseline Freeze`
-**Started:** 2026-09-18 · **Completed:** —
+**Started:** 2026-09-18 · **Completed:** 2026-10-20 (exit criterion met at the minimum standard; see below)
 
 > Preserve an open-loop system as an experimental constant. You cannot show you
 > improved something you did not first pin down.
@@ -10,32 +10,52 @@
 
 ## Objectives
 
-- [ ] **1.1** Tag the baseline release — `v0.1-open-loop-baseline`
+- [x] **1.1** Tag the baseline release — `v0.1-open-loop-baseline`, 2026-10-20
 - [x] **1.2** Record the exact environment — OS, Python, simulator, models, packages, settings, startup procedure
 - [x] 📄 `requirements.txt`, `environment.yml`, [`docs/BASELINE_ENVIRONMENT.md`](../../docs/BASELINE_ENVIRONMENT.md)
 - [x] **1.0** Write the open-loop agent — *added 2026-09-24, see the record below*
-- [ ] **1.3** Run the ten-mission baseline set and record the results
-- [ ] ✅ **Exit criterion** — see below
+- [x] **1.3** Run the ten-mission baseline set and record the results — `v6-polled`, 2026-10-19
+- [x] ✅ **Exit criterion** — met at the minimum standard, 2026-10-20; see below
 
 ## Exit criterion
 
 > A new student can clone the repository, follow the documentation, and
 > reproduce the baseline flights **without help from the original developer.**
 
-**Met:** no. Untested — and it cannot be self-certified. It needs either a real
-second person, or at minimum a clean-clone dry run performed using nothing
-outside the clone.
+**Met: yes, at the minimum standard this record set**, a clean-clone dry run
+using nothing outside the clone, on 2026-10-19/20. It is not the stronger test,
+a real second person, which remains recommended before Phase 20 publishes
+anything.
+
+What was shown, in two passes (log entry for 2026-10-20 below):
+
+* **From a local clone:** planning reproduces byte for byte (42/42
+  drone-plans). M01–M09 fly to within 0.10 s and 3 cm of `v6-polled`. A
+  complete 30-run block on a fresh simulator landed 30/30. The pass also
+  found 19 documentation and apparatus problems, all fixed or recorded.
+* **From GitHub (`SC` at `f819d98`):** every fix present. The environment
+  builds from `environment.yml` as SETUP describes and has exactly the
+  measured package set. Tests and audit pass. It found two more problems, the
+  Terms of Service gate and a stale settings hash, both fixed.
+
+What it does not show: that someone without this machine's Vega account can
+serve the model. The docs cover Vega and any other ~48 GB GPU server, but only
+Vega has been exercised. And M10's landing is a rate (13 of 16), not a
+certainty. That is a property of the baseline, recorded as such, not a
+reproduction failure.
 
 ## Deliverables
 
 | Artifact | Location | State |
 |---|---|---|
-| Open-loop agent | [`baseline/open_loop_agent.py`](../../baseline/open_loop_agent.py) | Written; planner and single-drone flight verified (M01, M02). Multi-drone unflown |
-| Baseline tag | `v0.1-open-loop-baseline` | Pending — tagged once the agent runs the mission set |
-| Environment record | [`docs/BASELINE_ENVIRONMENT.md`](../../docs/BASELINE_ENVIRONMENT.md) | v1.0, §9 rewritten 2026-09-24 |
-| Mission set | [`docs/BASELINE_MISSIONS.md`](../../docs/BASELINE_MISSIONS.md) | Defined; **results empty** |
-| Package manifests | `requirements.txt`, `environment.yml` | Done |
-| Run data | [`results/`](results/) | Empty |
+| Open-loop agent | [`baseline/open_loop_agent.py`](../../baseline/open_loop_agent.py) | **Frozen** at `v0.1-open-loop-baseline`. All ten missions flown, one to four drones |
+| Baseline tag | `v0.1-open-loop-baseline` | **Tagged 2026-10-20**, with `phase-01-complete` on the same commit |
+| Environment record | [`docs/BASELINE_ENVIRONMENT.md`](../../docs/BASELINE_ENVIRONMENT.md) | v1.0; settings hash corrected 2026-10-20 |
+| Mission set | [`docs/BASELINE_MISSIONS.md`](../../docs/BASELINE_MISSIONS.md) | Frozen; **results recorded** (`v6-polled`) |
+| Package manifests | `requirements.txt`, `environment.yml` | Done; rebuilt from GitHub to the identical package set, 2026-10-20 |
+| Run data | [`results/`](results/) | `v6-polled` is the citable block; every earlier session kept with its verdict in [`../RUN_LEDGER.md`](../RUN_LEDGER.md) |
+| Exit evidence | [`evidence/clean-clone-dry-run-2026-10-19.md`](evidence/clean-clone-dry-run-2026-10-19.md) | The clean-clone dry run, its 19 findings and their fixes |
+| Model hosting | [`docs/vega/`](../../docs/vega/) | The Vega HPC manual, source and PDF |
 
 ## Record
 
@@ -1504,10 +1524,57 @@ would have been.
 Write the agent, then 24 scored runs plus M09/M10. Restore `settings.json` after
 the multi-drone missions, or the single-drone missions become invalid.
 
+### 2026-10-20 — the exit test: from a clean clone, then from GitHub
+
+The criterion asks whether someone else can clone, follow the docs and
+reproduce the baseline. It was tested at the minimum standard set above, in two
+passes. The full record of the first is
+[`evidence/clean-clone-dry-run-2026-10-19.md`](evidence/clean-clone-dry-run-2026-10-19.md).
+
+**Pass 1, a local clone of `SC` at `f35ded6`, 2026-10-19/20.** Planning came
+back byte-identical, 42/42 drone-plans. Flown from the clone (97 runs in five
+blocks), M01–M09 matched `v6-polled` to 0.10 s and 3 cm, and a fresh-simulator
+block of all ten missions landed 30/30. It also found what would have stopped
+a student long before that: no documented path to the study's model, the
+mission doc still on the 3B model and Block A, a literal tab in the `setx`
+example, `environment.yml` fetching a different CARLA build from PyPI. Plus
+two things that change how results are read:
+
+* **Leftover drones.** Drones M10 spawns stay in the scene, parked on the +X
+  path every forward mission flies. Flying M01–M09 after M10 without a restart
+  hit them in 17 of 27 runs, and nothing warned. Now refused in code
+  (`626e0f2`).
+* **M10 lands at a rate, not always.** The Drone1–Drone3 contact happens on
+  every run. Drone3 failed to land in 3 of 16. v6's 3/3 was a favourable draw.
+
+**Pass 2, a fresh clone of `SC` from GitHub at `f819d98`, 2026-10-20.** Every
+pass-1 fix was present, and tests and audit passed. This time the environment
+was built exactly as SETUP said, into a throwaway prefix, which pass 1 had not
+done. It failed: a fresh Miniconda adds `defaults` to every command, and
+`conda env create` stopped at Anaconda's Terms of Service gate. Fixed by
+documenting `CONDA_DEFAULT_CHANNELS` for that one command, and the file is
+now conda-forge only. Rebuilt that way, then with the shipped CARLA wheel
+added, the environment has **exactly the measured package set**, and the
+suite passes in it. Pass 2 also found that `BASELINE_ENVIRONMENT.md`'s
+`settings.json` hash was from 2026-09-24, before the file was rewritten on
+2026-09-28. Corrected.
+
+Two of the dry run's claims were themselves wrong and are corrected in place:
+"`z: 0` appears for the first time" (M04 has always done it, `f819d98`), and
+the stale settings hash (above).
+
+**Verdict:** met at the minimum standard. Phase 1 closes, and the baseline is
+tagged `v0.1-open-loop-baseline` along with `phase-01-complete`. The two things
+this does not show are in Open questions: a second person, and why Drone3
+jumps.
+
 ## Decisions
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-10-20 | **Close Phase 1 on the clean-clone exit test** | The record set "a real second person, or at minimum a clean-clone dry run performed using nothing outside the clone". The minimum was done twice: from a local clone with full flights, then from GitHub with a rebuilt environment. Both passes' findings are fixed or recorded. A second person stays an open question rather than a blocker, because it needs someone else's time. |
+| 2026-10-20 | **Report M10 landing as a rate, and investigate the jump separately** | Drone3's jump and the resulting contact are a property of the platform under this mission, seen on every run, and fixing them would change the frozen baseline. So the baseline is frozen with the behaviour in it, and the results quote 13/16 rather than v6's 3/3. The investigation is its own piece of work. |
+| 2026-10-20 | **Mission order is enforced in code, not left to the protocol** | The clean-clone run showed that flying single-drone missions after M10 without a restart wrecks 17 of 27 runs, silently. A rule only written in a document had already been stated wrongly in five places. The runner now refuses the order before the first takeoff. |
 | 2026-10-19 | **`fly_to`'s z stays unbounded, where `set_altitude`'s is bounded** | The model emits `z: 0` for M04 every time, and with altitudes anchored to the measured ground that means the terrain. Three options were weighed: bound it (M04 goes 3/3 to 0/3), normalise 0 to the cruise altitude as the validator already does for a positive z, or leave it. **Left alone.** Nothing in the system prompt tells the model that fly_to's z has a floor, so refusing the plan would score it against a rule it was never given, and normalising would quietly change what the aircraft does in a mission already flown. The consequence is documented instead: a fly_to at z = 0 arrives at ground level, which is why M04 finishes at 0.27 m where other missions finish near 1.17 m, and why two sandbox drones told to "return home and land" from 70 m and 55 m both arrived at 0.04 m. Revisit if the plan language gains a documented floor. |
 | 2026-10-19 | **`num_ctx = 98304`: the largest context one H100 holds entirely** | Superseded the same day's earlier decision to run at the full 131,072 on two GPUs. Working the budget out properly showed full context misses a single card by only **1,408 MiB** -- 82,967 against 81,559 -- so the second GPU was being requested to cover a 1.4 GB shortfall, at a 12-hour queue and a card another user could have had. 98,304 fits with 8.8 GB spare. And since Ollama reserves cache for the context DECLARED rather than used, this is sizing, not capping: the longest request measures ~838 tokens, so 98,304 is 117x what the task can consume and the limit cannot be reached. That also retires the plan to keep the 4,096 runs as a comparison -- 4,096 was already 4.9x what was needed, so the same argument covers them and no comparison run is required. |
 | 2026-10-09 | **Flight speed is fixed at `MOVE_SPEED = 5.0` and the model cannot set it** | Legs are specified in SECONDS, so speed is the conversion factor between a plan and the world: distance = speed x duration. Let it vary and "fly forward for 5 seconds" stops having one meaning. It would also break the scoring, which compares action SEQUENCES -- two models could emit identical correct sequences and fly completely different missions. And M09/M10 have no collision avoidance, so the vertical stagger is only a margin if closing rates are known. If it ever needs to vary it becomes a declared field in `[protocol]`, recorded per run like `num_ctx`, never an interactive prompt. Why 5 specifically was never recorded and is not reconstructible. |
@@ -1526,22 +1593,32 @@ the multi-drone missions, or the single-drone missions become invalid.
 - **The ground guard has no absolute reference.** It compares drones against each other, so if they all read the same wrong ground it passes -- and `z = 0` is a natural shared wrong value here, being where `simSetVehiclePose` and `client.reset()` put things. Demonstrated accidentally on 2026-10-19. Needs a check against the session's first good reading, not only against the other drones.
 - **`simGetObjectPose` returns NaN for runtime-spawned drones** and works for the one declared in `settings.json`, though `simListSceneObjects` lists all four. Runtime vehicles are bookkept differently somewhere in the engine; unexplored, and possibly related to the contact question above.
 - **`per_pair_min_m` is a minimum over a flight, not a value at an event.** Comparing it with a contact produced three sessions of apparent paradox. It should probably be accompanied by the separation recorded AT each contact.
-- **One AirSim client shared across threads.** `DroneRunner` threads share a
-  single `MultirotorClient`. `msgpack-rpc-python` multiplexes one socket and is
-  not documented as thread-safe, so this is a plausible source of rare failures
-  under multi-drone load. Settle it at the first M09/M10 flight test — either
-  observe it working reliably, or give each thread its own client. Do not settle
-  it by assertion either way.
+- ~~**One AirSim client shared across threads.**~~ **Settled 2026-09-28 by
+  failure:** a shared client produced `IOLoop is already running` and
+  `BufferError` on the first two-drone flight. Every flight thread and the
+  separation monitor now open their own connection (`connect()`).
 - **Does CARLA synchronous mode gate AirSim physics?** Both plugins share one
   UE4 tick loop, so it plausibly does, but the two APIs have no shared notion of
   time and this has not been tested. It decides whether deterministic replay of
   *flight* is possible at all, which Phase 10 depends on. Test: world in
   synchronous mode, issue a velocity command, check whether the drone moves
   without `world.tick()`.
-- **Absolute paths in the docs.** `SETUP.md` and `CONTROLS.md` quote this
-  machine's paths (`D:\Research\...`, `D:\AllSetups\...`). A student on another
-  machine meets them immediately, and the exit criterion is explicitly about
-  someone else. Decide whether they become placeholders before the exit test.
+- ~~**Absolute paths in the docs.**~~ **Settled 2026-10-09:** paths a reader
+  follows are `%CARLAAIR_ROOT%` or placeholders, and `tools/audit_repo.py`
+  fails on any that reappear. Kept deliberately only in
+  `BASELINE_ENVIRONMENT.md`, which records the machine that measured.
+- **Why Drone3 jumps 12.7 m in 0.44 s during M10's backward leg**, and whether
+  fixing it is in scope for the frozen baseline. It causes the Drone1–Drone3
+  contact on every M10 run and Drone3's landing failure in about 1 run in 5
+  (3 of 16 from the clean clone). Phase 1 closes with this reported as a rate.
+  The investigation is separate work.
+- **A second person.** The exit test was run at the minimum standard. Someone
+  who is not the author, on another machine and ideally another GPU server,
+  is the stronger version, and the one that matters before Phase 20.
+- **The manifest records the default endpoint, not the one used.**
+  `manifest.json` takes `ollama_endpoint` from the agent's default, so `v6`'s
+  says 11434 while its rows (correctly) say 11435. Harmless, because the rows
+  are authoritative, but it misleads anyone reading the manifest alone.
 - ~~**Which licence** this repository carries.~~ **Settled 2026-10-06: MIT**,
   held by the FICS Research Group, matching the parent repository. Possible only
   because the baseline was reimplemented — had the external code remained, the
