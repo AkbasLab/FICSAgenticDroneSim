@@ -161,26 +161,33 @@ decisions get made.
 ## Layout
 
 ```
-docs/       RESEARCH_PLAN · SETUP · CONTROLS · BASELINE_* · carlaair/ reference set
-configs/    missions/ — the mission set as data, edit here to add or change one
-baseline/   the open-loop agent — original to this project, and frozen
-scripts/    experiment entry points: run_missions.py
-tools/      development tooling: audit_repo.py, fly_chat.py, the doc generators
-tests/      unit tests for the pure logic — no simulator, no model
-phases/     one folder per phase: objectives, exit criterion, evidence, decisions
-runs/       raw run output; the directory is tracked, its contents are not
+docs/         RESEARCH_PLAN · SETUP · CONTROLS · BASELINE_* · carlaair/ reference set · vega/
+configs/      missions/ — the mission set as data, edit here to add or change one
+agentic_uav/  the research modules, built in Phase 2 (see below)
+baseline/     open_loop_agent.py — the baseline's command line, now a thin entry
+              point over agentic_uav/; the original single file is the tag
+              v0.1-open-loop-baseline
+scripts/      experiment entry points: run_missions.py, the command line of
+              agentic_uav/experiments/runner.py
+tools/        development tooling: audit_repo.py, fly_chat.py, record_golden.py,
+              the doc generators
+tests/        unit tests, and the golden tests that pin the baseline's behaviour
+              (tests/golden/) — no simulator, no model
+phases/       one folder per phase: objectives, exit criterion, evidence, decisions
+runs/         raw run output; the directory is tracked, its contents are not
 ```
 
 **`scripts/` versus `tools/`**: scripts run experiments and produce evidence;
-tools maintain or explore the repository and **never appear in a result**. The
-split follows the module tree in `AUV-03`, which Phase 2 builds out.
+tools maintain or explore the repository and **never appear in a result**.
 
 `fly_chat.py` sits on that boundary and is worth explaining: it drives the
 simulator and the model like a script, but records nothing, so it cannot
 contribute to a result. It exists for the question a fixed mission set cannot
-answer -- *what does this model do if I phrase it like THIS* -- and it flies
-through `fly_plans`, the same path the runner uses, so what it shows you
-transfers.
+answer -- *what does this model do if I phrase it like THIS* -- and it plans
+through the same planner and flies through `fly_plans`, the same path the
+runner uses, so what it shows you transfers. Its two deliberate departures from
+the study (a prompt addendum, and leaving a drone hovering when its plan never
+lands) are passed in as arguments; it changes nothing in the study's code.
 
 **Two output locations, deliberately.** `runs/agent-log.jsonl` is the raw,
 git-ignored log of *every* planning call ever made on this machine, whatever
@@ -190,6 +197,7 @@ recorder, the second is the experimental record.
 
 ```powershell
 python -m unittest discover tests     # no simulator or model needed
+python tools\record_golden.py --check # the goldens alone, with a per-case report
 python tools\audit_repo.py            # run before every commit
 python tools\fly_chat.py              # interactive: ask a model, fly the answer
 ```
@@ -199,12 +207,30 @@ including the attempts that failed. Measurements land in
 `phases/phase-NN-*/results/`, exit-criterion proof in `evidence/`, and each
 completed phase is tagged `phase-NN-complete`.
 
-The module tree the project refactors into during Phase 2 — `agentic_uav/` with
-`core`, `simulator`, `control`, `agents`, `coordination`, `planners`,
-`experiments` — is specified in `AUV-03 — Repository Architecture`. Its shape
+The module tree is specified in `AUV-03 — Repository Architecture`. Its shape
 encodes the experimental design: policies, planners and simulators are all
 interchangeable, which is what makes selecting an architecture a configuration
-change rather than four separate codebases.
+change rather than four separate codebases. Phase 2 has built these parts of
+it, by moving the baseline without changing what it does:
+
+```
+agentic_uav/
+  core/         plain data shared by everything: positions, vehicle state,
+                skill commands and results, protocol constants, errors
+  simulator/    the only code that talks to a simulator: the VehicleAdapter and
+                SceneAdapter protocols, the AirSim adapter, the scenario manager,
+                AirSim's settings.json
+  control/      the open-loop executor, the ground reference, contact
+                classification, the separation monitor
+  planners/     the MissionPlanner protocol: the plan schema and validation, the
+                prompt, the Ollama planner and a replay planner
+  experiments/  the mission runner, the agent log, provenance
+```
+
+`agents/` and `coordination/` arrive with the phases that need them; they are
+not created empty. `tests/golden/` holds what the baseline did before any of
+it moved — every AirSim call, every model request, every runner and sandbox
+output — and the tests check the moved code against it.
 
 ---
 
