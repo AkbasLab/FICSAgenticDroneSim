@@ -1,0 +1,105 @@
+# The canonical search-and-relay mission (AUV-05). Phase 4.
+#
+# ONE mission, held fixed while the architecture changes underneath it: every
+# result in the study is measured against this file. Do not edit a value once
+# results cite it. Add search_relay_002 instead, as the mission set does with
+# M-numbers.
+#
+# Loaded strictly by agentic_uav/experiments/scenarios.py: an unknown or
+# missing key is an error, so a typo cannot silently fall back to a default.
+#
+# Map metres, x and y, the frame the drones fly in. Starts are on the ground;
+# how high to fly is the controller's choice, not the scenario's.
+
+scenario_id = "search_relay_001"
+random_seed = 17                 # places the targets; NOT in the controller's brief
+description = """
+Four drones on a start line search four 80 m sectors for two targets,
+report them to a base whose radio reaches 100 m, avoid a restricted zone
+on the direct path to the far sectors, and return, within 15 minutes and
+their batteries.
+"""
+
+# Fault injection arrives with Phases 9-11. Empty is the canonical condition.
+faults = []
+
+[mission]
+type = "distributed_search"
+deadline_s = 900                 # AUV-05's value: fifteen minutes
+required_coverage = 0.95         # of the sectors' area, by the detection footprint
+targets_to_find = 2
+
+[base]
+position = [-8.0, 0.0]           # behind the start line; on the ground
+
+[network]
+profile = "perfect"              # degraded profiles are Phase 10's
+# Reaches the near sectors (x 40-120) only in part and the far ones (x 120-200)
+# not at all, so a detection there is reported only through a relay, or later,
+# on return: AUV-05's "or eventually synchronized".
+communication_range_m = 100.0
+
+[detection]
+radius_m = 10.0
+# Held this long inside the radius. At 5 m/s a pass must stay within 10 m for
+# 2 s, i.e. a 10 m chord, so a lane detects to 8.66 m either side, not 10.
+min_observation_s = 2.0
+line_of_sight = false            # not modelled: the mock has no obstacles
+
+# Simulated, uncalibrated, in percent. Enough for the mission with margin; low
+# enough that a long detour shows in it.
+[battery]
+capacity = 100.0
+hover_drain_per_s = 0.05         # 3 % a minute in the air
+move_drain_per_m = 0.02          # 2 % per 100 m flown
+reserve = 20.0                   # a drone must land with at least this
+
+[safety]
+min_separation_m = 2.0           # closer than this is a separation violation
+
+[targets]
+count = 2
+placement = "random_in_sectors"  # uniform over the sectors, outside restricted zones
+min_spacing_m = 20.0             # the two never inside one detection footprint
+
+# The spawn layout: 4 m apart along +x, as settings.json and ensure_vehicles
+# lay drones out, so the same file can be flown in CarlaAir.
+[[vehicles]]
+id = "Drone1"
+start = [0.0, 0.0, 0.0]
+
+[[vehicles]]
+id = "Drone2"
+start = [4.0, 0.0, 0.0]
+
+[[vehicles]]
+id = "Drone3"
+start = [8.0, 0.0, 0.0]
+
+[[vehicles]]
+id = "Drone4"
+start = [12.0, 0.0, 0.0]
+
+# Four 80 m sectors, two near and two far: four drones, four sectors, so the
+# naive one-drone-per-sector allocation is obvious (AUV-05).
+[[sectors]]
+id = "S1"
+bounds = [40.0, -80.0, 120.0, 0.0]       # x_min, y_min, x_max, y_max
+
+[[sectors]]
+id = "S2"
+bounds = [40.0, 0.0, 120.0, 80.0]
+
+[[sectors]]
+id = "S3"
+bounds = [120.0, -80.0, 200.0, 0.0]
+
+[[sectors]]
+id = "S4"
+bounds = [120.0, 0.0, 200.0, 80.0]
+
+# Directly ahead of the start line, on the straight path to the far sectors:
+# reaching S3 or S4 means going round it.
+[[restricted_zones]]
+id = "R1"
+polygon = [[15.0, -15.0], [35.0, -15.0], [35.0, 15.0], [15.0, 15.0]]

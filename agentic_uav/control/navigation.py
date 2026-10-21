@@ -30,6 +30,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from ..core.geometry import Region  # noqa: F401  (moved to core in Phase 4; same class)
 from ..core.models import Position
 
 
@@ -142,23 +143,6 @@ def standoff_point(target: Position, origin: Position, radius_m: float) -> Posit
 
 
 # -------------------------------------------------------------------- search
-
-@dataclass(frozen=True)
-class Region:
-    """An axis-aligned rectangle on the map, in metres. AUV-05's search sectors."""
-
-    x_min: float
-    y_min: float
-    x_max: float
-    y_max: float
-
-    def __post_init__(self) -> None:
-        if self.x_max < self.x_min or self.y_max < self.y_min:
-            raise ValueError(f"region has negative size: {self}")
-
-    def contains(self, x: float, y: float) -> bool:
-        return self.x_min <= x <= self.x_max and self.y_min <= y <= self.y_max
-
 
 def lawnmower(region: Region, spacing_m: float, altitude_m: float) -> list[Waypoint]:
     """A boustrophedon path covering `region`, legs along x, `spacing_m` apart.

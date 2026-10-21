@@ -31,9 +31,13 @@ class RealClockTests(unittest.TestCase):
     def test_is_a_clock_and_moves(self):
         clock = RealClock()
         self.assertIsInstance(clock, Clock)
+        # monotonic() can be coarse: GetTickCount64 on Windows ticks every
+        # 15.6 ms, so a 10 ms sleep sometimes read as 0. Sleep well past one
+        # tick and allow one tick of error.
+        tick = time.get_clock_info("monotonic").resolution
         t0 = clock.now()
-        clock.sleep(0.01)
-        self.assertGreaterEqual(clock.now() - t0, 0.009)
+        clock.sleep(0.05)
+        self.assertGreaterEqual(clock.now() - t0, 0.05 - tick)
 
     def test_negative_sleep_does_not_raise(self):
         RealClock().sleep(-1.0)
