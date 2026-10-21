@@ -67,7 +67,7 @@ sys.path.insert(0, REPO)
 
 from agentic_uav.control.executor import LAND_TIMEOUT, DroneRunner, fly_plans  # noqa: E402
 from agentic_uav.control.ground import forget_ground_reference  # noqa: E402
-from agentic_uav.core.models import SkillCommand  # noqa: E402
+from agentic_uav.core.models import PrimitiveCommand  # noqa: E402
 from agentic_uav.core.protocol import MOVE_SPEED  # noqa: E402
 from agentic_uav.planners.endpoint import check_endpoint  # noqa: E402
 from agentic_uav.planners.ollama_planner import OllamaPlanner  # noqa: E402
@@ -187,7 +187,7 @@ def land_all(scene, names):
     for n, agl in airborne(scene, names):
         try:
             scene.take_control(n)
-            scene.execute_skill(n, SkillCommand.land(LAND_TIMEOUT))
+            scene.execute_primitive(n, PrimitiveCommand.land(LAND_TIMEOUT))
         except Exception as exc:
             say(f"  {n}: landing failed: {type(exc).__name__}: {exc}", "r")
         finally:

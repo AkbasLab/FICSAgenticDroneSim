@@ -3,8 +3,8 @@
 from .models import (  # noqa: F401
     CollisionInfo,
     Position,
-    SkillCommand,
-    SkillKind,
-    SkillResult,
+    PrimitiveCommand,
+    PrimitiveKind,
+    PrimitiveResult,
     VehicleState,
 )

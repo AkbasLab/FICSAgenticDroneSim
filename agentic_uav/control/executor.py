@@ -18,7 +18,7 @@ import time
 from typing import Any, Callable
 
 from ..core.errors import PlanError
-from ..core.models import SkillCommand
+from ..core.models import PrimitiveCommand
 from ..simulator.adapter import VehicleAdapter
 from ..simulator.scenario_manager import ensure_vehicles
 from .contacts import is_ground, landing_contact
@@ -223,11 +223,11 @@ class DroneRunner:
 
     def take_off(self) -> None:
         """Lift off and settle at cruise height before the plan begins."""
-        self.vehicle.execute_skill(self.name, SkillCommand.take_off())
+        self.vehicle.execute_primitive(self.name, PrimitiveCommand.take_off())
         # Every altitude is relative to the GROUND, not to z=0. Town10HD's
         # ground sits at NED z = +29.25, so a bare moveToZAsync(-8) climbs to
         # 37.5 m rather than 8 m. Measured 2026-10-06; see the phase log.
-        self.vehicle.execute_skill(self.name, SkillCommand.move_to_z(
+        self.vehicle.execute_primitive(self.name, PrimitiveCommand.move_to_z(
             self.ground_z + CRUISE_ALTITUDE, self.speed))
         # Settle before executing: a velocity command issued mid-climb produces
         # a curve rather than the straight leg the plan describes.
@@ -279,7 +279,7 @@ class DroneRunner:
 
         See the phase log for 2026-10-06.
         """
-        self.vehicle.execute_skill(self.name, SkillCommand.velocity(vx, vy, duration))
+        self.vehicle.execute_primitive(self.name, PrimitiveCommand.velocity(vx, vy, duration))
         # Velocity commands do not brake -- they expire and the aircraft coasts.
         # Without this hover, every leg overshoots by however far momentum
         # carries it, and the overshoot compounds across a multi-step plan.
@@ -305,12 +305,12 @@ class DroneRunner:
         elif action == "fly_left":
             self._velocity(0.0, -self.speed, step["duration"])
         elif action == "hover":
-            self.vehicle.execute_skill(self.name, SkillCommand.hover())
+            self.vehicle.execute_primitive(self.name, PrimitiveCommand.hover())
             time.sleep(step["duration"])
         elif action == "set_altitude":
             # ground_z-relative: the plan says "30 m up", which means 30 m above
             # the ground the drone armed on, not 30 m above the map origin.
-            self.vehicle.execute_skill(self.name, SkillCommand.move_to_z(
+            self.vehicle.execute_primitive(self.name, PrimitiveCommand.move_to_z(
                 self.ground_z + step["z"], self.speed))
         elif action == "fly_to":
             # BOUNDED, for the same reason `land` is. An unbounded
@@ -323,7 +323,7 @@ class DroneRunner:
             #
             # The timeout is generous: a 300 m leg at MOVE_SPEED is 60 s, so this
             # cannot cut short a journey that was going to arrive.
-            self.vehicle.execute_skill(self.name, SkillCommand.move_to_position(
+            self.vehicle.execute_primitive(self.name, PrimitiveCommand.move_to_position(
                 float(step["x"]), float(step["y"]),
                 self.ground_z + float(step.get("z", CRUISE_ALTITUDE)),
                 self.speed, FLY_TO_TIMEOUT))
@@ -332,9 +332,9 @@ class DroneRunner:
             # (2 m/s rather than MOVE_SPEED), then hand over to landAsync. Going
             # straight to landAsync from cruise means a fast descent onto a
             # surface the physics does not model.
-            self.vehicle.execute_skill(self.name, SkillCommand.move_to_z(
+            self.vehicle.execute_primitive(self.name, PrimitiveCommand.move_to_z(
                 self.ground_z - 1.0, 2.0, LAND_DESCENT_TIMEOUT))
-            self.vehicle.execute_skill(self.name, SkillCommand.land(LAND_TIMEOUT))
+            self.vehicle.execute_primitive(self.name, PrimitiveCommand.land(LAND_TIMEOUT))
             # VERIFY, and raise if it did not land. Both calls above can return
             # having moved the aircraft nowhere: measured 2026-10-06, moveToZAsync
             # running 27.1 s and returning with the aircraft still at 54.17 m when

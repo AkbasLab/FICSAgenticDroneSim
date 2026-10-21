@@ -13,18 +13,26 @@ timeout), the call here leaves the argument out too.
 
 `airsim` is imported lazily, so code that only plans, or only tests against a
 fake client, never needs the package or a simulator.
+
+PHASE 3 ADDITIONS, which the baseline never calls: the heading in `get_state`
+(read from the same `getMultirotorState` call, so no new call), the
+`ROTATE_TO_YAW` primitive (`rotateToYawAsync`) and `cancel`
+(`cancelLastTask`). Having no baseline to copy, their call shapes follow
+AirSim's own API, and their behaviour in CarlaAir is checked in a live
+flight before Phase 3 closes.
 """
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from ..core.models import (
     CollisionInfo,
     Position,
-    SkillCommand,
-    SkillKind,
-    SkillResult,
+    PrimitiveCommand,
+    PrimitiveKind,
+    PrimitiveResult,
     VehicleState,
 )
 
@@ -55,8 +63,10 @@ class AirSimAdapter:
     def get_state(self, vehicle_id: str) -> VehicleState:
         state = self.client.getMultirotorState(vehicle_name=vehicle_id)
         p = state.kinematics_estimated.position
+        q = getattr(state.kinematics_estimated, "orientation", None)
         return VehicleState(vehicle_id, Position(p.x_val, p.y_val, p.z_val),
-                            getattr(state, "landed_state", None))
+                            getattr(state, "landed_state", None),
+                            None if q is None else yaw_degrees(q.w_val, q.x_val, q.y_val, q.z_val))
 
     def get_pose(self, vehicle_id: str) -> Position:
         # Positional, as the baseline called it.
@@ -88,32 +98,40 @@ class AirSimAdapter:
         self.client.armDisarm(False, vehicle_name=vehicle_id)
         self.client.enableApiControl(False, vehicle_name=vehicle_id)
 
-    def execute_skill(self, vehicle_id: str, command: SkillCommand) -> SkillResult:
+    def execute_primitive(self, vehicle_id: str, command: PrimitiveCommand) -> PrimitiveResult:
         kind, p = command.kind, command.params
         c = self.client
-        if kind is SkillKind.TAKE_OFF:
+        if kind is PrimitiveKind.TAKE_OFF:
             c.takeoffAsync(vehicle_name=vehicle_id).join()
-        elif kind is SkillKind.MOVE_TO_Z:
+        elif kind is PrimitiveKind.MOVE_TO_Z:
             extra = {} if p.get("timeout") is None else {"timeout_sec": p["timeout"]}
             c.moveToZAsync(p["z"], p["speed"], **extra, vehicle_name=vehicle_id).join()
-        elif kind is SkillKind.VELOCITY:
+        elif kind is PrimitiveKind.VELOCITY:
             c.moveByVelocityBodyFrameAsync(
                 p["vx"], p["vy"], 0.0, p["duration"], vehicle_name=vehicle_id).join()
-        elif kind is SkillKind.HOVER:
+        elif kind is PrimitiveKind.HOVER:
             c.hoverAsync(vehicle_name=vehicle_id).join()
-        elif kind is SkillKind.MOVE_TO_POSITION:
+        elif kind is PrimitiveKind.MOVE_TO_POSITION:
             extra = {} if p.get("timeout") is None else {"timeout_sec": p["timeout"]}
             c.moveToPositionAsync(p["x"], p["y"], p["z"], p["speed"],
                                   **extra, vehicle_name=vehicle_id).join()
-        elif kind is SkillKind.LAND:
+        elif kind is PrimitiveKind.LAND:
             extra = {} if p.get("timeout") is None else {"timeout_sec": p["timeout"]}
             c.landAsync(**extra, vehicle_name=vehicle_id).join()
-        else:  # unreachable: SkillCommand rejects unknown kinds
-            raise ValueError(f"unhandled skill {kind!r}")
-        return SkillResult(vehicle_id, kind)
+        elif kind is PrimitiveKind.ROTATE_TO_YAW:
+            extra = {} if p.get("timeout") is None else {"timeout_sec": p["timeout"]}
+            if p.get("margin") is not None:
+                extra["margin"] = p["margin"]
+            c.rotateToYawAsync(p["yaw"], **extra, vehicle_name=vehicle_id).join()
+        else:  # unreachable: PrimitiveCommand rejects unknown kinds
+            raise ValueError(f"unhandled primitive {kind!r}")
+        return PrimitiveResult(vehicle_id, kind)
 
     def stop(self, vehicle_id: str) -> None:
-        self.execute_skill(vehicle_id, SkillCommand.hover())
+        self.execute_primitive(vehicle_id, PrimitiveCommand.hover())
+
+    def cancel(self, vehicle_id: str) -> None:
+        self.client.cancelLastTask(vehicle_name=vehicle_id)
 
     # --------------------------------------------------------- SceneAdapter
 
@@ -133,6 +151,16 @@ class AirSimAdapter:
                       ignore_collision: bool = True) -> None:
         self.client.simSetVehiclePose(_pose(position), ignore_collision=ignore_collision,
                                       vehicle_name=vehicle_id)
+
+
+def yaw_degrees(w: float, x: float, y: float, z: float) -> float:
+    """Heading, in degrees, of an orientation quaternion (w, x, y, z).
+
+    The yaw term of AirSim's own `to_eularian_angles`, so the number matches
+    what AirSim reports; in degrees, within -180..180. Pure, so it is tested
+    without a simulator.
+    """
+    return math.degrees(math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z)))
 
 
 def _pose(position: Position) -> Any:

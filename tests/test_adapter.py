@@ -13,6 +13,13 @@ the calls recorded from `v0.1-open-loop-baseline`, and the adapter is checked
 against them call for call.
 
 No simulator: the adapter wraps the recording fake from `tests/airsim_fake.py`.
+
+PHASE 3 ADDITIONS have no baseline to take expectations from: the baseline
+never turned to a heading or cancelled a movement. Their expected calls follow
+AirSim's own API (`rotateToYawAsync(yaw, timeout_sec, margin, vehicle_name)`,
+`cancelLastTask(vehicle_name)`), and their behaviour in CarlaAir is checked by
+a live flight before Phase 3 closes. The heading conversion is checked against
+AirSim's own `to_eularian_angles`.
 """
 
 import json
@@ -24,7 +31,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path[:0] = [ROOT, os.path.join(ROOT, "tests")]
 
 import airsim_fake  # noqa: E402
-from agentic_uav.core import Position, SkillCommand, SkillKind, SkillResult  # noqa: E402
+from agentic_uav.core import Position, PrimitiveCommand, PrimitiveKind, PrimitiveResult  # noqa: E402
 from agentic_uav.simulator import SceneAdapter, VehicleAdapter  # noqa: E402
 from agentic_uav.simulator.airsim_adapter import AirSimAdapter  # noqa: E402
 
@@ -62,36 +69,36 @@ class ProtocolTests(unittest.TestCase):
         self.assertIsInstance(adapter, VehicleAdapter)
         self.assertIsInstance(adapter, SceneAdapter)
 
-    def test_skill_commands_reject_unknown_kinds(self):
+    def test_primitive_commands_reject_unknown_kinds(self):
         with self.assertRaises(ValueError):
-            SkillCommand("teleport")
+            PrimitiveCommand("teleport")
 
-    def test_skill_result_reports_what_ran(self):
-        result = _Rig().adapter.execute_skill("Drone1", SkillCommand.hover())
-        self.assertEqual(result, SkillResult("Drone1", SkillKind.HOVER, True))
+    def test_primitive_result_reports_what_ran(self):
+        result = _Rig().adapter.execute_primitive("Drone1", PrimitiveCommand.hover())
+        self.assertEqual(result, PrimitiveResult("Drone1", PrimitiveKind.HOVER, True))
 
 
-class SkillCallTests(unittest.TestCase):
-    """Each skill sends exactly what the baseline sent. Expectations from the goldens."""
+class PrimitiveCallTests(unittest.TestCase):
+    """Each primitive sends exactly what the baseline sent. Expectations from the goldens."""
 
-    def check(self, command: SkillCommand, expected: list, prepare=None) -> None:
+    def check(self, command: PrimitiveCommand, expected: list, prepare=None) -> None:
         rig = _Rig()
         if prepare:
             prepare(rig.adapter)
             rig.world.calls.clear()
-        rig.adapter.execute_skill("Drone1", command)
+        rig.adapter.execute_primitive("Drone1", command)
         self.assertEqual(rig.calls, [expected])
 
     def test_take_off(self):
         _, call = first(baseline_calls("M01#1"), "takeoffAsync")
-        self.check(SkillCommand.take_off(), call)
+        self.check(PrimitiveCommand.take_off(), call)
 
     def test_climb_to_cruise_uses_the_default_timeout(self):
         calls = baseline_calls("M01#1")
         i, _ = first(calls, "takeoffAsync")
         _, climb = first(calls, "moveToZAsync", i)
         z, speed = climb[1]
-        self.check(SkillCommand.move_to_z(z, speed), climb)
+        self.check(PrimitiveCommand.move_to_z(z, speed), climb)
 
     def test_landing_descent_carries_its_timeout(self):
         calls = baseline_calls("M03#1")
@@ -99,12 +106,12 @@ class SkillCallTests(unittest.TestCase):
         descent = calls[calls.index(land) - 1]
         self.assertEqual(descent[0], "moveToZAsync")
         z, speed = descent[1]
-        self.check(SkillCommand.move_to_z(z, speed, descent[2]["timeout_sec"]), descent)
+        self.check(PrimitiveCommand.move_to_z(z, speed, descent[2]["timeout_sec"]), descent)
 
     def test_velocity_leg(self):
         _, call = first(baseline_calls("M01#1"), "moveByVelocityBodyFrameAsync")
         vx, vy, _vz, duration = call[1]
-        self.check(SkillCommand.velocity(vx, vy, duration), call)
+        self.check(PrimitiveCommand.velocity(vx, vy, duration), call)
 
     def test_velocity_duration_passes_through_unconverted(self):
         # The plan's integer 5 reached AirSim as 5, not 5.0. Keep it so.
@@ -113,16 +120,16 @@ class SkillCallTests(unittest.TestCase):
 
     def test_hover(self):
         _, call = first(baseline_calls("M02#1"), "hoverAsync")
-        self.check(SkillCommand.hover(), call)
+        self.check(PrimitiveCommand.hover(), call)
 
     def test_fly_to(self):
         _, call = first(baseline_calls("M04#1"), "moveToPositionAsync")
         x, y, z, speed = call[1]
-        self.check(SkillCommand.move_to_position(x, y, z, speed, call[2]["timeout_sec"]), call)
+        self.check(PrimitiveCommand.move_to_position(x, y, z, speed, call[2]["timeout_sec"]), call)
 
     def test_land(self):
         _, call = first(baseline_calls("M03#1"), "landAsync")
-        self.check(SkillCommand.land(call[2]["timeout_sec"]), call)
+        self.check(PrimitiveCommand.land(call[2]["timeout_sec"]), call)
 
     def test_stop_is_a_hover(self):
         rig = _Rig()
@@ -208,7 +215,7 @@ class SandboxCallTests(unittest.TestCase):
                                                     "armDisarm", "enableApiControl"])
         rig = _Rig()
         rig.adapter.take_control("Drone1")
-        rig.adapter.execute_skill("Drone1", SkillCommand.land(expected[2][2]["timeout_sec"]))
+        rig.adapter.execute_primitive("Drone1", PrimitiveCommand.land(expected[2][2]["timeout_sec"]))
         rig.adapter.release("Drone1")
         self.assertEqual(rig.calls, expected)
 
@@ -238,6 +245,63 @@ class SceneTests(unittest.TestCase):
     def test_list_vehicles(self):
         rig = _Rig(declared=["Drone1", "Drone2"])
         self.assertEqual(rig.adapter.list_vehicles(), ["Drone1", "Drone2"])
+
+
+class HeadingAndCancelTests(unittest.TestCase):
+    """Phase 3, 3.2: turn to a heading, read the heading, cancel a movement."""
+
+    def test_rotate_to_yaw_leaves_airsim_defaults_out(self):
+        rig = _Rig()
+        rig.adapter.execute_primitive("Drone1", PrimitiveCommand.rotate_to_yaw(90.0))
+        # The fake records AirSim's defaults when an argument is omitted.
+        self.assertEqual(rig.calls, [["rotateToYawAsync", [90.0],
+                                      {"margin": 5, "timeout_sec": 3e38, "vehicle_name": "Drone1"}]])
+
+    def test_rotate_to_yaw_passes_timeout_and_margin(self):
+        rig = _Rig()
+        rig.adapter.execute_primitive("Drone1", PrimitiveCommand.rotate_to_yaw(-45.0, 10.0, 2.0))
+        self.assertEqual(rig.calls, [["rotateToYawAsync", [-45.0],
+                                      {"margin": 2.0, "timeout_sec": 10.0, "vehicle_name": "Drone1"}]])
+
+    def test_heading_is_read_from_the_same_state_call(self):
+        rig = _Rig()
+        rig.adapter.execute_primitive("Drone1", PrimitiveCommand.rotate_to_yaw(135.0))
+        rig.world.calls.clear()
+        state = rig.adapter.get_state("Drone1")
+        self.assertAlmostEqual(state.yaw_deg, 135.0, places=6)
+        self.assertEqual([c[0] for c in rig.calls], ["getMultirotorState"])   # no new call
+
+    def test_cancel(self):
+        rig = _Rig()
+        rig.adapter.cancel("Drone1")
+        self.assertEqual(rig.calls, [["cancelLastTask", [], {"vehicle_name": "Drone1"}]])
+
+    def test_yaw_degrees_matches_airsim(self):
+        # Against AirSim's own conversion, across the circle and with pitch and
+        # roll present -- including -45.59, the spawn heading Phase 1 measured.
+        import airsim
+        from agentic_uav.simulator.airsim_adapter import yaw_degrees
+        for pitch, roll, yaw in [(0, 0, 0), (0, 0, 90), (0, 0, -90), (0, 0, 179.9),
+                                 (0, 0, -45.59), (0.2, -0.1, 30), (-0.3, 0.25, -120)]:
+            q = airsim.to_quaternion(pitch, roll, __import__("math").radians(yaw))
+            expected = __import__("math").degrees(airsim.to_eularian_angles(q)[2])
+            with self.subTest(yaw=yaw):
+                self.assertAlmostEqual(yaw_degrees(q.w_val, q.x_val, q.y_val, q.z_val), expected, 9)
+
+    def test_no_orientation_means_no_heading(self):
+        import types
+        client = types.SimpleNamespace(getMultirotorState=lambda vehicle_name="": types.SimpleNamespace(
+            kinematics_estimated=types.SimpleNamespace(
+                position=types.SimpleNamespace(x_val=0.0, y_val=0.0, z_val=29.25)),
+            landed_state=0))
+        self.assertIsNone(AirSimAdapter(client).get_state("Drone1").yaw_deg)
+
+    def test_the_baseline_never_turns_or_cancels(self):
+        # Additions, not changes: no recorded baseline flight makes either call.
+        for case in GOLDEN.values():
+            for stream in case["result"]["calls"].values():
+                methods = {c[0] for c in stream}
+                self.assertFalse(methods & {"rotateToYawAsync", "cancelLastTask"}, case["id"])
 
 
 if __name__ == "__main__":

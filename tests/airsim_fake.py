@@ -34,6 +34,7 @@ import glob
 import inspect
 import io
 import json
+import math
 import os
 import re
 import shutil
@@ -105,6 +106,7 @@ class _Vehicle:
         self.landed_state = 0      # 0 Landed, 1 Flying
         self.api = False
         self.armed = False
+        self.yaw = 0.0             # degrees; Phase 3 reads it, the baseline never did
 
     def reset(self) -> None:
         self.x, self.y, self.z = self.spawn_x, 0.0, GROUND_Z
@@ -204,8 +206,11 @@ class FakeClient:
         self._rec("getMultirotorState", (), {"vehicle_name": vehicle_name})
         v = self._v(vehicle_name)
         position = types.SimpleNamespace(x_val=v.x, y_val=v.y, z_val=v.z)
+        half = math.radians(v.yaw) / 2.0          # a yaw-only quaternion, as AirSim builds it
+        orientation = types.SimpleNamespace(w_val=math.cos(half), x_val=0.0, y_val=0.0,
+                                            z_val=math.sin(half))
         return types.SimpleNamespace(
-            kinematics_estimated=types.SimpleNamespace(position=position),
+            kinematics_estimated=types.SimpleNamespace(position=position, orientation=orientation),
             landed_state=v.landed_state)
 
     def simGetVehiclePose(self, vehicle_name: str = "") -> Any:
@@ -281,6 +286,17 @@ class FakeClient:
         if vehicle_name not in self.world.stuck_land:
             v.z, v.landed_state = GROUND_Z, 0
         return _Future()
+
+    # -- Phase 3: never called by the baseline, so absent from its goldens
+    def rotateToYawAsync(self, yaw: float, timeout_sec: float = 3e38, margin: float = 5,
+                         vehicle_name: str = "") -> _Future:
+        self._rec("rotateToYawAsync", (yaw,),
+                  {"timeout_sec": timeout_sec, "margin": margin, "vehicle_name": vehicle_name})
+        self._v(vehicle_name).yaw = (float(yaw) + 180.0) % 360.0 - 180.0
+        return _Future()
+
+    def cancelLastTask(self, vehicle_name: str = "") -> None:
+        self._rec("cancelLastTask", (), {"vehicle_name": vehicle_name})
 
 
 # ----------------------------------------------------------- running a case
