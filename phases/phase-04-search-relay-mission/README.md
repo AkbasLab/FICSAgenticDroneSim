@@ -23,7 +23,9 @@ Mirrored from `AUV-22 — Phase Objectives Checklist`.
 > A fully scripted, **non-agentic** controller can complete the canonical
 > mission.
 
-**Met:** no · **Evidence:** —
+**Met:** on the mock, 2026-10-21, 20 of 20 seeds · **Evidence:**
+[`evidence/exit-criterion-mock-2026-10-21.md`](evidence/exit-criterion-mock-2026-10-21.md).
+The optional live run (step 5) is not yet flown.
 
 Planned evidence: the scripted controller completing the canonical scenario on
 the mock across 20 seeds (target layouts), every success criterion passed.
@@ -37,7 +39,7 @@ airspace Phase 1 flew.
 | Scenario format, validated loader, the canonical scenario | `agentic_uav/core/scenario.py`, `agentic_uav/experiments/scenarios.py`, `configs/scenarios/` | **Done** 2026-10-21; goldens unedited |
 | The mission world: targets, detection, restricted zones, battery, connectivity, an observer | `agentic_uav/simulator/` | **Done** 2026-10-21; goldens unedited |
 | The evaluator: one mission report, every criterion | `agentic_uav/experiments/evaluation.py`, `agentic_uav/simulator/coverage.py` | **Done** 2026-10-21; goldens unedited |
-| The scripted controller, run across 20 seeds | `agentic_uav/control/`, `scripts/` | step 4 |
+| The scripted controller, run across 20 seeds | `agentic_uav/control/routing.py`, `agentic_uav/control/scripted.py`, `agentic_uav/experiments/search_relay.py`, `scripts/search_relay_exit.py` | **Done** 2026-10-21; exit met on the mock, 20/20 |
 | Optional live run; close | `results/`, `evidence/` | step 5 |
 
 ## Plan
@@ -343,6 +345,103 @@ seventeen in the evaluator. Getting there:
 **The goldens did not move.** `record_golden.py --check` matches all four.
 406 tests pass, 15 skipped (live only); audit clean.
 
+### 2026-10-21 — step 4: the scripted controller, and the exit met on the mock, 20 of 20 seeds
+
+**Routing** (`agentic_uav/control/routing.py`): the shortest route between
+two map points that keeps `ZONE_CLEARANCE_M` (2.0 m) from every restricted
+zone, on a visibility graph. The nodes are each zone's corners, grown
+outward by the clearance; an edge exists where the straight line keeps out
+of every grown zone; Dijkstra finds the route. Zones are grown by mitring
+each corner, so every edge moves out by exactly the clearance (tested on a
+clockwise triangle). From Drone3's pad to S3's first lane, the route bends
+once, at R1's grown corner (12.9, −17.1): 138.1 m.
+
+**The controller** (`agentic_uav/control/scripted.py`): `plan_mission(brief)`
+takes a `MissionBrief` and refuses a `Scenario`, so it cannot be handed the
+targets. The whole plan is fixed before take-off, and is identical for every
+seed.
+
+* One drone per sector in id order (drone i takes sectors i, i+n, …, so two
+  drones take two sectors each).
+* Heights 12, 16, 20 and 24 m, Phase 3's live heights.
+* Lanes 16 m apart. The detection rule allows at most 17.32 m at 5 m/s;
+  95 % of that, rounded up to whole lanes, gives 16 m.
+* Routes out and home go round R1 with clearance. A lawnmower lane that
+  would pass within the clearance of a zone is refused, not flown.
+* Each drone lands on its own pad.
+* Before take-off, the plan's battery use and duration are estimated with the
+  brief's model, and a plan that would breach the reserve or the deadline is
+  refused. The estimates for the canonical brief: 657–807 m per drone, at
+  most 199 s, and at most 26.9 % of the battery.
+
+The skills it flies are TAKE_OFF, FOLLOW_WAYPOINTS (out), SEARCH_REGION,
+FOLLOW_WAYPOINTS (home) and LAND. Drone1's route out is straight, so it
+flies four skills; the others fly five.
+
+**The exit run** (`experiments/search_relay.py`, `scripts/search_relay_exit.py`)
+flies the plan on a fresh mock per seed, with the drones placed on their
+pads. The trajectories are the mock's exact trace, and each flight is judged
+by the evaluator. The seeds are `EXIT_SEEDS` = 1–20, fixed before any was
+flown. A seed meets when the mission succeeds **and** every planned skill
+succeeded with no safety landing.
+
+**Result: 20 of 20 met** — every criterion passed on every seed. The run
+took 5.5 s of wall time and is deterministic (the saved reports match a dry
+run seed for seed). The margins:
+
+| | Measured | Required |
+|---|---|---|
+| Completion | 182.2 s | 900 s deadline |
+| Coverage | 0.9995 | 0.95 |
+| Lowest battery | 73.9 % | 20 % reserve |
+| Closest pair | 3.31 m | 2 m |
+| Skill results | 380 of 380 succeeded | — |
+
+What the 20 flights showed, measured:
+
+* **27 of the 40 reports went through a relay**, with no relay logic: the
+  detecting drone was out of range of the base and other drones formed the
+  chain.
+* **Drones detect in transit.** Drone3 made the first report of 5 of the
+  11 S1 targets, crossing S1 on its way out.
+* **The closest approach is the same on every seed.** Drone1, inbound at
+  12 m, passes 3.21 m from Drone2's pad while Drone2 descends through 11.2 m.
+
+Evidence: [`evidence/exit-criterion-mock-2026-10-21.md`](evidence/exit-criterion-mock-2026-10-21.md),
+generated from `results/search-relay-exit-mock-20261021-093521-exit.jsonl`.
+The run was made on commit `bc12512` with the step-4 files uncommitted.
+Provenance records the package digest `3729c0c3d5b1e673`, which the commit
+of this step must reproduce.
+
+**The exit can fail**, and tests show it:
+
+* Lanes 20 m apart fail C1.
+* A landing that does not land fails C6, and is not counted as met.
+* A rescued run — a safety landing, or a skipped skill — is not met, even
+  when the mission report succeeds.
+* Two drones fly all four sectors and meet it (AUV-05: "two to four drones").
+
+**Tests: 24 new, in `tests/test_scripted.py`** — routing (7), the controller
+(7), the exit (8), the script (2).
+
+**Mutations: 21, all caught**, against the full suite. The first pass caught
+13 of 22, and the nine survivors were all of two kinds:
+
+* **Hidden by the canonical geometry.** R1 is a square listed
+  counter-clockwise, so mitring and orientation changed nothing. The pads are
+  the mock's own spawn layout, so skipping placement changed nothing. A lane
+  width from the radius alone also rounds to 16 m. New tests use a clockwise
+  triangle, pads elsewhere, and a 3 s observation time (7 lanes, 11.43 m).
+* **Untested, or not code at all.** Choosing the shorter of two two-corner
+  routes round R1 was untested; so was the endpoint check's message (without
+  it a route still fails, less clearly), and `skills_ok` on a rescued run. Two
+  filters on graph nodes were equivalent: a concave corner is never on a
+  shortest route, and a node inside a grown zone can never be joined. Both
+  were removed; 22 mutations became 21.
+
+**The goldens did not move.** `record_golden.py --check` matches all four.
+430 tests pass, 15 skipped (live only); audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -360,8 +459,16 @@ seventeen in the evaluator. Getting there:
 | 2026-10-21 | **Return is to the drone's own pad, within 2.0 m** | The scenario places drones on pads and the base is a radio; half the pad spacing makes the pad unambiguous. Battery at or above the reserve is part of "safely". |
 | 2026-10-21 | **Partial scores are reported as components, unweighted** | AUV-14 names a weighted MissionScore but no weights, and Phase 15 forbids choosing metrics after seeing results. |
 | 2026-10-21 | **The mock is observed exactly; live is polled** | The mock knows its own motion and records it; a live simulator can only be sampled. The record will say which observer judged each run. |
+| 2026-10-21 | **The scripted plan: one drone per sector, its own height, lanes at 95 % of the detection limit, routes with 2 m zone clearance** | The naive allocation AUV-05 names as the baseline; heights already flown live in Phase 3, so crossings never conflict; the 5 % and the 2 m are for live flight, which does not hold a line exactly. |
+| 2026-10-21 | **Exit seeds 1–20, fixed before flying; met = mission success and every planned skill succeeded** | Fixed in code before the first run so no seed can be chosen after the fact. A mission rescued by a safety landing is the safety net working, not the script. |
 
 ## Open questions
+
+- **The 3.31 m closest approach on a live run.** On the mock, Drone1's
+  inbound leg passes 3.21 m from Drone2's pad while Drone2 descends; that is
+  1.3 m clear of the minimum, with no position error. Live, Phase 1 measured
+  drift, so a live flight of the full plan could come closer. Not a question
+  for the mock exit; one for step 5, if the full plan is ever flown live.
 
 ---
 
