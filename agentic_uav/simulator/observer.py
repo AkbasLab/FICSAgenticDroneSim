@@ -74,14 +74,27 @@ def trajectories_from_samples(samples: dict[str, list[Sample]] | dict[str, list[
     return out
 
 
-def mock_trajectories(world: MockWorld, drones: list[str] | tuple[str, ...] | None = None) -> dict[str, Trajectory]:
-    """Every (or each named) mock drone's exact trajectory so far."""
+def mock_trajectories(world: MockWorld, drones: list[str] | tuple[str, ...] | None = None,
+                      until_now: bool = False) -> dict[str, Trajectory]:
+    """Every (or each named) mock drone's exact trajectory so far.
+
+    The trace has a knot at every change of motion, so mid-move its last knot
+    is where the move began. `until_now` adds a knot at the present instant,
+    where the drone is now, which is what a reading taken in flight needs; a
+    finished flight does not.
+    """
     names = list(world.vehicles) if drones is None else list(drones)
     out = {}
-    for name in names:
-        knots = [Knot(t, p.x, p.y, _altitude(p.z, world.ground_z), airborne)
-                 for t, p, airborne in world.trace(name)]
-        out[name] = Trajectory(name, knots)
+    with world.lock:                         # trace and present position at one instant
+        now = world.clock.now()
+        for name in names:
+            knots = [Knot(t, p.x, p.y, _altitude(p.z, world.ground_z), airborne)
+                     for t, p, airborne in world.trace(name)]
+            if until_now and (not knots or now > knots[-1].t):
+                p = world.position(name)
+                knots.append(Knot(now, p.x, p.y, _altitude(p.z, world.ground_z),
+                                  not world.vehicles[name].landed))
+            out[name] = Trajectory(name, knots)
     return out
 
 

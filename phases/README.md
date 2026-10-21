@@ -42,7 +42,7 @@ disk are not study data, for reasons that are easy to forget.
 | **2** | [Repository architecture](phase-02-repository-architecture/) | Baseline examples run through the modular structure unchanged | **Complete** 2026-10-20 — goldens unedited after every step; a 30-run re-flight matches `v6-polled` |
 | **3** | [Flight-skill layer](phase-03-flight-skill-layer/) | Four drones take off, navigate, hold, return, land — each skill returning a structured result | **Complete** 2026-10-21 — eleven skills, a mock, one contract; the four-drone script met live in CarlaAir and on the mock |
 | **4** | [Search-and-relay mission](phase-04-search-relay-mission/) | A scripted, non-agentic controller completes the canonical mission | **Complete** 2026-10-21 — the scripted controller meets all 20 exit seeds on the mock; a small variant met 20 of 20 in each of three CarlaAir flights |
-| 5 | Persistent single agent | One agent completes a search task with no preflight action list | Not started |
+| **5** | [Persistent single agent](phase-05-persistent-agent/) | One agent completes a search task with no preflight action list | In progress — step 1 of 6: sensing behind the truth/belief boundary |
 | 6 | Belief state | The logger can show exactly what an agent knew and did not know | Not started |
 | 7 | Inter-agent messaging | Four agents exchange heartbeats; team beliefs update only on delivery | Not started |
 | 8 | Decentralized task allocation | Four drones divide sectors with no central assignment | Not started |
