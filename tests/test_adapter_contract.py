@@ -222,11 +222,23 @@ class LiveAirSimContract(AdapterContract, unittest.TestCase):
     def make(self, declared=("Drone1",)):
         adapter = AirSimAdapter.connect()
         adapter.reset()
-        self.wait_for_rest(adapter)
-        return adapter, RealClock(), adapter.get_state("Drone1").position.z
+        ground = self.wait_for_rest(adapter)
+        return adapter, RealClock(), ground
 
-    def wait_for_rest(self, adapter=None):
-        time.sleep(4.0)          # a reset drone falls from the player start; let it land
+    def wait_for_rest(self, adapter=None, name="Drone1"):
+        # A reset drone FALLS from the player start. A fixed wait read it in
+        # mid-air in Phase 1 (18 m wrong), so sample until it stops moving, as
+        # the executor's arming does.
+        adapter = adapter or self.adapter
+        previous = adapter.get_state(name).position.z
+        deadline = time.monotonic() + 15.0
+        while time.monotonic() < deadline:
+            time.sleep(0.3)
+            current = adapter.get_state(name).position.z
+            if abs(current - previous) < 0.05:
+                return current
+            previous = current
+        self.fail(f"{name} did not come to rest within 15 s after a reset")
 
     def tearDown(self):
         try:

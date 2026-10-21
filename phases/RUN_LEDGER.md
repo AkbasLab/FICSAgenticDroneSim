@@ -242,12 +242,19 @@ and kept on purpose. Planning data from every 70B session stands.
 | **`20261020-193347-p2-blockA`** | **70b** | **24** | **VALID — Phase 2's re-flight of v6** through the refactored code |
 | **`20261020-194802-p2-blockB-M09`** | **70b** | **3** | **VALID — Phase 2's re-flight of v6** |
 | **`20261020-195048-p2-blockC-M10`** | **70b** | **3** | **VALID — Phase 2's re-flight of v6**; Drone1–Drone3 contact every run, as in v6 |
+| `20261021-005707` four-drone-skills, live | none | 1 (20 skills) | **Phase 3 exit run** — a skill demonstration, not a mission run: 20/20 skills, no contacts |
+| `20261021-005853` four-drone-skills, mock | none | 1 (20 skills) | Phase 3 — the same script on the mock, simulated time |
 
 The `p2-` sessions are in `phases/phase-02-repository-architecture/results/`,
 not Phase 1's. They meet every condition in §1 and are the Phase 2 exit
 evidence: the same 30 runs as v6, flown by the code at `ac48cb0`, compared run
 by run in that phase's `evidence/`. **v6 stays the citable Phase 1 block**; the
 re-flight shows the refactor did not change it.
+
+The two Phase 3 rows are in `phases/phase-03-flight-skill-layer/results/`. They
+are not mission runs and plan nothing: a fixed four-drone skill script
+(`scripts/four_drone_skills.py`), counted here because the live one flew four
+drones in CarlaAir. Its conditions: v6's simulator setup, no model.
 
 ### Why Block A is split
 
@@ -327,7 +334,7 @@ are demonstrations.
 | Phase | Exit criterion | What it needs |
 |---|---|---|
 | **2** — Repository architecture | Baseline examples run through the modular structure unchanged | A refactor plus a demonstration that behaviour is unchanged. No scored runs. **Done 2026-10-20**: a 30-run re-flight of the mission set (plus a plan-only pass), every drone-plan identical to v6, every outcome equal; see §3 |
-| **3** — Flight-skill layer | Four drones take off, navigate, hold, return, land, each skill returning a structured result | Flights, but a capability demonstration rather than a scored matrix |
+| **3** — Flight-skill layer | Four drones take off, navigate, hold, return, land, each skill returning a structured result | Flights, but a capability demonstration rather than a scored matrix. **Done 2026-10-21**: one live four-drone run, 20/20 skills, no contacts; see §3 |
 
 > **Phase 3's exit criterion names four drones**, and on the evidence of M09 it
 > is not blocked: multi-drone flight works when the extra drones are spawned at

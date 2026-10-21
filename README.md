@@ -163,12 +163,13 @@ decisions get made.
 ```
 docs/         RESEARCH_PLAN · SETUP · CONTROLS · BASELINE_* · carlaair/ reference set · vega/
 configs/      missions/ — the mission set as data, edit here to add or change one
-agentic_uav/  the research modules, built in Phase 2 (see below)
+agentic_uav/  the research modules, built in Phases 2 and 3 (see below)
 baseline/     open_loop_agent.py — the baseline's command line, now a thin entry
               point over agentic_uav/; the original single file is the tag
               v0.1-open-loop-baseline
 scripts/      experiment entry points: run_missions.py, the command line of
-              agentic_uav/experiments/runner.py
+              agentic_uav/experiments/runner.py; four_drone_skills.py, Phase 3's
+              exit script (--sim mock or airsim)
 tools/        development tooling: audit_repo.py, fly_chat.py, record_golden.py,
               the doc generators
 tests/        unit tests, and the golden tests that pin the baseline's behaviour
@@ -210,27 +211,35 @@ completed phase is tagged `phase-NN-complete`.
 The module tree is specified in `AUV-03 — Repository Architecture`. Its shape
 encodes the experimental design: policies, planners and simulators are all
 interchangeable, which is what makes selecting an architecture a configuration
-change rather than four separate codebases. Phase 2 has built these parts of
-it, by moving the baseline without changing what it does:
+change rather than four separate codebases. Phase 2 built these parts of it,
+by moving the baseline without changing what it does, and Phase 3 added the
+flight-skill layer and the mock simulator:
 
 ```
 agentic_uav/
   core/         plain data shared by everything: positions, vehicle state,
-                skill commands and results, protocol constants, errors
+                primitive commands and results, protocol constants, errors;
+                the real and simulated clocks
   simulator/    the only code that talks to a simulator: the VehicleAdapter and
-                SceneAdapter protocols, the AirSim adapter, the scenario manager,
-                AirSim's settings.json
+                SceneAdapter protocols, the AirSim adapter, the mock adapter
+                (simulated time, contacts, injectable faults), the scenario
+                manager, AirSim's settings.json
   control/      the open-loop executor, the ground reference, contact
-                classification, the separation monitor
+                classification, the separation monitor; navigation (the one
+                place altitude becomes NED) and the eleven mission-level skills,
+                each with a contract and a four-state SkillResult
   planners/     the MissionPlanner protocol: the plan schema and validation, the
                 prompt, the Ollama planner and a replay planner
-  experiments/  the mission runner, the agent log, provenance
+  experiments/  the mission runner, the agent log, provenance; team flight
 ```
 
 `agents/` and `coordination/` arrive with the phases that need them; they are
 not created empty. `tests/golden/` holds what the baseline did before any of
 it moved — every AirSim call, every model request, every runner and sandbox
 output — and the tests check the moved code against it.
+`tests/test_adapter_contract.py` holds every adapter to the same promises:
+the AirSim adapter, the mock, and, with `AUV_LIVE_AIRSIM=1`, a running
+CarlaAir.
 
 ---
 

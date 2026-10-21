@@ -1,7 +1,7 @@
 # Phase 3 — Complete the deterministic flight-skill layer
 
 **Stage:** 1 · Platform · **Vault note:** `AUV-04 — Flight Skills and the Mock Simulator`
-**Started:** 2026-10-20 · **Completed:** —
+**Started:** 2026-10-20 · **Completed:** 2026-10-21
 
 > Give every later agent a reliable toolbox: eleven mission-level skills with
 > formal contracts and structured results, heading and waypoint navigation, and
@@ -14,10 +14,10 @@
 
 Mirrored from `AUV-22 — Phase Objectives Checklist`.
 
-- [ ] **3.1** Define high-level skills — `TAKE_OFF` `GO_TO_WAYPOINT` `FOLLOW_WAYPOINTS` `SEARCH_REGION` `INSPECT_POINT` `HOLD_POSITION` `RENDEZVOUS` `ACT_AS_RELAY` `RETURN_HOME` `LAND` `EMERGENCY_HOLD`
-- [ ] **3.2** Add heading and waypoint navigation — turn to heading, 3D waypoint, waypoint list, cancel movement, stop and hold, reached-within-tolerance
-- [ ] **3.3** Give every skill a formal contract — parameters, preconditions, success, failure, timeout, abort behaviour, expected state change
-- [ ] **3.4** Add a lightweight mock simulator — `MockVehicleAdapter` for unit tests, communication testing, task-allocation testing, rapid debugging, CI
+- [x] **3.1** Define high-level skills — `TAKE_OFF` `GO_TO_WAYPOINT` `FOLLOW_WAYPOINTS` `SEARCH_REGION` `INSPECT_POINT` `HOLD_POSITION` `RENDEZVOUS` `ACT_AS_RELAY` `RETURN_HOME` `LAND` `EMERGENCY_HOLD` *(step 3; relay and rendezvous geometric until Phases 7 and 9, as decided)*
+- [x] **3.2** Add heading and waypoint navigation — turn to heading, 3D waypoint, waypoint list, cancel movement, stop and hold, reached-within-tolerance *(steps 1–3; turning and cancelling from a second connection checked live)*
+- [x] **3.3** Give every skill a formal contract — parameters, preconditions, success, failure, timeout, abort behaviour, expected state change *(step 3; all seven clauses for all eleven, as data, checked by a test)*
+- [x] **3.4** Add a lightweight mock simulator — `MockVehicleAdapter` for unit tests, communication testing, task-allocation testing, rapid debugging, CI *(step 4; held to the same contract as AirSim)*
 
 ## Exit criterion
 
@@ -25,11 +25,17 @@ Mirrored from `AUV-22 — Phase Objectives Checklist`.
 > waypoints, hold, return and land — and **each skill returns a structured
 > result rather than merely printing output.**
 
-**Met:** no · **Evidence:** —
+**Met:** **yes, 2026-10-21** · **Evidence:**
+[`evidence/exit-criterion-2026-10-21.md`](evidence/exit-criterion-2026-10-21.md).
 
-Planned evidence: the exit script's structured results from the mock (a test,
-on every run) and from one live CarlaAir flight of the same script, flown by
-the user.
+The same script and plan, `scripts/four_drone_skills.py` at `5738760`, flown
+twice: **live in CarlaAir by the user** — 20 of 20 skills succeeded, each a
+structured `SkillResult`, closest approach 4.0 m, no drone contacts, every
+drone landed at home, 46 s — and **on the mock**, with the same outcome in
+36 s of simulated time. The mock run is also a test, on every run
+(`tests/test_exit_script.py`). Before the live flight the live adapter
+contract passed 14 of 14 in CarlaAir, including a move cancelled from a
+second connection.
 
 ## Deliverables
 
@@ -40,7 +46,7 @@ the user.
 | The eleven skills and their contracts | `agentic_uav/control/skills.py` | **Done** 2026-10-20 |
 | `MockVehicleAdapter`, and one contract suite for every adapter | `agentic_uav/simulator/mock_adapter.py`, `tests/test_adapter_contract.py` | **Done** 2026-10-20 |
 | The four-drone exit script | `scripts/four_drone_skills.py`, `agentic_uav/experiments/team_flight.py` | **Done** 2026-10-20; exit criterion met on the mock |
-| Live flight of the exit script; close | `results/`, `evidence/` | step 6 |
+| Live flight of the exit script; close | [`results/`](results/), [`evidence/`](evidence/) | **Done** 2026-10-21; exit criterion met live |
 
 ## Plan
 
@@ -329,6 +335,71 @@ one connection cancelled from a second — the open question of whether
 The four Phase 2 goldens match unedited. 316 tests pass, 15 live ones
 skipped; audit clean.
 
+### 2026-10-21 — step 6: live in CarlaAir; the exit criterion is met
+
+Flown by the user, step by step, after midnight. No model runs in Phase 3, so
+no Vega job.
+
+**Before flying, one fix to the live test.** `LiveAirSimContract` waited a
+fixed 4 s after each reset for the falling drone to land, then read the
+ground. Phase 1 had found a fixed wait reads the drone in mid-air (18 m
+wrong once), so it was replaced, before any live run, by the executor's
+settle loop: sample until the drone stops moving, at most 15 s.
+
+**The scene.** `.\CarlaAir.ps1 Town10HD`, fresh, `settings.json` declaring
+Drone1 only. A read-only check: one vehicle, on the ground at z = 29.25,
+uncontrolled, heading **−45.6°** — Phase 1 measured the spawn heading as
+−45.59°, so step 1's heading reading is right in CarlaAir.
+
+**The live adapter contract**, `AUV_LIVE_AIRSIM=1 python
+tests\test_adapter_contract.py -v LiveAirSimContract`: **15 tests in 178.5 s,
+OK, 1 skipped by design** (spawning a test drone would leave it in the scene).
+The two questions only CarlaAir could answer:
+
+* **Cancelling from a second connection works.** A 60 m move running on one
+  connection was cancelled 4 s in by `cancelLastTask` on a third; the move
+  returned early and the drone stopped well short. So
+  `SkillRunner.request_abort(via=...)` works as designed.
+* **Turning holds.** 90°, −135° and 0°, each within 5°.
+
+Every other promise held live: start on the ground uncontrolled, control and
+release, take-off, moves, hover, landing, reset, the skills end to end. The
+run printed `ResourceWarning: unclosed socket` repeatedly: every AirSim
+connection in this project is opened and never closed. Harmless at this
+scale; noted below.
+
+**The exit script, live**: `python scripts\four_drone_skills.py --sim airsim
+--block live` → `four-drone-skills-airsim-20261021-005707-live`. Drone2–4
+spawned at runtime and placed 4 m apart. **20 of 20 skills succeeded**, each
+a structured result; the four drones flew 46 s together; closest approaches
+4.03, 8.02, 12.02, 4.0, 8.0 and 4.0 m over 420 monitor samples; **no drone
+contacts**; every drone landed at home. **Exit criterion: MET.** The mock run
+of the same script was saved beside it (`…-005853-mock`): 20 of 20, 36 s
+simulated, closest approach exactly the 4 m spacing.
+
+**What the live numbers say**
+
+* **TAKE_OFF measured the grounds Phase 1 knew**: 29.245, 29.282, 29.281 and
+  27.29 under the four spawns — Phase 1 recorded 29.25, 29.28 and 27.29 across
+  M10's. Measuring at rest and uncontrolled works in CarlaAir.
+* **A landed drone reads 1.16–1.17 m above its take-off ground** (z 28.07
+  over 29.245; Drone4 26.12 over 27.29). v6's landed drones read the same
+  (28.04–28.12, and 26.12), so it is CarlaAir's own behaviour, not this
+  layer's. It is why `LAND` keeps the baseline's 3 m threshold: a 1 m one
+  would have failed every live landing.
+* **Headings ended at ±87.6° for ±90° asked**: AirSim's `rotateToYawAsync`
+  returns once inside its default 5° margin, which the skill also accepts.
+* **Heights crept 0.2–0.5 m above target over the legs** (12.24 after
+  take-off, 12.52 after the waypoint, 13.01 after returning home, for 12 m
+  asked): constant-height moves in CarlaAir end slightly high. All within the
+  1 m tolerance.
+* **Live take-off took 11.5–13.9 s**, the mock's 7.1–9.5 s; waypoint legs
+  7.9–8.0 s live against 5.0 s: the mock has no acceleration, so its timings
+  are lower bounds.
+
+The scene now holds Drone2–4 until the simulator restarts; restart before any
+single-drone mission (the runner would refuse anyway).
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -342,6 +413,8 @@ skipped; audit clean.
 | 2026-10-20 | **Contracts are data beside the code that keeps them** | So the contract a skill promises and the contract a reader sees cannot drift apart, and a test can require all seven clauses for all eleven skills. |
 | 2026-10-20 | **The mock copies AirSim where code depends on it, and differs only where a difference makes errors visible** | Spawning that ignores the pose, a reset that removes nothing, a release that drops an airborne drone: code written on the mock must behave the same on AirSim. The one deliberate difference, solid ground, turns a silent sign error into a recorded contact. |
 | 2026-10-20 | **Every adapter runs one contract suite** | The skills are written once; they fly the same everywhere only if every adapter keeps the same promises. A live variant runs the same promises against CarlaAir. |
+| 2026-10-20 | **The exit plan's tracks never cross** | The first plan let Drone1 pass 2.4 m from a still-climbing Drone2; safe on the mock's timing, and exactly M10's contact in CarlaAir's. Straight out sideways, alternating, keeps every pair at least the 4 m spawn spacing whatever the timing. |
+| 2026-10-21 | **The live contract runs before the live exit flight** | It flies Drone1 only, so it runs on a fresh scene before Drone2–4 are spawned, and it answers the questions only CarlaAir can (cancel from a second connection, turning) before the exit run depends on them. |
 | 2026-10-20 | **`ACT_AS_RELAY` and `RENDEZVOUS` are geometric in Phase 3** | Go to a point and hold (until a deadline, for rendezvous). What makes them relay and rendezvous — messages — arrives in Phases 7 and 9. |
 
 ## Open questions
@@ -353,7 +426,18 @@ skipped; audit clean.
   goldens could prove, but nothing in Phase 3 needs it.
 - **The mock is a point mass.** No acceleration, wind or drift; constant
   speed. Fine for coordination questions; anything about flight dynamics
-  belongs in AirSim, as AUV-19 recommends.
+  belongs in AirSim, as AUV-19 recommends. Measured live: real take-offs are
+  about 4.5 s slower and 20 m legs about 3 s slower than the mock's, so mock
+  timings are lower bounds.
+- **Constant-height moves end slightly high in CarlaAir** (0.2–0.5 m per
+  leg, cumulative over a sequence). Within tolerance for Phase 3's plans; a
+  long sequence could drift out of a tight tolerance.
+- **A landed drone reads about 1.17 m above its take-off ground in CarlaAir**,
+  as it did in Phase 1. The 3 m landing threshold absorbs it; a tighter
+  landing check would need to know why.
+- **AirSim connections are never closed** (`ResourceWarning: unclosed
+  socket`). Every test and flight opens fresh ones. Harmless so far; a long
+  experiment opening thousands might exhaust sockets.
 
 ---
 
