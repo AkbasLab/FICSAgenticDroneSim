@@ -37,7 +37,7 @@ the user.
 |---|---|---|
 | Primitives renamed `Primitive*`; turn, cancel and heading in the adapter | `agentic_uav/core/models.py`, `agentic_uav/simulator/` | **Done** 2026-10-20; Phase 2 goldens pass unedited |
 | NED conversion, heading, tolerance, coverage paths; a clock | `agentic_uav/control/navigation.py`, `agentic_uav/core/clock.py` | **Done** 2026-10-20 |
-| The eleven skills and their contracts | `agentic_uav/control/skills.py` | step 3 |
+| The eleven skills and their contracts | `agentic_uav/control/skills.py` | **Done** 2026-10-20 |
 | `MockVehicleAdapter`, and one contract suite for every adapter | `agentic_uav/simulator/mock_adapter.py`, `tests/` | step 4 |
 | The four-drone exit script | `scripts/` | step 5 |
 | Live flight of the exit script; close | `results/`, `evidence/` | step 6 |
@@ -168,6 +168,58 @@ wake-up instead of the earliest — 3.
 
 The four Phase 2 goldens match unedited. 203 tests pass; audit clean.
 
+### 2026-10-20 — step 3: the eleven skills, their contracts, and SkillResult
+
+**`agentic_uav/control/skills.py`**, written once against `VehicleAdapter`, so
+the same skills fly AirSim or the mock. It reaches the simulator only through
+primitives, measures time only on a `Clock`, converts heights only through
+`navigation`.
+
+| Piece | What |
+|---|---|
+| `SkillName` | the eleven: `TAKE_OFF` `GO_TO_WAYPOINT` `FOLLOW_WAYPOINTS` `SEARCH_REGION` `INSPECT_POINT` `HOLD_POSITION` `RENDEZVOUS` `ACT_AS_RELAY` `RETURN_HOME` `LAND` `EMERGENCY_HOLD` |
+| `SkillStatus` | AUV-04's four states: success, failed, aborted, timeout |
+| `ErrorCode` | `PRECONDITION_FAILED` `NOT_REACHED` `HEADING_NOT_REACHED` `TIMEOUT` `LATE` `LANDING_FAILED` `ABORTED` `SIMULATOR_ERROR` |
+| `SkillResult` | skill, vehicle, status, `started_at`, `ended_at`, final position (NED) and altitude above the ground, final heading, error code, message, skill-specific details (legs of a list, coverage of a search, drift during a hold); `as_json()` |
+| one `…Command` per skill | AUV-04's `GoToWaypointCommand(waypoint, speed_mps, tolerance_m, timeout_s)` and ten more, validated when built: an impossible command is refused before any drone moves |
+| `CONTRACTS` | per skill: parameters, preconditions, success, failure, timeout, abort behaviour, expected state change — as data, so a test checks all eleven are complete |
+| `SkillRunner(vehicle, vehicle_id, clock, ground_z, home)` | runs one skill at a time for one drone; never raises for a flight; `request_abort(via)` from another thread |
+
+**Phase 1's lessons, kept.** `TAKE_OFF` measures the ground with the drone
+uncontrolled and at rest, and refuses to measure one already under control —
+an armed drone is held wherever it is, which once made a run 17 m wrong.
+`LAND` descends at 2 m/s to the remembered ground and verifies; a landing
+that did not land keeps control, because releasing an airborne drone cuts its
+motors. Defaults match the measured baseline: 5 m/s, take-off to 8 m, landed
+within 3 m.
+
+**Abort.** `request_abort` sets a flag and cancels the movement (on the
+calling thread's own adapter, for AirSim). The skill then holds position and
+returns `aborted`. An abort targets the skill in progress; a stale request
+does not abort the next one. `EMERGENCY_HOLD` is the same as a skill:
+cancel, then brake.
+
+**Relay and rendezvous** are geometric, as decided: go and hold; a rendezvous
+reached after `arrive_by` is `LATE` and does not hold.
+
+**Tests: 39 new**, `tests/test_skills.py`, on the real `AirSimAdapter` over
+the recording fake, with a `SimClock`. Every skill's success path and the
+state it leaves; every failure clause made to happen — refused precondition,
+stopping short, running out of time, heading not reached, a simulator error
+reported word for word, a leg failing mid-list, partial search coverage, a
+late rendezvous, a landing that does not land, an abort mid-move and one from
+another thread mid-hold. Every height checked as the AirSim call it became
+(30 m → `moveToZAsync(-0.75)`).
+
+**Mutations, each caught:** control taken before measuring the ground — 29
+failing; arrival never checked — 4; timeouts reported as failures — 2; a
+landing released while airborne — 3; abort not holding — 1; abort ignored —
+2; airborne precondition skipped — 1; emergency hold not cancelling — 1;
+waypoint altitude sent as −altitude — 6; heading not checked — 1; rendezvous
+never late — 1.
+
+The four Phase 2 goldens match unedited. 242 tests pass; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -177,6 +229,8 @@ The four Phase 2 goldens match unedited. 203 tests pass; audit clean.
 | 2026-10-20 | **The mock is a constant-speed point mass, with separation and collisions** | AUV-04 asks for a lightweight mock for coordination questions. Acceleration and wind would cost more than they tell; the coordination phases do need separation and contact. |
 | 2026-10-20 | **Above the navigation module, altitude is metres above the ground, positive; below it, NED** | AUV-04's coordinate trap, and Phase 1's two-week altitude error. One module converts, always against a measured ground, and a mission's `Waypoint` has no `z` to misuse. |
 | 2026-10-20 | **Simulated time is one timeline, advanced only when every flying thread waits** | Drones fly in their own threads; comparing their positions needs one instant. Advancing only when all wait makes simulated times independent of machine speed. |
+| 2026-10-20 | **A skill never raises for a flight; it returns a status** | AUV-04: an agent must recognise failure and decide what next. Every way a flight goes wrong — including a primitive raising — comes back as a `SkillResult` with an error code, and the simulator's own message kept word for word. Only an impossible command (refused at construction) or a non-command raises. |
+| 2026-10-20 | **Contracts are data beside the code that keeps them** | So the contract a skill promises and the contract a reader sees cannot drift apart, and a test can require all seven clauses for all eleven skills. |
 | 2026-10-20 | **`ACT_AS_RELAY` and `RENDEZVOUS` are geometric in Phase 3** | Go to a point and hold (until a deadline, for rendezvous). What makes them relay and rendezvous — messages — arrives in Phases 7 and 9. |
 
 ## Open questions

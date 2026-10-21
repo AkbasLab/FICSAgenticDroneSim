@@ -6,4 +6,5 @@
 `monitor`   separation and collision polling during a flight
 `navigation` altitude above ground to NED and back, headings, tolerance,
             coverage paths -- the skill layer's only sign handling (Phase 3)
+`skills`    the eleven mission-level skills, their contracts, SkillResult (Phase 3)
 """
