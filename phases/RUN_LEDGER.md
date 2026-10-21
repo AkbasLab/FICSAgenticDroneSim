@@ -341,15 +341,16 @@ vertical movement. That GPU load is in the protocol deliberately.
 
 ---
 
-## 4. Phases 2 and 3 have no run inventory
+## 4. Phases 2 to 4 have no run inventory
 
-Neither is a measurement phase, so neither has a run count. Their exit criteria
+None is a measurement phase, so none has a run count. Their exit criteria
 are demonstrations.
 
 | Phase | Exit criterion | What it needs |
 |---|---|---|
 | **2** — Repository architecture | Baseline examples run through the modular structure unchanged | A refactor plus a demonstration that behaviour is unchanged. No scored runs. **Done 2026-10-20**: a 30-run re-flight of the mission set (plus a plan-only pass), every drone-plan identical to v6, every outcome equal; see §3 |
 | **3** — Flight-skill layer | Four drones take off, navigate, hold, return, land, each skill returning a structured result | Flights, but a capability demonstration rather than a scored matrix. **Done 2026-10-21**: one live four-drone run, 20/20 skills, no contacts; see §3 |
+| **4** — Search-and-relay mission | A scripted, non-agentic controller completes the canonical mission | A feasibility check (AUV-19's gate G1), judged against AUV-05's six criteria on fixed seeds, not a scored comparison. **Done 2026-10-21**: 20/20 exit seeds on the mock (twice: before and after a controller fix), and three live flights of a small variant, 20/20 each; see §3 |
 
 > **Phase 3's exit criterion names four drones**, and on the evidence of M09 it
 > is not blocked: multi-drone flight works when the extra drones are spawned at

@@ -1,7 +1,7 @@
 # Phase 4 — Build the canonical search-and-relay mission
 
 **Stage:** 1 · Platform · **Vault note:** `AUV-05 — The Search-and-Relay Mission`
-**Started:** 2026-10-21 · **Completed:** —
+**Started:** 2026-10-21 · **Completed:** 2026-10-21
 
 > One controlled mission that stays fixed while the architecture changes under
 > it. Everything in the study is measured against it, so it must be feasible
@@ -13,27 +13,36 @@
 
 Mirrored from `AUV-22 — Phase Objectives Checklist`.
 
-- [ ] **4.1** Define the environment — one base station, four search sectors, two targets, one restricted region, two to four drones, a communication/relay requirement, a deadline, a simulated battery
-- [ ] **4.2** Use simulated detection first — detection radius, line of sight if easy, minimum observation period; **no object-detection network at this stage**
-- [ ] **4.3** Define mission success — sectors searched or coverage threshold, all targets detected, detections reported **or eventually synchronized**, no restricted-region entry, no collision or separation violation, all functioning drones return
-- [ ] **4.4** Put scenarios in configuration files — `scenario_id`, `random_seed`, mission, vehicles, network, faults, restricted zones
+- [x] **4.1** Define the environment — one base station, four search sectors, two targets, one restricted region, two to four drones, a communication/relay requirement, a deadline, a simulated battery *(steps 1–2: `search_relay_001`; a 100 m radio the far sectors reach only by relay or on return; the battery recorded, not enforced)*
+- [x] **4.2** Use simulated detection first — detection radius, line of sight if easy, minimum observation period; **no object-detection network at this stage** *(step 2: 10 m horizontal, held 2 s, solved exactly from the flown path; line of sight not modelled)*
+- [x] **4.3** Define mission success — sectors searched or coverage threshold, all targets detected, detections reported **or eventually synchronized**, no restricted-region entry, no collision or separation violation, all functioning drones return *(step 3: C1–C6, judged from the world's facts up to the deadline)*
+- [x] **4.4** Put scenarios in configuration files — `scenario_id`, `random_seed`, mission, vehicles, network, faults, restricted zones *(step 1: TOML, a strict loader; the controller gets a brief with no targets and no seed)*
 
 ## Exit criterion
 
 > A fully scripted, **non-agentic** controller can complete the canonical
 > mission.
 
-**Met:** on the mock, 2026-10-21, 20 of 20 seeds · **Evidence:**
-[`evidence/exit-criterion-mock-2026-10-21.md`](evidence/exit-criterion-mock-2026-10-21.md).
-Re-met after the lane-end overrun (step 5): 20 of 20, recorded as a dated
-note in the same evidence file. The optional live run is flown: three flights
-of a small variant in CarlaAir, each met on all 20 seeds,
-[`evidence/live-run-2026-10-21.md`](evidence/live-run-2026-10-21.md).
+**Met:** **yes, 2026-10-21** · **Evidence:**
+[`evidence/exit-criterion-mock-2026-10-21.md`](evidence/exit-criterion-mock-2026-10-21.md)
+and [`evidence/live-run-2026-10-21.md`](evidence/live-run-2026-10-21.md).
 
-Planned evidence: the scripted controller completing the canonical scenario on
-the mock across 20 seeds (target layouts), every success criterion passed.
-Optionally, the same controller in CarlaAir on a small variant inside the
-airspace Phase 1 flew.
+**On the mock**, the scripted controller (`control/scripted.py`, planned from
+the brief alone) completed `search_relay_001` on all 20 exit seeds: every
+one of AUV-05's six criteria on every seed, and every planned skill
+succeeded. That was at `1bcfcdc`, 182.2 s. After the lane-end fix of step 5
+it met them again, at the version that closes the phase: 192.1 s of the
+900 s deadline, coverage 0.99977, lowest battery 72.4 %, closest pair
+3.36 m.
+
+**In CarlaAir**, flown by the user, a small variant inside the airspace
+Phases 1 and 3 had flown (two drones, two sectors) met all 20 seeds in each
+of three flights. Every skill succeeded, there were no contacts but the
+ground, and the pads were within 0.34 m. Flights 2 and 3 were within 0.22 m
+of each other throughout.
+
+The plan was the mock across 20 seeds, with an optional small live variant.
+Both were done.
 
 ## Deliverables
 
@@ -43,7 +52,7 @@ airspace Phase 1 flew.
 | The mission world: targets, detection, restricted zones, battery, connectivity, an observer | `agentic_uav/simulator/` | **Done** 2026-10-21; goldens unedited |
 | The evaluator: one mission report, every criterion | `agentic_uav/experiments/evaluation.py`, `agentic_uav/simulator/coverage.py` | **Done** 2026-10-21; goldens unedited |
 | The scripted controller, run across 20 seeds | `agentic_uav/control/routing.py`, `agentic_uav/control/scripted.py`, `agentic_uav/experiments/search_relay.py`, `scripts/search_relay_exit.py` | **Done** 2026-10-21; exit met on the mock, 20/20 |
-| Optional live run; close | `configs/scenarios/search_relay_live_small.toml`, `agentic_uav/experiments/search_relay.py` (`fly_live`), `results/`, `evidence/` | Live run **done** 2026-10-21: three CarlaAir flights, 20/20 seeds each; the close remains |
+| Optional live run; close | `configs/scenarios/search_relay_live_small.toml`, `agentic_uav/experiments/search_relay.py` (`fly_live`), `results/`, `evidence/` | **Done** 2026-10-21: three CarlaAir flights, 20/20 seeds each; phase closed |
 
 ## Plan
 
@@ -623,7 +632,9 @@ What the polls show of CarlaAir:
 
 * **Overshoot at the lane-end turn.** The drones overshoot by about 1.3 m
   (x 21.3 for a lane ending at 20), and rise 1.5–2 m above cruise height
-  there.
+  there. *(Corrected at the close: the rises also come at the top of the
+  climb and at the route's corner, and the 2.8 m maximum off track is the
+  arrival home, about 2.8 m past each pad. See the live evidence.)*
 * **Landed height varies by drone.** Drone2 reads 1.18 m after landing, as
   Phase 3 measured; Drone1 reads 0.01 m.
 * **Live is slower.** Completion was 39.9 s against the mock's 31.1 s.
@@ -698,7 +709,36 @@ The three flights side by side, generated from the records:
 **Step 5's live run is done: three flights, 60 of 60 seed judgements met.**
 The mock exit (step 4, re-met after the overrun) is the exit criterion; the
 live flights show the same controller, observer and evaluator working in
-CarlaAir.
+CarlaAir. Committed as `0b894e5`.
+
+### 2026-10-21 — close: Phase 4 complete
+
+**The exit holds at the closing code.** The canonical exit, re-run on
+`0b894e5` (the closing commit's code, with only this record edited), gave
+reports identical, seed by seed, to the saved post-fix run
+`search-relay-exit-mock-20261021-183608-overrun`. Neither later fix (the
+poller's 3 m line and `wait_at_rest`) touches a mock flight, and this shows
+it rather than assuming it.
+
+**What Phase 4 leaves for Phase 5 onwards:**
+
+* **The canonical mission as data.** `search_relay_001.toml` and a strict
+  loader, so later factors (network profile, faults, team size, seed) are
+  fields in a file, not branches in code.
+* **A judge that cannot be argued with.** `observe` and `evaluate` decide
+  AUV-05's six criteria from the flown path alone, exactly on the mock and
+  by polling live; they never ask a controller what it did.
+* **A baseline to beat.** One drone per sector, flown blind: 192.1 s, 20 of
+  20 seeds, 27 of 40 reports relayed by accident. Any agent or coordination
+  scheme is measured against it.
+* **A live path.** `fly_live` and `LiveFlight` fly once and judge any seeds,
+  save and re-judge, and set a flight beside its mock twin.
+
+**Test and check totals at close:** 450 tests, 16 skipped (live-only, plus
+the real-time flight). The four Phase 2 goldens are unedited through every
+step, and the audit is clean. Mutations: 25, 33, 26, 21, 19 and 4 by step
+and fix, every one caught; the survivors on the way were each fixed in the
+tests or removed as redundant code.
 
 ## Decisions
 
@@ -736,11 +776,14 @@ CarlaAir.
   report moved 14.6 s on 3 cm of drift (19.999 against 20.028 m). The perfect
   network has a hard range. Phase 10's degraded profiles should decide
   whether range is a hard edge or a fall-off, before any result leans on it.
-- **CarlaAir climbs and overshoots at turns.** Live, the drones rose up to
-  2.5 m above cruise height and ran about 1.3 m past each lane end. Harmless
-  here, since detection is horizontal and lanes run on 5 m. But the
-  four-drone plan's 4 m height spacing has less room than it looks, if two
-  drones turn near each other.
+- **CarlaAir climbs and overshoots at turns, and on arrival home.** Live,
+  the drones rose up to 2.5 m above cruise height (at the climb's top and at
+  every turn), ran about 1.3 m past each lane end, and about 2.8 m past
+  their own pads before coming back to land. Harmless here: detection is
+  horizontal, lanes run on 5 m, and the two drones were 4 m apart in height.
+  But in the four-drone plan, pads are 4 m apart and heights 4 m apart, so a
+  2.8 m overrun towards a neighbour that is rising 2 m would leave little
+  room. Fly that plan live only after measuring it.
 - **Provenance calls a tree with uncommitted result files dirty.** Flight 3
   recorded `dirty: true` with the same code as flight 2. The package digest
   settled it; a provenance that ignored `phases/*/results/` would not need
