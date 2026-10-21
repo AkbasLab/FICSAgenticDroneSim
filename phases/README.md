@@ -41,7 +41,7 @@ disk are not study data, for reasons that are easy to forget.
 | **1** | [Baseline freeze](phase-01-baseline-freeze/) | A new student clones, follows the docs, reproduces the baseline unaided | **Complete** 2026-10-20, at the minimum standard (clean-clone test); `v0.1-open-loop-baseline` |
 | **2** | [Repository architecture](phase-02-repository-architecture/) | Baseline examples run through the modular structure unchanged | **Complete** 2026-10-20 — goldens unedited after every step; a 30-run re-flight matches `v6-polled` |
 | **3** | [Flight-skill layer](phase-03-flight-skill-layer/) | Four drones take off, navigate, hold, return, land — each skill returning a structured result | **Complete** 2026-10-21 — eleven skills, a mock, one contract; the four-drone script met live in CarlaAir and on the mock |
-| **4** | [Search-and-relay mission](phase-04-search-relay-mission/) | A scripted, non-agentic controller completes the canonical mission | In progress — steps 1–2 of 5: the scenario format and loader; the mission world, solved exactly from trajectories |
+| **4** | [Search-and-relay mission](phase-04-search-relay-mission/) | A scripted, non-agentic controller completes the canonical mission | In progress — steps 1–3 of 5: the scenario format and loader; the mission world, solved exactly from trajectories; the evaluator |
 | 5 | Persistent single agent | One agent completes a search task with no preflight action list | Not started |
 | 6 | Belief state | The logger can show exactly what an agent knew and did not know | Not started |
 | 7 | Inter-agent messaging | Four agents exchange heartbeats; team beliefs update only on delivery | Not started |

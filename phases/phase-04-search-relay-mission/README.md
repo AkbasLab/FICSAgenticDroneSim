@@ -36,7 +36,7 @@ airspace Phase 1 flew.
 |---|---|---|
 | Scenario format, validated loader, the canonical scenario | `agentic_uav/core/scenario.py`, `agentic_uav/experiments/scenarios.py`, `configs/scenarios/` | **Done** 2026-10-21; goldens unedited |
 | The mission world: targets, detection, restricted zones, battery, connectivity, an observer | `agentic_uav/simulator/` | **Done** 2026-10-21; goldens unedited |
-| The evaluator: one mission report, every criterion | `agentic_uav/experiments/` | step 3 |
+| The evaluator: one mission report, every criterion | `agentic_uav/experiments/evaluation.py`, `agentic_uav/simulator/coverage.py` | **Done** 2026-10-21; goldens unedited |
 | The scripted controller, run across 20 seeds | `agentic_uav/control/`, `scripts/` | step 4 |
 | Optional live run; close | `results/`, `evidence/` | step 5 |
 
@@ -240,6 +240,109 @@ committed was affected; the files were rewritten LF and checked with Python.
 **The goldens did not move.** `record_golden.py --check` matches all four.
 384 tests pass, 15 skipped (live only); audit clean.
 
+### 2026-10-21 — step 3: the evaluator — AUV-05's six criteria, each with its number
+
+**Coverage first** (`agentic_uav/simulator/coverage.py`), because "searched"
+needed a definition before it could be judged. A point is searched once a
+target there would have been detected: some airborne drone held it within
+the radius, horizontally, for 2 s unbroken. So coverage is the chance a
+uniformly placed target would be found, and coverage and detection cannot
+disagree — a test checks 300 cells against `detections` one by one, to the
+same instant. Passing within range is not searching, and neither is two
+drones each holding a point for half the time, however the halves join. The
+searchable area is the sectors less any zone (where targets can be), on a
+1 m grid judged at cell centres, the dwell at every centre solved exactly
+per leg with numpy (already pinned: `numpy==2.2.6`). The whole team's
+coverage takes about 0.01 s.
+
+**The evaluator** (`agentic_uav/experiments/evaluation.py`):
+`evaluate(scenario, trajectories, start, end, contacts, failed)` returns a
+`MissionReport`, judged on `mission_world` facts and never on what a
+controller says about itself.
+
+| | AUV-05 4.3 | Passes when |
+|---|---|---|
+| C1 | sectors searched or coverage threshold | coverage of the searchable area ≥ `required_coverage` |
+| C2 | all targets detected | ≥ `targets_to_find` distinct targets detected |
+| C3 | reported, or eventually synchronized | ≥ `targets_to_find` distinct targets reported (a detecting drone later connected to the base, directly or relayed) |
+| C4 | no restricted-region entry | no zone entered |
+| C5 | no collision or separation violation | no contact except with the ground, and no pair under `min_separation_m` while one flew |
+| C6 | all functioning drones return safely | every drone not in `failed` ends landed, within 2.0 m of its own pad, at or above the battery reserve, never flat |
+
+* **The window** is the flight up to the deadline. Nothing after it counts,
+  landing included, so success already means on time; there is no separate
+  deadline criterion.
+* **Return is to the drone's pad.** 2.0 m is half the 4 m pad spacing, so
+  which pad a drone is on is never ambiguous. The base is a radio.
+* **Completion time** (AUV-14's T_completion) is the last of three moments:
+  coverage reaching the threshold, the last needed target reported, the last
+  functioning drone landing. A failed mission has no completion time; it is
+  recorded as failed, never as a fast finish.
+* **Partial scores are components, not a score.** Coverage, detection,
+  reporting, safe return, and the safety counts are reported separately.
+  AUV-14 sketches w1·Coverage + w2·Detection + w3·SafeReturn but sets no
+  weights, and Phase 15 forbids inventing a metric after seeing results; the
+  weights are Phase 15's.
+
+**A mission flown by hand passes.** The test fixture flies trajectories, not
+a controller, on seed 17. Each drone:
+
+* takes one sector at its own height (12, 16, 20 or 24 m);
+* leaves its pad sideways to y = ±20, then goes round R1 at x = 40;
+* flies 16 m lanes, then returns the same way and lands.
+
+The result: **success in 186.3 s**. Coverage was 0.9995. T1 was reported by
+Drone3 on its way home at 152.6 s. Batteries landed at 73.5–78.1 %, and the
+closest pair came to 4.0 m (on the pads). It is not the step-4 exit, but it
+says the canonical mission is feasible with margin, and how.
+
+**Then broken one way at a time**, each failing exactly the criteria it
+should and no others:
+
+| Break | Fails |
+|---|---|
+| S3 skipped (only three drones fly) | C1, C2, C3 |
+| a straight route through R1 | C4 |
+| a building contact (a ground contact does not count) | C5 |
+| Drone3 at Drone1's height, 1.6 s late, meeting at (8, −20) | C5 |
+| one drone left airborne, one landed 3 m off its pad | C6 |
+| drain 0.4 %/s: Drone3 and 4 land at 8.8 % and 8.5 % | C6 |
+| T1 detected in S3, but Drone3 lands there | C3, C6 |
+| the deadline 1 s before the last landing | C6, and no completion time |
+
+The relay is tested with worked distances: Drone1 hovering 99.0 m from the
+base and 95.3 m from Drone3 at the moment of detection reports T1 at once;
+at 108.9 m from the base it reports nothing.
+
+**Tests: 22 new, in `tests/test_evaluation.py`** — coverage (7), the
+evaluator (15).
+
+**Mutations: 26, all caught**, against the full suite: nine in coverage,
+seventeen in the evaluator. Getting there:
+
+* **Five first-run failures were all my test fixtures, not the code.**
+  * A climb sat exactly 10 m from the test cell, so the climb itself was a
+    dwell.
+  * A relay premise was wrong: Drone1 relays Drone3 naturally on its way home.
+  * A 0.2 %/s drain still left 47 %.
+  * A "wrong pad" was inside R1.
+  * Two "same height" drones ran 8 m apart in line.
+
+  Each was rebuilt with the numbers worked out first.
+* **A completion test could not see a dropped report moment.** In its layout,
+  coverage came in last (394 s against 385 s). A second layout puts T2 where
+  only Drone2's last lane passes, so the report comes in last. The first try
+  at that, (115, 75), was found early by Drone4; (100, 75) is not.
+* **The first mutation pass caught 22 of 26.** The four survivors were
+  untested behaviours, now tested:
+  * a landed drone searching;
+  * hovering over a point;
+  * `time_to` rounding down, which would report a fraction one cell early;
+  * contacts outside the window.
+
+**The goldens did not move.** `record_golden.py --check` matches all four.
+406 tests pass, 15 skipped (live only); audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -253,6 +356,9 @@ committed was affected; the files were rewritten LF and checked with Python.
 | 2026-10-21 | **Detection is horizontal and needs flight** | The target is a point on the ground and AUV-05 gives a radius, not a cone; lane spacing (step 1) already assumes a horizontal footprint. Height narrowing it would be a sensor model nobody specified. |
 | 2026-10-21 | **The battery is recorded, not enforced** | A drone forced down when it runs flat is a fault, and faults are Phases 9–11's. Phase 4 asks whether the mission is feasible; the record says when, if ever, a drone would have stopped. |
 | 2026-10-21 | **Radio is 3D, through any drone, flying or landed; reported means a chain at one instant** | A landed drone is still a radio. Information hopping between drones over time is messaging, Phase 7's; until then only an instantaneous chain to the base counts. |
+| 2026-10-21 | **Searched means a target there would have been detected** | One rule for coverage and detection, so they cannot disagree; coverage becomes the chance a random target is found. A looser "passed within range" would let a team claim 95 % and still miss a target in it. |
+| 2026-10-21 | **Return is to the drone's own pad, within 2.0 m** | The scenario places drones on pads and the base is a radio; half the pad spacing makes the pad unambiguous. Battery at or above the reserve is part of "safely". |
+| 2026-10-21 | **Partial scores are reported as components, unweighted** | AUV-14 names a weighted MissionScore but no weights, and Phase 15 forbids choosing metrics after seeing results. |
 | 2026-10-21 | **The mock is observed exactly; live is polled** | The mock knows its own motion and records it; a live simulator can only be sampled. The record will say which observer judged each run. |
 
 ## Open questions
