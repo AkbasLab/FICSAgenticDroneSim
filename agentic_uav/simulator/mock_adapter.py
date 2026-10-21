@@ -44,6 +44,11 @@ collision and a drone passes through it; here a move below the ground stops
 at it and records a ground contact, so a sign error shows up as a contact
 rather than as a drone underground.
 
+THE TRACE. Every change of motion is recorded as a knot -- (time, position,
+airborne) -- so `trace(name)` is the drone's exact path:
+straight lines between knots, a jump where two share an instant. The mission
+world judges a flight by it (`simulator/observer.py`), with nothing sampled.
+
 FAULTS can be injected per drone (`world.faults`): a landing that does not
 descend (the 2026-10-06 and 2026-10-19 failure), moves that make no
 progress, a primitive that raises, a slower drone.
@@ -143,9 +148,11 @@ class MockWorld:
         self.faults = MockFaults()
         self.lock = threading.RLock()
         self.vehicles: dict[str, _Vehicle] = {}
+        self._trace: dict[str, list[tuple[float, Position, bool]]] = {}
         for i, name in enumerate(declared):
             spawn = Position(i * spacing_m, 0.0, ground_z)
             self.vehicles[name] = _Vehicle(name, spawn, _static(spawn))
+            self._knot(self.vehicles[name])
         # Per unordered pair: (minimum distance, simulated time it happened).
         self.min_separation: dict[tuple[str, str], tuple[float, float]] = {}
         # Every contact, one row per (pair or drone-and-ground, instant).
@@ -162,6 +169,11 @@ class MockWorld:
         with self.lock:
             return sorted(self._contacts.values(), key=lambda c: (c["at_s"], c["drone"], c["object"]))
 
+    def trace(self, name: str) -> list[tuple[float, Position, bool]]:
+        """`name`'s knots so far: (simulated time, position, airborne), in time order."""
+        with self.lock:
+            return list(self._trace[name])
+
     def separation(self) -> dict[str, dict[str, float]]:
         with self.lock:
             return {f"{a}-{b}": {"min_m": round(d, 3), "at_s": round(t, 3)}
@@ -174,6 +186,14 @@ class MockWorld:
             return self.vehicles[name]
         except KeyError:
             raise KeyError(f"no vehicle named {name!r} in the mock") from None
+
+    def _knot(self, v: _Vehicle) -> None:
+        # Caller holds the lock. Called before and after every change of motion.
+        now = self.clock.now()
+        knot = (now, v.segment.at(now), not v.landed)
+        trace = self._trace.setdefault(v.name, [])
+        if not trace or trace[-1] != knot:
+            trace.append(knot)
 
     def _touch(self, v: _Vehicle, obj: str, at: float, depth: float = 0.0) -> None:
         # Caller holds the lock.
@@ -251,9 +271,11 @@ class MockVehicleAdapter:
             here = v.segment.at(now)
             if not v.landed:
                 # Motors cut in the air: it falls. The skill layer must never.
+                self.world._knot(v)
                 ground = Position(here.x, here.y, self.world.ground_z)
                 v.segment = _static(ground)
                 v.landed = True
+                self.world._knot(v)
                 self.world._touch(v, GROUND_OBJECT, now, depth=0.0)
 
     def execute_primitive(self, vehicle_id: str, command: PrimitiveCommand) -> PrimitiveResult:
@@ -302,6 +324,7 @@ class MockVehicleAdapter:
                 with self.world.lock:
                     if self.world.position(vehicle_id).z >= self.world.ground_z - 1e-6:
                         v.landed = True
+                        self.world._knot(v)
                         self.world._touch(v, GROUND_OBJECT, self.world.clock.now())
         elif kind is PrimitiveKind.ROTATE_TO_YAW:
             self._require_armed(v)
@@ -327,8 +350,10 @@ class MockVehicleAdapter:
     def reset(self) -> None:
         with self.world.lock:
             for v in self.world.vehicles.values():
+                self.world._knot(v)
                 v.segment = _static(v.spawn)
                 v.yaw, v.landed, v.api, v.armed = 0.0, True, False, False
+                self.world._knot(v)
                 v.moving = v.cancel_requested = False
                 v.collision = CollisionInfo(False)
 
@@ -343,6 +368,7 @@ class MockVehicleAdapter:
                 return False
             spawn = Position(0.0, 0.0, self.world.ground_z)
             self.world.vehicles[vehicle_id] = _Vehicle(vehicle_id, spawn, _static(spawn))
+            self.world._knot(self.world.vehicles[vehicle_id])
             return True
 
     def place_vehicle(self, vehicle_id: str, position: Position,
@@ -350,9 +376,11 @@ class MockVehicleAdapter:
         with self.world.lock:
             v = self.world._vehicle(vehicle_id)
             rest = Position(position.x, position.y, self.world.ground_z)   # it falls to rest
+            self.world._knot(v)
             v.segment = _static(rest)
             v.spawn = rest
             v.landed = True
+            self.world._knot(v)
 
     # ------------------------------------------------------------- motion
 
@@ -386,6 +414,7 @@ class MockVehicleAdapter:
             v.cancel_requested = False
             if target.z < world.ground_z - 1e-6:
                 v.landed = False
+            world._knot(v)                  # the start: here, and airborne if leaving the ground
         cancelled = False
         try:
             while True:
@@ -404,7 +433,9 @@ class MockVehicleAdapter:
                 # A move that ran its full course ends EXACTLY at its target:
                 # summed ticks drift in the last digits (0.1 x 100 != 10.0).
                 completed = not cancelled and not stalled and duration <= limit
+                world._knot(v)
                 v.segment = _static(target if completed else v.segment.at(clock.now()))
+                world._knot(v)
                 v.moving = False
                 v.cancel_requested = False
 

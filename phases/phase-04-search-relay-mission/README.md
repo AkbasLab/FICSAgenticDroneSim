@@ -35,7 +35,7 @@ airspace Phase 1 flew.
 | Artifact | Location | State |
 |---|---|---|
 | Scenario format, validated loader, the canonical scenario | `agentic_uav/core/scenario.py`, `agentic_uav/experiments/scenarios.py`, `configs/scenarios/` | **Done** 2026-10-21; goldens unedited |
-| The mission world: targets, detection, restricted zones, battery, connectivity, an observer | `agentic_uav/simulator/` | step 2 |
+| The mission world: targets, detection, restricted zones, battery, connectivity, an observer | `agentic_uav/simulator/` | **Done** 2026-10-21; goldens unedited |
 | The evaluator: one mission report, every criterion | `agentic_uav/experiments/` | step 3 |
 | The scripted controller, run across 20 seeds | `agentic_uav/control/`, `scripts/` | step 4 |
 | Optional live run; close | `results/`, `evidence/` | step 5 |
@@ -156,6 +156,90 @@ clock's reported resolution; 30 repeats pass. `RealClock` is unchanged.
 **The goldens did not move.** `record_golden.py --check` matches all four.
 340 tests pass, 15 skipped (live only); audit clean.
 
+### 2026-10-21 — step 2: the mission world — targets, detection, zones, battery, radio, and an exact record
+
+**Judged from trajectories, solved exactly.** A flight is judged by each
+drone's trajectory: knots `(t, x, y, altitude, airborne)` joined by straight,
+constant-velocity legs (`agentic_uav/simulator/trajectory.py`), in the
+mission's frame, not NED. On a leg, the distance from a drone to a target,
+to another drone or to the base is a quadratic in time, so every fact below
+is the root of one, not a sample: a 2 s dwell is 2 s, and the closest
+approach is the true minimum. Two knots at one instant are a jump (placed,
+reset, a fall with the motors cut), which takes no time and flies no
+distance.
+
+**The facts** (`agentic_uav/simulator/mission_world.py`), each as the
+module docstring defines it:
+
+| Fact | How it is decided |
+|---|---|
+| Targets | `place_targets`: uniform over the sectors by area, from the seed, by `random.Random` alone; outside every zone, `min_spacing_m` apart; or the fixed positions. Seed 17: T1 (184.54, −3.16) in S3, T2 (101.29, 56.34) in S2 — pinned by a test |
+| Detection | airborne, and within `radius_m` horizontally for `min_observation_s` unbroken, across knots; detected when that time is reached; first per (target, drone) |
+| Zone entry | the first instant a drone's ground track touches a zone — `Polygon.entry_fraction`, new in `core/geometry.py` |
+| Battery | `hover_drain_per_s` per airborne second plus `move_drain_per_m` per metre flown; when it crossed the reserve and when it would have run flat. Recorded, not enforced |
+| Connectivity | a chain of links ≤ `communication_range_m` (3D) from drone to base, through any drones, flying or landed; the base a node on the ground |
+| Reported | the first moment at or after a detection that its drone is connected to the base |
+| Separation | each pair's closest approach (3D) while at least one flies, and every interval under `min_separation_m` |
+
+`observe(scenario, trajectories, start, end)` returns them as one
+`MissionFacts`, whose `as_json()` gives times from the mission's start. The
+evaluator (step 3) judges these; nothing here passes or fails anything.
+
+**Two sources of trajectory** (`agentic_uav/simulator/observer.py`):
+
+* **The mock, exactly.** `MockWorld` now records a knot at every change of
+  motion — move start and end, landing, a fall, placement, reset — and
+  `mock_trajectories(world)` reads them. The trace is checked against a mock
+  flight worked by hand: R1 entered at x = 15 three seconds into the leg, T1
+  in view at x = 65 − √75, 180 m flown.
+* **A live simulator, by polling.** `PollingObserver` reads every drone's
+  pose on its own connection, 10 Hz by default, never commanding anything;
+  altitude from each drone's measured ground; airborne above 0.5 m. Between
+  polls it can miss what the mock cannot (a corner clipped in under 0.1 s).
+  It refuses a `SimClock`: alone on simulated time its sleeps would run the
+  clock away before and after the flight. Tested on the mock in real time —
+  1.1 s of flight polled at 20 Hz, every sample within 0.5 m of the exact
+  trace; 25 repeats pass.
+
+`simulator/` still depends on `core/` only: the observer repeats the one-line
+NED-to-altitude conversion rather than import `control.navigation`.
+
+**Tests: 44 new, in `tests/test_mission_world.py`** — trajectories (4),
+target placement (5), detection (9), zones (6), battery (3), connectivity
+(4), separation (5), `observe` (2), the mock's trace (3), the poller (3).
+Hand-worked numbers throughout: the boundary dwell (an offset of √75 m is a
+10 m chord, exactly 2 s, and detects; 1 cm more does not), a relay breaking
+the moment its own base link does (t = 4.4 s), a report on return (x = 92 m
+inbound), a violation interval of 10 ± √3/10 s.
+
+**Mutations: 33, all caught**, against the full suite. The first clean pass
+caught 24 of 34, and the ten survivors were all one of two things:
+
+* **Redundant code, removed.** Two survivors were code that changed
+  nothing: zone entry's separate "starts inside" check (a leg starting
+  inside already enters at fraction 0), and the mock's knot *before* a move
+  starts (the knot after it records the same instant and place, and the
+  airborne flag applies from the knot on). Both deleted; 34 became 33.
+* **Tests that could not see the fault.** "A dwell carries over a knot" was
+  detectable from its first piece alone; it is now three pieces of 0.6, 1.0
+  and 0.6 s. "Motors cut" let no time pass before the fall, so a missing
+  pre-fall knot changed nothing; it now holds 5 s first. And six cases were
+  missing outright: a zone lying inside a sector (R1 lies in none, so the
+  canonical file could never show a target placed in one), a leg that
+  begins already in range, a pair parting from the start (both: a quadratic
+  root before the leg must be clipped), a zone crossed from the far side, a
+  detection made in range (reported at once), and a landed drone with
+  another flying 1 m over it.
+
+**A slip of mine, caught by the mutation runner.** Two files patched by an
+in-place script had been written in Windows text mode, CRLF, so its patterns
+found nothing; a `grep` check I ran first wrongly said they were LF. The
+repository's `.gitattributes` normalises to LF on commit, so nothing
+committed was affected; the files were rewritten LF and checked with Python.
+
+**The goldens did not move.** `record_golden.py --check` matches all four.
+384 tests pass, 15 skipped (live only); audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -165,6 +249,11 @@ clock's reported resolution; 30 repeats pass. `RealClock` is unchanged.
 | 2026-10-21 | **"Reported" means connected to the base, before messaging exists** | A detection counts as reported once the detecting drone is connected to the base — directly or through drones within range — at any time before the mission ends: AUV-05's "eventually synchronized" under a perfect network, and what gives a relay a purpose. Messages arrive in Phase 7. |
 | 2026-10-21 | **Line of sight is not modelled** | AUV-05: "if easy". The mock has no obstacles to occlude anything. |
 | 2026-10-21 | **The controller gets a brief, never the scenario** | Target positions — and the seed, which with the placement rule would reveal them — are ground truth, for the world and the evaluator only (AUV-06, 6.2), enforced by what the controller is handed. |
+| 2026-10-21 | **Facts are solved from trajectories, not sampled** | A tick-sampled world gets dwells, entries and closest approaches wrong by up to a tick, and the step-4 exit turns on exactly those margins (lanes are spaced so a dwell is just over 2 s). Straight legs make each a quadratic root. |
+| 2026-10-21 | **Detection is horizontal and needs flight** | The target is a point on the ground and AUV-05 gives a radius, not a cone; lane spacing (step 1) already assumes a horizontal footprint. Height narrowing it would be a sensor model nobody specified. |
+| 2026-10-21 | **The battery is recorded, not enforced** | A drone forced down when it runs flat is a fault, and faults are Phases 9–11's. Phase 4 asks whether the mission is feasible; the record says when, if ever, a drone would have stopped. |
+| 2026-10-21 | **Radio is 3D, through any drone, flying or landed; reported means a chain at one instant** | A landed drone is still a radio. Information hopping between drones over time is messaging, Phase 7's; until then only an instantaneous chain to the base counts. |
+| 2026-10-21 | **The mock is observed exactly; live is polled** | The mock knows its own motion and records it; a live simulator can only be sampled. The record will say which observer judged each run. |
 
 ## Open questions
 

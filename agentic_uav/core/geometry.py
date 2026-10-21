@@ -92,6 +92,40 @@ class Polygon:
             return True
         return any(_segments_intersect(start, end, a, b) for a, b in self.edges())
 
+    def entry_fraction(self, start: tuple[float, float], end: tuple[float, float],
+                       eps: float = 1e-9) -> float | None:
+        """How far along the path from `start` to `end` it first enters, 0..1; None if never.
+
+        0 when `start` is already inside. Touching the boundary counts as
+        entering, as it does for `contains` and `crosses`.
+        """
+        if self.contains(*start):
+            return 0.0
+        if not self.crosses(start, end):
+            return None
+        dx, dy = end[0] - start[0], end[1] - start[1]
+        best = 1.0
+        for a, b in self.edges():
+            ex, ey = b[0] - a[0], b[1] - a[1]
+            wx, wy = a[0] - start[0], a[1] - start[1]
+            denom = dx * ey - dy * ex
+            if denom == 0.0:
+                # Parallel. Only a path along the edge's own line meets it:
+                # first at whichever of the edge's ends comes first.
+                if abs(_cross(start, end, a)) > eps:
+                    continue
+                length2 = dx * dx + dy * dy
+                for q in (a, b):
+                    s = ((q[0] - start[0]) * dx + (q[1] - start[1]) * dy) / length2
+                    if -eps <= s <= 1.0 + eps:
+                        best = min(best, max(0.0, s))
+                continue
+            s = (wx * ey - wy * ex) / denom          # along the path
+            u = (wx * dy - wy * dx) / denom          # along the edge
+            if -eps <= s <= 1.0 + eps and -eps <= u <= 1.0 + eps:
+                best = min(best, max(0.0, s))
+        return best
+
 
 def _cross(o, a, b) -> float:
     return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
