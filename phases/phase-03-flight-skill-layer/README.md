@@ -38,7 +38,7 @@ the user.
 | Primitives renamed `Primitive*`; turn, cancel and heading in the adapter | `agentic_uav/core/models.py`, `agentic_uav/simulator/` | **Done** 2026-10-20; Phase 2 goldens pass unedited |
 | NED conversion, heading, tolerance, coverage paths; a clock | `agentic_uav/control/navigation.py`, `agentic_uav/core/clock.py` | **Done** 2026-10-20 |
 | The eleven skills and their contracts | `agentic_uav/control/skills.py` | **Done** 2026-10-20 |
-| `MockVehicleAdapter`, and one contract suite for every adapter | `agentic_uav/simulator/mock_adapter.py`, `tests/` | step 4 |
+| `MockVehicleAdapter`, and one contract suite for every adapter | `agentic_uav/simulator/mock_adapter.py`, `tests/test_adapter_contract.py` | **Done** 2026-10-20 |
 | The four-drone exit script | `scripts/` | step 5 |
 | Live flight of the exit script; close | `results/`, `evidence/` | step 6 |
 
@@ -220,6 +220,62 @@ never late — 1.
 
 The four Phase 2 goldens match unedited. 242 tests pass; audit clean.
 
+### 2026-10-20 — step 4: the MockVehicleAdapter, and one contract for every adapter
+
+**`agentic_uav/simulator/mock_adapter.py`**: `MockWorld` (the shared scene)
+and `MockVehicleAdapter` (both protocols, one per thread like AirSim's).
+
+| Model | |
+|---|---|
+| motion | a point moving in straight lines at the commanded speed; no acceleration, wind or drift; turns at 90°/s; take-off lifts 3 m at 1.5 m/s, landing descends at 1 m/s |
+| time | every motion takes simulated time on the world's `SimClock`, so timeouts, holds and team timing mean something, and minutes of flight take milliseconds |
+| determinism | motion is stored as segments (from, to, start, end), so where a drone is at the current simulated instant is exact, whichever thread asks first |
+| contacts | two drones closer than 0.8 m touch: both record a collision with the other, by name; every pair's minimum separation is kept |
+| copies AirSim | NED with the ground at +29.25 by default; `add_vehicle` ignores its pose and spawns at the player start, `place_vehicle` then sets x and y; `reset` removes nothing; releasing an airborne drone drops it; landing is a contact with `MockGround`, classified as ground |
+| differs, on purpose | the ground is solid: a move below it stops there and records a ground contact, so a sign error shows up instead of a drone underground |
+| faults | per drone: a landing that does not descend, moves that make no progress, a primitive that raises, a slower drone |
+
+One flaw found and fixed while testing: a finished move ended at
+49.99999999999988 instead of 50, because a hundred 0.1 s ticks do not sum to
+10.0 exactly. A move that runs its full course now ends exactly on its target.
+
+**`tests/test_adapter_contract.py` — one contract, every adapter.** Fourteen
+promises the skill layer relies on (the protocols; starting on the ground
+uncontrolled; control and release; cancel with nothing moving; take-off,
+moves, turns, hover, landing; reset; spawn ignoring the pose, then placing;
+the skills flying end to end), written once in `AdapterContract` and run by:
+
+* `AirSimOverFakeContract` — the real `AirSimAdapter` over the recording fake;
+* `MockContract` — the mock, plus the scenario manager's spawn-and-place
+  running on it;
+* `LiveAirSimContract` — the real `AirSimAdapter` against a running CarlaAir,
+  skipped unless `AUV_LIVE_AIRSIM=1`. It flies Drone1, with tolerances (1 m,
+  5°), and is part of step 6's live check.
+
+**`tests/test_mock_adapter.py`, 20 tests:** motion time is distance over
+speed, take-off, climb and turn times, a timeout stopping a drone part way,
+body-frame velocity after a turn, solid ground, a release dropping the drone,
+landing contact, each fault giving the right skill result (stuck landing →
+`LANDING_FAILED` with control kept, stalled → `TIMEOUT` at 15.0 s, raising →
+`SIMULATOR_ERROR`, half speed → twice the time), and no real time passing (a
+400 s search flown in well under a second). Then teams, one thread per drone
+on one timeline: four drones flying take-off, waypoint, hold, home and land
+concurrently; the same flight five times with identical results, separations
+and contacts; two drones swapping places touching, classified as a drone
+contact; two flying parallel 4 m apart not touching, minimum separation
+exactly 4.0 m; an abort from a controller thread on its own adapter stopping
+a drone 15 m into a 50 m leg, after 3 s at 5 m/s.
+
+**Mutations:** contacts never recorded — 3; ground not solid — 1; cancel
+ignored — 1; release not dropping an airborne drone — 1; spawning at the
+requested pose — 1; motion taking no simulated time — 11; velocity ignoring
+heading — 1. (A first "ground not solid" mutation patched a constant already
+bound as a default argument and so changed nothing; it was redone on the
+clamp itself.)
+
+The four Phase 2 goldens match unedited. 305 tests pass, 14 of them the live
+contract, skipped; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -231,9 +287,20 @@ The four Phase 2 goldens match unedited. 242 tests pass; audit clean.
 | 2026-10-20 | **Simulated time is one timeline, advanced only when every flying thread waits** | Drones fly in their own threads; comparing their positions needs one instant. Advancing only when all wait makes simulated times independent of machine speed. |
 | 2026-10-20 | **A skill never raises for a flight; it returns a status** | AUV-04: an agent must recognise failure and decide what next. Every way a flight goes wrong — including a primitive raising — comes back as a `SkillResult` with an error code, and the simulator's own message kept word for word. Only an impossible command (refused at construction) or a non-command raises. |
 | 2026-10-20 | **Contracts are data beside the code that keeps them** | So the contract a skill promises and the contract a reader sees cannot drift apart, and a test can require all seven clauses for all eleven skills. |
+| 2026-10-20 | **The mock copies AirSim where code depends on it, and differs only where a difference makes errors visible** | Spawning that ignores the pose, a reset that removes nothing, a release that drops an airborne drone: code written on the mock must behave the same on AirSim. The one deliberate difference, solid ground, turns a silent sign error into a recorded contact. |
+| 2026-10-20 | **Every adapter runs one contract suite** | The skills are written once; they fly the same everywhere only if every adapter keeps the same promises. A live variant runs the same promises against CarlaAir. |
 | 2026-10-20 | **`ACT_AS_RELAY` and `RENDEZVOUS` are geometric in Phase 3** | Go to a point and hold (until a deadline, for rendezvous). What makes them relay and rendezvous — messages — arrives in Phases 7 and 9. |
 
 ## Open questions
+
+- **The baseline's executor still reads real time.** `control/executor.py`
+  uses the `time` module directly (settle loops, `TAKEOFF_SETTLE`), so the
+  open-loop baseline cannot fly the mock in simulated time; only the skill
+  layer can. Making the executor clock-aware is a behaviour-neutral change the
+  goldens could prove, but nothing in Phase 3 needs it.
+- **The mock is a point mass.** No acceleration, wind or drift; constant
+  speed. Fine for coordination questions; anything about flight dynamics
+  belongs in AirSim, as AUV-19 recommends.
 
 ---
 
