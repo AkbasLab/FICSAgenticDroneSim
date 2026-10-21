@@ -241,6 +241,34 @@ class LiveAirSimContract(AdapterContract, unittest.TestCase):
     def test_add_ignores_the_pose_and_place_sets_it(self):
         self.skipTest("live: a spawned drone stays until restart and would block later flights")
 
+    def test_cancel_from_a_second_connection_stops_a_move(self):
+        # Phase 3's open question: SkillRunner.request_abort cancels on the
+        # CALLER's own connection (one per thread). Does CarlaAir honour a
+        # cancelLastTask that arrives on a different connection from the move?
+        import threading
+        self.fly(altitude=8.0)
+        start = self.adapter.get_pose("Drone1")
+        target = Position(start.x + 60.0, start.y, start.z)     # 20 s at 3 m/s
+        mover = AirSimAdapter.connect()
+        done = {}
+
+        def move():
+            t0 = time.monotonic()
+            mover.execute_primitive("Drone1", PrimitiveCommand.move_to_position(
+                target.x, target.y, target.z, 3.0, 40.0))
+            done["seconds"] = time.monotonic() - t0
+
+        thread = threading.Thread(target=move)
+        thread.start()
+        time.sleep(4.0)
+        AirSimAdapter.connect().cancel("Drone1")                 # a third connection
+        thread.join(30.0)
+        self.adapter.stop("Drone1")
+        travelled = self.adapter.get_pose("Drone1").x - start.x
+        self.assertFalse(thread.is_alive(), "the move never returned")
+        self.assertLess(done["seconds"], 12.0, f"cancel did not cut the move short ({done})")
+        self.assertLess(travelled, 40.0, f"travelled {travelled:.1f} m of 60")
+
 
 if __name__ == "__main__":
     unittest.main()

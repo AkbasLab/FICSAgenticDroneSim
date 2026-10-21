@@ -8,7 +8,7 @@ calls to the AirSim client were changed, to calls on the adapter;
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import Any, Callable
 
 from ..core.models import Position
 from .adapter import SceneAdapter
@@ -46,7 +46,8 @@ def foreign_vehicles(present: list[str], names: list[str]) -> list[str]:
     return sorted(v for v in present if v not in wanted)
 
 
-def ensure_vehicles(adapter: Any, names: list[str]) -> dict[str, Any]:
+def ensure_vehicles(adapter: Any, names: list[str],
+                    settle: Callable[[float], None] | None = None) -> dict[str, Any]:
     """Make sure every named drone exists in the RUNNING simulator -- and no other.
 
     Drones declared in settings.json are created at process start, so changing
@@ -76,7 +77,11 @@ def ensure_vehicles(adapter: Any, names: list[str]) -> dict[str, Any]:
 
     Spawned along X at SPACING metres, matching the layout settings.json uses,
     because nothing in this stack avoids collisions.
+
+    `settle` waits for the simulator (Phase 3): by default real time, as the
+    baseline always has; the mock passes its simulated clock's `sleep`.
     """
+    wait = time.sleep if settle is None else settle
     # `adapter` is both a SceneAdapter (spawn, place) and a VehicleAdapter
     # (read back where each drone landed). AirSimAdapter is both.
     existing = adapter.list_vehicles()
@@ -99,7 +104,7 @@ def ensure_vehicles(adapter: Any, names: list[str]) -> dict[str, Any]:
         added.append(name)
 
     if added:
-        time.sleep(1.5)                      # let them register and settle
+        wait(1.5)                            # let them register and settle
         now = adapter.list_vehicles()
         missing = [n for n in names if n not in now]
         if missing:
@@ -120,7 +125,7 @@ def ensure_vehicles(adapter: Any, names: list[str]) -> dict[str, Any]:
         adapter.place_vehicle(name, Position(index * SPACING, 0.0, 0.0),
                               ignore_collision=True)
         placed.append(name)
-    time.sleep(1.5)                          # let them fall to the ground
+    wait(1.5)                                # let them fall to the ground
 
     # Verify, because a silent failure here puts drones on top of each other.
     layout = {}

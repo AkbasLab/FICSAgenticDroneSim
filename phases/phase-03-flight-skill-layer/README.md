@@ -39,7 +39,7 @@ the user.
 | NED conversion, heading, tolerance, coverage paths; a clock | `agentic_uav/control/navigation.py`, `agentic_uav/core/clock.py` | **Done** 2026-10-20 |
 | The eleven skills and their contracts | `agentic_uav/control/skills.py` | **Done** 2026-10-20 |
 | `MockVehicleAdapter`, and one contract suite for every adapter | `agentic_uav/simulator/mock_adapter.py`, `tests/test_adapter_contract.py` | **Done** 2026-10-20 |
-| The four-drone exit script | `scripts/` | step 5 |
+| The four-drone exit script | `scripts/four_drone_skills.py`, `agentic_uav/experiments/team_flight.py` | **Done** 2026-10-20; exit criterion met on the mock |
 | Live flight of the exit script; close | `results/`, `evidence/` | step 6 |
 
 ## Plan
@@ -275,6 +275,59 @@ clamp itself.)
 
 The four Phase 2 goldens match unedited. 305 tests pass, 14 of them the live
 contract, skipped; audit clean.
+
+### 2026-10-20 — step 5: the four-drone exit script, met on the mock
+
+**`agentic_uav/experiments/team_flight.py`**: `exit_plan()`, the fixed plan,
+and `fly_team(missions, connect, clock)`, which flies any such plan with one
+thread and one adapter per drone, all on one clock (the world's `SimClock`,
+every thread a participant, or real time for AirSim), keeping every
+`SkillResult`. A drone whose skill does not succeed runs `EMERGENCY_HOLD` and
+`LAND`, and its remaining skills are recorded as skipped: no drone is left
+flying because a script stopped. `verdict()` checks the exit criterion.
+
+**`scripts/four_drone_skills.py`**: `--sim mock` (default) or `--sim
+airsim`. Resets the scene, spawns and places Drone2–4 through
+`ensure_vehicles` (on both backends: it gained an optional `settle`, so the
+mock waits in simulated time; the default is the real-time wait it always
+had, and the goldens did not move), flies the plan, and writes a JSONL (a
+header with provenance, layout, separation and the verdict, then one row per
+skill: the command and its full result) and a Markdown summary. Exit code 0
+only if every skill succeeded. On AirSim the separation monitor Phase 1 built
+polls at 10 Hz during the flight; on the mock the world measures separation
+and contacts exactly.
+
+**The plan.** Four drones spawned 4 m apart along +x climb to 12, 16, 20 and
+24 m, fly 20 m straight out sideways — Drone1 and Drone3 to −y, Drone2 and
+Drone4 to +y — turn to face the way they went (±90°), hold 5 s, fly home at
+their own height and land: the kind of legs M09 and M10 flew safely in
+Phase 1. **A first version was unsafe and was changed:** it fanned the drones
+forward, and Drone1, at 12 m, passed 2.4 m sideways from Drone2 while Drone2
+was still climbing — 3.5 m apart on the mock, and in CarlaAir's different
+timing exactly the crossing that made M10's contact. Now no tracks cross, and
+every pair's closest approach is the 4 m spawn spacing.
+
+**On the mock: exit criterion met.** 20 of 20 skills succeeded, each a
+structured result; 37.5 s of simulated flight; every pair at least 4.0 m
+apart; no drone contacts; every drone landed at home.
+
+**Tests: 10 new**, `tests/test_exit_script.py`: the plan's shape (four
+drones, five skills, distinct waypoints, 4 m altitude steps, alternating
+sides); the script's own `main` on the mock, its outputs and verdict;
+separation; every drone ending on the ground; four identical runs; a stalled
+drone timing out mid-plan and then holding and landing while the other three
+finish; a stuck landing failing the verdict; and `--sim airsim` against the
+recording fake — the scene, the monitor and one connection per drone thread,
+the waypoints sent as NED. **Mutations, each caught:** no hold-and-land after
+a failure — 1; verdict always met — 2; all drones at one altitude — 1; the
+old crossing plan — 2.
+
+**One more live-only check, for step 6**: in `LiveAirSimContract`, a move on
+one connection cancelled from a second — the open question of whether
+`request_abort` works in CarlaAir.
+
+The four Phase 2 goldens match unedited. 316 tests pass, 15 live ones
+skipped; audit clean.
 
 ## Decisions
 
