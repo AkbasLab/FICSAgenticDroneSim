@@ -237,6 +237,17 @@ and kept on purpose. Planning data from every 70B session stands.
 | `20261019-18*-v5-polled` | 70b | 24 | **diagnostic** — exposed the timing-dependent landing check |
 | **`20261019-18*-v6-polled`** | **70b** | **30** | **THE CITABLE BLOCK** — plan, flight, altitude, landing and contact all measured |
 | `20261006-184158-v2-M10` | 70b | 1 | **diagnostic** — the run that exposed the altitude defect |
+| `20261020-192150-p2-planonly` | 70b | 30 | **Phase 2** — `--plan-only` on a fresh server; 42/42 drone-plans identical to v6 |
+| `20261020-192813-p2-blockA` | 70b | 0 | **aborted** — hung in AirSim's `reset()` before the first flight; nothing flown |
+| **`20261020-193347-p2-blockA`** | **70b** | **24** | **VALID — Phase 2's re-flight of v6** through the refactored code |
+| **`20261020-194802-p2-blockB-M09`** | **70b** | **3** | **VALID — Phase 2's re-flight of v6** |
+| **`20261020-195048-p2-blockC-M10`** | **70b** | **3** | **VALID — Phase 2's re-flight of v6**; Drone1–Drone3 contact every run, as in v6 |
+
+The `p2-` sessions are in `phases/phase-02-repository-architecture/results/`,
+not Phase 1's. They meet every condition in §1 and are the Phase 2 exit
+evidence: the same 30 runs as v6, flown by the code at `ac48cb0`, compared run
+by run in that phase's `evidence/`. **v6 stays the citable Phase 1 block**; the
+re-flight shows the refactor did not change it.
 
 ### Why Block A is split
 
@@ -315,7 +326,7 @@ are demonstrations.
 
 | Phase | Exit criterion | What it needs |
 |---|---|---|
-| **2** — Repository architecture | Baseline examples run through the modular structure unchanged | A refactor plus a demonstration that behaviour is unchanged. No scored runs |
+| **2** — Repository architecture | Baseline examples run through the modular structure unchanged | A refactor plus a demonstration that behaviour is unchanged. No scored runs. **Done 2026-10-20**: a 30-run re-flight of the mission set (plus a plan-only pass), every drone-plan identical to v6, every outcome equal; see §3 |
 | **3** — Flight-skill layer | Four drones take off, navigate, hold, return, land, each skill returning a structured result | Flights, but a capability demonstration rather than a scored matrix |
 
 > **Phase 3's exit criterion names four drones**, and on the evidence of M09 it
@@ -391,6 +402,9 @@ Recorded here because a run's conditions are part of the result. These are
 | `temperature` | 0 |
 | Planning latency | 35.6 s first call, then **0.8–6.0 s** by mission (M10 sums four drones) |
 | Flight times | M01 21.7 · M02 17.7 · M03 27.4 · M04 22.8 · M05 22.2 · M06 20.7 · M07 23.7 · M08 30.9 · M09 33.5 · M10 38.3–39.1 s |
+
+Phase 2's re-flight (2026-10-20) ran under these same conditions, from
+`gpu02` **card 1**, job 71111; flight times match v6's to within 1.1 s.
 
 The 6 October runs used Ollama 0.35.1 and `num_ctx = 4096`. §4b shows
 the context could not have affected their plans, and the comparability note in

@@ -1,7 +1,7 @@
 # Phase 2 — Refactor the repository into research modules
 
 **Stage:** 1 · Platform · **Vault note:** `AUV-03 — Repository Architecture`
-**Started:** 2026-10-20 · **Completed:** —
+**Started:** 2026-10-20 · **Completed:** 2026-10-20
 
 > Split the single-file open-loop agent into interchangeable planners, a
 > vehicle adapter and an experiment layer, without changing anything it does.
@@ -14,19 +14,30 @@
 
 Mirrored from `AUV-22 — Phase Objectives Checklist`.
 
-- [ ] **2.1** Separate planner logic from drone execution — one `MissionPlanner` protocol
-- [ ] **2.2** Separate AirSim calls from agent logic — a `VehicleAdapter` protocol; the agent never calls arbitrary AirSim methods
-- [ ] **2.3** Preserve current functionality — refactoring adds no new behaviour
+- [x] **2.1** Separate planner logic from drone execution — one `MissionPlanner` protocol *(step 4: an Ollama planner serving Llama and Mistral, and a replay planner. Ticked for the planners that exist: Gemini was excluded from the baseline by decision, and the deterministic policies take the protocol when they are built, in Phase 5)*
+- [x] **2.2** Separate AirSim calls from agent logic — a `VehicleAdapter` protocol; the agent never calls arbitrary AirSim methods *(steps 3 and 5: only the AirSim adapter imports AirSim, enforced by a test)*
+- [x] **2.3** Preserve current functionality — refactoring adds no new behaviour *(four goldens unedited after every step; the live block matches `v6-polled`)*
 
 ## Exit criterion
 
 > All original baseline examples run through the new modular structure
 > **without changing their expected behaviour.**
 
-**Met:** no · **Evidence:** `tests/test_golden.py` against `tests/golden/`:
-execution and planning recorded from `v0.1-open-loop-baseline` before any code
-moved, runner and fly_chat from step 4 before those moved. A live block, flown
-by the user and compared with `v6-polled`, closes it.
+**Met:** **yes, 2026-10-20** · **Evidence:** two kinds, one without the
+simulator and one in it.
+
+1. `tests/test_golden.py` against `tests/golden/`: execution and planning
+   recorded from `v0.1-open-loop-baseline` before any code moved, runner and
+   fly_chat from step 4 before those moved. All four pass unedited.
+2. The live block, flown by the user through the refactored code at
+   `ac48cb0` and compared run by run with `v6-polled` in
+   [`evidence/live-block-vs-v6-2026-10-20.md`](evidence/live-block-vs-v6-2026-10-20.md),
+   produced by the script beside it. All 84 drone-plans identical to v6 as raw
+   model text; all 30 flown runs the same outcome as v6, every drone landed, no
+   collision recorded; 40 of 42 drone-flights within v6's own repeat-to-repeat
+   spread, and the other two are M10's Drone3 after its known mid-air contact,
+   with every step before the contact matching v6 to the centimetre. See the
+   record.
 
 Checked 2026-10-20 after step 5, with the current harness run against the
 tagged baseline itself (`git archive v0.1-open-loop-baseline`): execution,
@@ -55,6 +66,8 @@ they must still pass, unedited, when the refactor is done.
 | Runner, agent log, provenance moved; settings.json helpers moved | [`agentic_uav/experiments/`](../../agentic_uav/experiments/), [`simulator/airsim_settings.py`](../../agentic_uav/simulator/airsim_settings.py) | **Done** 2026-10-20; goldens pass unedited |
 | Sandbox on the adapter and the planner | [`tools/fly_chat.py`](../../tools/fly_chat.py) | **Done** 2026-10-20; goldens pass unedited |
 | Experiment and sandbox tests | [`tests/test_experiments.py`](../../tests/test_experiments.py), [`tests/test_fly_chat.py`](../../tests/test_fly_chat.py) | **Passing**, 11 + 2 tests |
+| Live block: plan-only, M01–M08, M09, M10 | [`results/`](results/) | **Flown** 2026-10-20 by the user |
+| Live block against `v6-polled`, and the script that made it | [`evidence/`](evidence/) | **Matches**; see the exit criterion |
 
 ## Plan
 
@@ -77,6 +90,7 @@ one without the goldens being re-recorded.
    record. The monitor had already moved, with execution, in step 3; the
    sandbox moved onto the adapter in this step too.
 6. **Close:** docs, a live block flown by the user, compared with `v6-polled`.
+   Done; see the record.
 
 ## Record
 
@@ -85,8 +99,9 @@ one without the goldens being re-recorded.
 Nothing in the agent was touched. The harness records what the tagged baseline
 does, so later steps can be checked against it.
 
-**The fake.** `tests/airsim_fake.py` implements the 17 AirSim methods the agent
-uses, with trivial physics: commands set positions, every drone rests on
+**The fake.** `tests/airsim_fake.py` implements the 16 AirSim methods the agent
+uses (*corrected 2026-10-20: this said 17; the 17th, `isApiControlEnabled`, was
+added in step 5*), with trivial physics: commands set positions, every drone rests on
 ground z = 29.25, nothing drifts. It is not a simulator. Its only job is to
 drive the real code down the same paths a flight does, deterministically.
 Three things make it deterministic:
@@ -406,10 +421,95 @@ design and unit-tested instead; the runner never calls `build_settings`, which
 162 tests pass; `record_golden.py --check` matches all four goldens; audit
 clean. The live block that closes the phase is step 6.
 
+### 2026-10-20 — docs, and a whole-repository check
+
+Before the live block: the README's layout section rewritten for the new tree
+(`17c2f0e`); a whole-repository check (`7fb5fb9`) found the exit-criterion line
+claiming every golden came from the tag, and ran today's harness against the
+tagged baseline itself (execution, planning and fly_chat match it; runner
+differs only in the manifest field step 3 added); `tools/sync_missions_to_vault.py`
+fixed to stop printing "the GPU belongs to the simulator" after `num_gpu 999`
+(`ac48cb0`). All pushed to `fics/SC` before flying, so the code that flew is a
+published commit.
+
+### 2026-10-20 — the live block: the refactored code flies v6 again
+
+Flown by the user, step by step, in one evening. The code was `ac48cb0`,
+published; every session's snapshot re-hashes to the same package digest,
+`0226b06de4917ae2`.
+
+**The model server.** ERAU Vega, a fresh job each time, so set up from the
+start:
+
+| Step | What | Seen |
+|---|---|---|
+| 1 | Idle cards, from the login node: `ssh gpu01 nvidia-smi`, `ssh gpu02 nvidia-smi` | `gpu02` all four cards at 0 MiB; `gpu01` cards 0 and 3 busy |
+| 2 | `qsub -I -q gpuq -l nodes=gpu02:ppn=48:gpus=1,mem=64gb,walltime=04:00:00` | job **71111**, started at once; `hostname` → `gpu02` |
+| 3 | Which card: `echo $CUDA_VISIBLE_DEVICES $PBS_GPUFILE` | **`CUDA_VISIBLE_DEVICES=1`, and a `PBS_GPUFILE`**, both set by the scheduler; see below |
+| 4 | `source /scratch/$USER/ollama/env.sh`; `ollama --version` | client 0.40.6 |
+| 5 | `OLLAMA_HOST=0.0.0.0:11434 OLLAMA_CONTEXT_LENGTH=98304 nohup ollama serve ...`; warm with `ollama run llama3.3:70b "reply with the single word: ready"` | `ready`; card 1 at **71,555 MiB** (budget 72,727 MiB), cards 2–3 untouched |
+| 6 | Laptop tunnel `ssh -N -o ServerAliveInterval=30 -L 11435:gpu02:11434 ...`; `curl.exe http://127.0.0.1:11435/api/version` | `{"version":"0.40.6"}` |
+
+v6 was served from `gpu02` card 0 (job 70633); tonight `gpu02` card 1. Same
+model, server version, options and context.
+
+**The sessions**, in order, all with `--ollama-host http://127.0.0.1:11435
+--out phases/phase-02-repository-architecture/results`:
+
+| Session | Missions | Runs | What happened |
+|---|---|---|---|
+| `20261020-192150-p2-planonly` | all | 30 (42 drone-plans) | No simulator. 27/27 scored correct; first call 35.3 s (model load), then 0.7–6.1 s. **Every drone-plan identical to v6 as raw text.** The Vega manual asks for this check on any fresh server |
+| `20261020-192813-p2-blockA` | M01–M08 | **0** | **Aborted.** Stuck in AirSim's `reset()` before the first flight; see below. Its snapshot folder stays as the record of the attempt |
+| `20261020-193347-p2-blockA` | M01–M08 | 24 | After a simulator restart. 21/21 scored correct, all landed, no collision. 19:34:23–19:45:09 |
+| `20261020-194802-p2-blockB-M09` | M09 | 3 | Drone2 spawned at runtime. 3/3, min separation 4.03/4.02/4.02 m, no contacts — v6's figures exactly |
+| `20261020-195048-p2-blockC-M10` | M10 | 3 | Drone3–4 spawned. 3/3, all four drones landed every run; Drone1–Drone3 contact every run, as in v6 |
+
+The simulator was launched under protocol conditions (`.\CarlaAir.ps1
+Town10HD`: Epic, traffic 30/50) with `settings.json` declaring one drone, and
+missions were flown in increasing drone count in one session, as the ordering
+rule requires.
+
+**Against `v6-polled`**, from the evidence file:
+
+| | Result |
+|---|---|
+| Drone-plans, raw model text | **84/84 identical**: 42 planned only, 42 flown (24 + 6 + 12) |
+| Outcomes — completed, landed, collision | **42/42** drone-flights equal to v6 |
+| Physical quantities — final position, height after each step, flight time | **40/42** within v6's own repeat-to-repeat spread |
+| Minimum separation, contacts | identical: M09 4.03/4.02/4.02 m, no contacts; M10 4.0 m, Drone1–Drone3 every run |
+
+**How flights were judged.** Plans compare exactly; a simulator does not, so
+each quantity was judged against how much v6 varied *between its own three
+repeats* of the same mission and drone, with a small floor where v6's repeats
+agreed exactly. A first version of the script judged against fixed numbers I
+had chosen and called "v6's spread" without computing it; it flagged M10, and
+that is what showed the claim was wrong. The script now measures the spread.
+
+**The two outside.** Both are M10's Drone3, run 1 (final x/y 1.82 m from v6
+against a v6 spread of 1.61 m; step height 0.83 against 0.56) and run 2 (step
+height 1.17 against 0.56; flight 1.1 s against 1.0). In both, Drone3's height
+after `take_off` and `set_altitude` matches v6 to 0.01 m. The difference is
+entirely in its `fly_backward` step — the one in which it climbs from 18 m to
+about 33 m and touches Drone1, at t+16.9 s tonight and t+16.9–17.0 s in v6.
+v6 itself landed that step at 33.43, 33.91 and 33.35 m; Drone1, the other half
+of the contact, varied in v6 by 1.88 m in position and 1.66 m in height. A
+mid-air contact scatters what follows it; three repeats are too few to bound
+that scatter tightly. Everything the code decides is unchanged.
+
+**Verdict:** the exit criterion is met. The baseline's examples run through the
+modular structure and behave as they did at the tag — plans identical,
+outcomes identical, flights within the simulator's own scatter.
+
+**Findings of the evening** (open questions below): the aborted start, the
+scheduler now naming the card, and every run inside the repository marking
+itself dirty.
+
 ## Decisions
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-10-20 | **Judge the live block's flights against v6's own repeat-to-repeat spread** | Plans compare exactly, flights cannot: the simulator scatters. A tolerance someone picks can be made to pass or fail anything. How much v6 differed from itself, for the same mission and drone, is the measured scatter, so a difference within it is not a change of behaviour. |
+| 2026-10-20 | **Tick 2.1 for the planners that exist** | The plan names Gemini and the deterministic policies. Gemini was excluded from the baseline by decision; the deterministic policies do not exist until Phase 5 and will take the same protocol. Holding Phase 2 open for code that later phases write would make the exit untestable. Same reasoning as 1.2's "Gemini model id" in Phase 1. |
 | 2026-10-20 | **Pin the runner and the sandbox as whole invocations before moving them** | The first two goldens stop at `fly_plans` and `plan_for`. Everything the runner does around them (refusals, scoring, the summary, the log, the snapshot) and everything the sandbox does was unpinned, and step 5 moves exactly that. |
 | 2026-10-20 | **A golden is re-recorded only from the code it pins** | `runner.json` needed a second recording to drop timing-dependent monitor figures. Recording it from the moved code would have made the moved code its own reference. It was recorded from `5f9ac56`, and shown to differ from the first recording in those lines only. |
 | 2026-10-20 | **The harness removes measurement noise, never behaviour** | Each normalisation names something that differs between two runs of identical code: clock, paths, digests, the monitor's 10 Hz race with virtual time, thread order. What the code decides, prints, writes or sends is compared exactly. |
@@ -464,6 +564,36 @@ clean. The live block that closes the phase is step 6.
   The untouched file is kept beside it as
   `runs/agent-log.backup-before-removing-90-scripted-records-20261020.jsonl`.
   The harness now redirects the log and raises if the real one changes.
+- **A runner start that hung in AirSim's `reset()`, 2026-10-20.** The first
+  block A attempt (`20261020-192813`) planned M01 and then never returned
+  from the world reset: no `Connected!` from the reset's own
+  `confirmConnection`, and only the runner's one connection to port 41451 —
+  the flight thread and the monitor never connected. It was started about a
+  minute after launch, and a `reset()` RPC is answered only by a ticking
+  game loop. After a simulator restart and a full load the same command flew
+  all 24 runs. Not seen in Phase 1. Two things would make it fail loudly
+  instead of waiting for AirSim's one-hour client timeout: a readiness check
+  before the first reset, and a timeout on `reset()` itself — behaviour
+  changes, so for a later phase.
+- **Vega's scheduler now names the card.** Job 71111 had
+  `CUDA_VISIBLE_DEVICES=1` and a `PBS_GPUFILE` set, where the Vega manual and
+  `docs/SETUP.md` record both as empty and tell the user to pick and export a
+  card. The card it named was idle, and the model loaded onto it and nowhere
+  else. The docs now say to check first and keep the scheduler's choice when
+  it makes one; whether it always does is unknown from one job.
+- **Every run inside the repository records `dirty: true`.** The runner
+  writes its code snapshot into the results folder, then reads `git status`
+  for the manifest, and finds its own snapshot untracked. Tonight's four
+  sessions say `dirty` with the tree clean at `ac48cb0`. Every Phase 1
+  manifest says `dirty` too (v6 at `1258aed`, v3 at `53d6017`), and since
+  Phase 1 often did fly uncommitted code, which of those were really dirty can
+  no longer be told — which is the problem. The snapshot's digests still identify the code exactly, so no
+  record is wrong about *what* flew, only about the tree. Fix: read the
+  provenance before writing the snapshot — a behaviour change, pinned by the
+  runner golden's manifest shape, so a deliberate one.
+- **M10's Drone3 still climbs into Drone1.** Unchanged from Phase 1 and
+  reproduced in every run tonight, which is what the refactor should do. Its
+  cause is the investigation set aside in Phase 1.
 
 ---
 

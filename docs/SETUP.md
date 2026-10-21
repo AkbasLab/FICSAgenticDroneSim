@@ -227,16 +227,26 @@ qsub -I -q gpuq -l nodes=gpu01:ppn=48:gpus=1,mem=64gb,walltime=04:00:00
 ```
 
 Name the node that has an idle card (near-zero memory **and** 0%). Then, inside
-the job:
+the job, first see whether the scheduler named a card for you:
+
+```bash
+echo "CUDA_VISIBLE_DEVICES=[$CUDA_VISIBLE_DEVICES]  PBS_GPUFILE=[$PBS_GPUFILE]"
+nvidia-smi --query-gpu=index,memory.used,utilization.gpu --format=csv
+```
 
 ```bash
 source /scratch/$USER/ollama/env.sh
-export CUDA_VISIBLE_DEVICES=N
+export CUDA_VISIBLE_DEVICES=N     # ONLY if the echo above showed it empty
 OLLAMA_HOST=0.0.0.0:11434 OLLAMA_CONTEXT_LENGTH=98304 nohup ollama serve > /scratch/$USER/ollama/serve-gpu.log 2>&1 &
 ```
 
-`N` is the idle card's index. Vega does not set `CUDA_VISIBLE_DEVICES` for
-you, and without it the model can land on another user's GPU.
+**If `CUDA_VISIBLE_DEVICES` is already set, keep it** — that is the card the
+scheduler allocated to the job; skip the `export`. If it is empty, `N` is the
+idle card's index, and without it the model can land on another user's GPU.
+Earlier jobs had both variables empty; job 71111 on 2026-10-20 had
+`CUDA_VISIBLE_DEVICES=1` and a `PBS_GPUFILE` set. Check every time.
+`nvidia-smi` always lists all four cards whatever the variable says, so it
+shows which are busy, not which is yours.
 
 **On the laptop**, in a window you leave open. The node must be the one the job
 is on:

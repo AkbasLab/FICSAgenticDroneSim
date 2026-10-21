@@ -1123,6 +1123,14 @@ On the allocated node, \texttt{CUDA\_VISIBLE\_DEVICES} and
 four cards was ours. GPUs appear not to be isolated per job, which means a
 careless user can disturb someone else's work.}
 
+\callout{good}{20 October 2026: the scheduler named the card \verified}{%
+Job 71111 on \texttt{gpu02} had \texttt{CUDA\_VISIBLE\_DEVICES=1} and a
+\texttt{PBS\_GPUFILE} set. The card it named was idle, and the model loaded
+onto it and nowhere else (71,555\,MiB on card~1). So check first, every
+time, with \texttt{echo \$CUDA\_VISIBLE\_DEVICES \$PBS\_GPUFILE}. If it is set, \textbf{keep it} and skip the \texttt{export} below. If it is
+empty, pick and pin a card as below. \texttt{nvidia-smi} lists all four cards
+whatever the variable says. It shows which are busy, not which is yours.}
+
 \callout{accent}{A node is not a card, and the tunnel wants the node}{%
 \texttt{gpu01} is a \textbf{machine} --- the cluster has two, \texttt{gpu01} and
 \texttt{gpu02}. The \texttt{2} in \texttt{CUDA\_VISIBLE\_DEVICES=2} is a
@@ -2154,9 +2162,10 @@ rm -f ollama-0.40.6.tar.zst
 source /scratch/$USER/ollama/env.sh
 hostname
 nvidia-smi
-export CUDA_VISIBLE_DEVICES=0
+echo "CUDA_VISIBLE_DEVICES=[$CUDA_VISIBLE_DEVICES]"   # set by the scheduler? keep it
+export CUDA_VISIBLE_DEVICES=0                       # only if it was empty
 
-OLLAMA_HOST=0.0.0.0:11434 OLLAMA_CONTEXT_LENGTH=4096 \
+OLLAMA_HOST=0.0.0.0:11434 OLLAMA_CONTEXT_LENGTH=98304 \
   nohup ollama serve > /scratch/$USER/ollama/serve-gpu.log 2>&1 &
 
 ollama run llama3.3:70b "reply with the single word: ready"
