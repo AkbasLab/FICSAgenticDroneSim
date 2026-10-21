@@ -245,6 +245,8 @@ and kept on purpose. Planning data from every 70B session stands.
 | `20261021-005707` four-drone-skills, live | none | 1 (20 skills) | **Phase 3 exit run** — a skill demonstration, not a mission run: 20/20 skills, no contacts |
 | `20261021-005853` four-drone-skills, mock | none | 1 (20 skills) | Phase 3 — the same script on the mock, simulated time |
 | **`20261021-093521-exit`** search-relay, mock | none | 20 seeds | **Phase 4 exit run** — the scripted controller on `search_relay_001`, seeds 1–20: 20/20 met |
+| `20261021-183608-overrun` search-relay, mock | none | 20 seeds | Phase 4 — the exit re-flown after lanes were made to run past sector ends: 20/20 met |
+| `20261021-183614-gate` search-relay, mock | none | 20 seeds | Phase 4 — the live variant `search_relay_live_small`'s mock gate: 20/20 met |
 
 The `p2-` sessions are in `phases/phase-02-repository-architecture/results/`,
 not Phase 1's. They meet every condition in §1 and are the Phase 2 exit
@@ -262,6 +264,9 @@ the first run judged as a mission against AUV-05's six criteria, but on the
 mock, not in CarlaAir, and by a scripted controller with no model: a
 feasibility check of the canonical mission (AUV-19's gate G1), not study data.
 Its 20 seeds move the targets; the plan is the same for all of them.
+The two later rows are the same exit re-flown after a controller fix, and
+the mock gate of the small variant meant for a live flight; see the phase
+record, step 5.
 
 ### Why Block A is split
 

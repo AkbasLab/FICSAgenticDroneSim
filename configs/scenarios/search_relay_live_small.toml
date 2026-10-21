@@ -1,0 +1,82 @@
+# A small variant of search_relay_001 for a live CarlaAir flight. Phase 4, step 5.
+#
+# NOT the canonical mission: Town10HD has buildings and nothing avoids them, so
+# the canonical sectors (40-200 m out) are flown only on the mock. This one fits
+# inside the airspace Phases 1 and 3 flew live, at their heights: its lanes run
+# between points the M09 and M10 drones reached (about (21, -21), (22, 17),
+# (-9.5, 18), (-6, -17.5) at 12-30 m) and across Phase 3's +-20 m sideways legs.
+# The lanes are flown from x = -8 to 20: the sectors end 5 m short of that at
+# each end, because the controller runs every lane 5 m past a sector's edge
+# (speed x observation time / 2) so that points on the edge are held long enough.
+# Same rules as the canonical file, scaled: two drones, two sectors, one
+# restricted zone in the way, a radio too short for the far ends of the lanes.
+#
+# Same detection, battery, safety and coverage threshold as search_relay_001;
+# only the geometry, the team, the radio range and the deadline differ.
+
+scenario_id = "search_relay_live_small"
+random_seed = 17
+description = """
+Two drones search an 18 x 16 m sector each, either side of their pads, for two
+targets, route round a restricted zone, report to a base whose radio reaches
+20 m, and land on their pads, within 5 minutes.
+"""
+
+faults = []
+
+[mission]
+type = "distributed_search"
+deadline_s = 300                 # the flight takes about a minute
+required_coverage = 0.95         # as search_relay_001
+targets_to_find = 2
+
+[base]
+position = [-6.0, 0.0]           # behind the pads, clear of the zone
+
+[network]
+profile = "perfect"
+# Reaches the lane starts (about 18 m) but not the far ends (about 32 m): a
+# detection out there is reported through the other drone or on the way home.
+communication_range_m = 20.0
+
+[detection]
+radius_m = 10.0
+min_observation_s = 2.0
+line_of_sight = false
+
+[battery]
+capacity = 100.0
+hover_drain_per_s = 0.05
+move_drain_per_m = 0.02
+reserve = 20.0
+
+[safety]
+min_separation_m = 2.0
+
+[targets]
+count = 2
+placement = "random_in_sectors"
+min_spacing_m = 20.0
+
+# The first two pads of the spawn layout: Drone2 is spawned at runtime, as in M09.
+[[vehicles]]
+id = "Drone1"
+start = [0.0, 0.0, 0.0]
+
+[[vehicles]]
+id = "Drone2"
+start = [4.0, 0.0, 0.0]
+
+# One lane each, at y = -18 and y = 18, flown from x = -8 to 20.
+[[sectors]]
+id = "S1"
+bounds = [-3.0, -26.0, 15.0, -10.0]      # x_min, y_min, x_max, y_max
+
+[[sectors]]
+id = "S2"
+bounds = [-3.0, 10.0, 15.0, 26.0]
+
+# Across Drone1's straight line from its pad to the start of S1's lane at (-8, -18).
+[[restricted_zones]]
+id = "R1"
+polygon = [[-8.0, -9.0], [-2.0, -9.0], [-2.0, -3.0], [-8.0, -3.0]]

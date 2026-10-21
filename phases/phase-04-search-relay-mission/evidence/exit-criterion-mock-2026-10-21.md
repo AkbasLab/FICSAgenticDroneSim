@@ -80,3 +80,18 @@ seed 17 twice and compares the records.
   should keep it in mind.
 * **Margins.** Completion 182.2 s of the 900 s deadline; the lowest battery
   73.9 %, against a 20 % reserve; coverage 0.9995 against 0.95.
+
+## Dated note, 2026-10-21, later the same day: re-met after the lane-end overrun
+
+Everything above stands for the code that produced it (digest
+`3729c0c3d5b1e673`, at `1bcfcdc`). In step 5 the controller changed: lanes
+now run 5 m past each sector end where the restricted zones allow, after a
+corner target in the live variant went undetected (see the phase record,
+"step 5, before flying"). The canonical exit was flown again with that
+change, by the same script and seeds:
+`../results/search-relay-exit-mock-20261021-183608-overrun.jsonl`.
+
+**20 of 20 seeds met**: every criterion on every seed, 380/380 skills.
+Completion 192.1 s (was 182.2), coverage 0.99977 (was 0.9995), closest pair
+3.36 m (was 3.31), lowest battery 72.4 % (was 73.9). Over seeds 1–2000, the
+plan now misses a target on 1 seed, against 3 before.

@@ -19,6 +19,9 @@ they can know, and the record says which was used:
   restricted zone, a closest approach between two polls. Airborne is decided
   from height (above `airborne_above_m`), since nothing else is reported
   reliably. It is the observer for a live run; on the mock the trace is used.
+  It keeps the raw NED samples, so the grounds may be given after the flight
+  -- the ones each drone's TAKE_OFF measured -- and a saved flight can be
+  turned into trajectories again (`trajectories_from_samples`).
 
 The poller reads with its own adapter, as every thread does (Phase 1: one
 connection per thread), and never commands anything.
@@ -43,6 +46,27 @@ def _altitude(z: float, ground_z: float) -> float:
     return ground_z - z
 
 
+Sample = tuple[float, float, float, float]       # t, x, y, NED z
+
+
+def trajectories_from_samples(samples: dict[str, list[Sample]] | dict[str, list[list[float]]],
+                              grounds: dict[str, float],
+                              airborne_above_m: float = DEFAULT_AIRBORNE_ABOVE_M) -> dict[str, Trajectory]:
+    """Trajectories from polled NED samples and each drone's measured ground."""
+    missing = [d for d in samples if d not in grounds]
+    if missing:
+        raise ValueError(f"no measured ground for {missing}")
+    out = {}
+    for drone, rows in samples.items():
+        if rows:
+            knots = []
+            for t, x, y, z in rows:
+                altitude = _altitude(z, grounds[drone])
+                knots.append(Knot(t, x, y, altitude, altitude > airborne_above_m))
+            out[drone] = Trajectory(drone, knots)
+    return out
+
+
 def mock_trajectories(world: MockWorld, drones: list[str] | tuple[str, ...] | None = None) -> dict[str, Trajectory]:
     """Every (or each named) mock drone's exact trajectory so far."""
     names = list(world.vehicles) if drones is None else list(drones)
@@ -59,11 +83,12 @@ class PollingObserver:
 
     `grounds` is each drone's measured ground in NED (the executor's ground
     reference), so altitude is above the ground the drone stands on, as
-    Phase 1 measured it varies.
+    Phase 1 measured it varies. It may be given here or to `trajectories()`
+    after the flight.
     """
 
     def __init__(self, connect: Callable[[], object], drones: list[str] | tuple[str, ...],
-                 grounds: dict[str, float], clock: Clock | None = None,
+                 grounds: dict[str, float] | None = None, clock: Clock | None = None,
                  hz: float = DEFAULT_POLL_HZ,
                  airborne_above_m: float = DEFAULT_AIRBORNE_ABOVE_M) -> None:
         clock = clock if clock is not None else RealClock()
@@ -73,16 +98,16 @@ class PollingObserver:
             raise ValueError("PollingObserver is for real time; on the mock use mock_trajectories()")
         if hz <= 0:
             raise ValueError("poll rate must be positive")
-        missing = [d for d in drones if d not in grounds]
+        missing = [d for d in drones if grounds is not None and d not in grounds]
         if missing:
             raise ValueError(f"no measured ground for {missing}")
         self.connect = connect
         self.drones = tuple(drones)
-        self.grounds = dict(grounds)
+        self.grounds = None if grounds is None else dict(grounds)
         self.clock = clock
         self.period = 1.0 / hz
         self.airborne_above_m = airborne_above_m
-        self._knots: dict[str, list[Knot]] = {d: [] for d in self.drones}
+        self._samples: dict[str, list[Sample]] = {d: [] for d in self.drones}
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._error: BaseException | None = None
@@ -108,14 +133,19 @@ class PollingObserver:
         for drone in self.drones:
             p = adapter.get_pose(drone)
             t = self.clock.now()
-            altitude = _altitude(p.z, self.grounds[drone])
-            knot = Knot(t, p.x, p.y, altitude, altitude > self.airborne_above_m)
             with self._lock:
-                self._knots[drone].append(knot)
+                self._samples[drone].append((t, p.x, p.y, p.z))
 
-    def trajectories(self) -> dict[str, Trajectory]:
+    def samples(self) -> dict[str, list[Sample]]:
+        """The raw polls, NED, per drone: what a record keeps."""
         with self._lock:
-            return {d: Trajectory(d, list(ks)) for d, ks in self._knots.items() if ks}
+            return {d: list(rows) for d, rows in self._samples.items()}
+
+    def trajectories(self, grounds: dict[str, float] | None = None) -> dict[str, Trajectory]:
+        grounds = grounds if grounds is not None else self.grounds
+        if grounds is None:
+            raise ValueError("no grounds: give them to the observer or to trajectories()")
+        return trajectories_from_samples(self.samples(), grounds, self.airborne_above_m)
 
     def _run(self) -> None:
         try:

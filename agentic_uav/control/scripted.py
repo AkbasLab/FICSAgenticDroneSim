@@ -24,6 +24,11 @@ THE PLAN, and why each part:
   5 m/s. Lanes are at most LANE_MARGIN of twice that apart, rounded up to
   whole lanes across the sector: 16 m in an 80 m sector. The margin is for
   live flight, which does not hold a lane exactly.
+* LANES RUN ON past each end of the sector by vT/2 (5 m), where the zones'
+  clearance allows: a point on the sector's edge is in view over a chord
+  centred on it, and a lane that stopped at the edge would fly only half of
+  it. Added 2026-10-21 (Phase 4, step 5) when a target in the corner of a
+  small sector went undetected; see the phase record.
 * ROUTES round restricted zones by `routing.route`, keeping ZONE_CLEARANCE_M,
   out to each sector's first lane, between sectors, and home to the pad.
   The search itself is the SEARCH_REGION skill's lawnmower; a lane that would
@@ -43,6 +48,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from ..core.geometry import Region
 from ..core.scenario import DetectionSpec, MissionBrief
 from . import navigation as nav
 from .routing import Point2, clear, grown, length, route
@@ -78,6 +84,7 @@ class DronePlan:
     estimated_s: float
     estimated_battery_used: float
     commands: tuple[SkillCommand, ...]
+    searched: tuple[Region, ...] = ()     # each sector as flown: its lanes run on past the ends
 
 
 def detection_half_width(detection: DetectionSpec, speed_mps: float) -> float:
@@ -101,7 +108,7 @@ def plan_mission(brief: MissionBrief, speed_mps: float = DEFAULT_SPEED_MPS) -> d
     if not isinstance(brief, MissionBrief):
         # A Scenario has every field a brief has, and the targets too: refuse it.
         raise TypeError(f"plan_mission takes a MissionBrief (scenario.brief()), not {type(brief).__name__}")
-    zones =[z.polygon for z in brief.restricted_zones]
+    zones = [z.polygon for z in brief.restricted_zones]
     obstacles = [grown(z, ZONE_CLEARANCE_M) for z in zones]
     drones = sorted(brief.vehicles, key=lambda v: v.id)
     sectors = sorted(brief.sectors, key=lambda s: s.id)
@@ -113,15 +120,18 @@ def plan_mission(brief: MissionBrief, speed_mps: float = DEFAULT_SPEED_MPS) -> d
         commands: list[SkillCommand] = [TakeOffCommand(altitude_m=altitude, speed_mps=speed_mps)]
         track: list[Point2] = [pad]
         spacings = []
+        searched: list[Region] = []
         for sector in mine:
-            region = sector.region
-            spacing = lane_spacing(region.y_max - region.y_min, brief.detection, speed_mps)
+            spacing = lane_spacing(sector.region.y_max - sector.region.y_min, brief.detection, speed_mps)
             spacings.append(spacing)
+            region = searched_region(sector.region, spacing, altitude,
+                                     lane_end_overrun(brief.detection, speed_mps), obstacles)
             lanes = [(w.x, w.y) for w in nav.lawnmower(region, spacing, altitude)]
             for a, b in zip(lanes, lanes[1:]):
                 if not clear(a, b, obstacles):
                     raise PlanError(f"{sector.id}'s lawnmower passes within {ZONE_CLEARANCE_M} m "
                                     f"of a restricted zone ({a} -> {b})")
+            searched.append(region)
             leg = route(track[-1], lanes[0], zones, ZONE_CLEARANCE_M)
             if len(leg) > 2:            # the search flies straight to its first lane itself
                 commands.append(FollowWaypointsCommand(
@@ -146,5 +156,35 @@ def plan_mission(brief: MissionBrief, speed_mps: float = DEFAULT_SPEED_MPS) -> d
                             f"{brief.mission.deadline_s:g} s deadline")
         plans[vehicle.id] = DronePlan(vehicle.id, tuple(s.id for s in mine), altitude,
                                       min(spacings) if spacings else 0.0, tuple(track),
-                                      flown, seconds, used, tuple(commands))
+                                      flown, seconds, used, tuple(commands), tuple(searched))
     return plans
+
+
+def lane_end_overrun(detection: DetectionSpec, speed_mps: float) -> float:
+    """How far a lane must run past a sector's edge for a point on that edge to be held long enough.
+
+    A point at the edge, up to the half width off the lane, is in view over a
+    chord centred on it, at least speed x T long; a lane that stops at the
+    edge flies only half of it.
+    """
+    return speed_mps * detection.min_observation_s / 2.0
+
+
+def searched_region(region: Region, spacing_m: float, altitude_m: float, overrun_m: float,
+                    obstacles: list) -> Region:
+    """`region` with its lanes run on `overrun_m` past each end the zones allow.
+
+    Both ends if the lanes stay clear, else whichever one end does, else the
+    region as it is. Lanes run along x, so only x grows; the lanes' y stay.
+    """
+    def lanes_clear(r: Region) -> bool:
+        path = [(w.x, w.y) for w in nav.lawnmower(r, spacing_m, altitude_m)]
+        return all(clear(a, b, obstacles) for a, b in zip(path, path[1:]))
+
+    e = overrun_m
+    for x_min, x_max in ((region.x_min - e, region.x_max + e), (region.x_min, region.x_max + e),
+                         (region.x_min - e, region.x_max)):
+        candidate = Region(x_min, region.y_min, x_max, region.y_max)
+        if lanes_clear(candidate):
+            return candidate
+    return region

@@ -29,8 +29,11 @@ thereby searched it. The definitions:
 * C3: at least `targets_to_find` distinct targets reported: some drone that
   detected it was later connected to the base, directly or relayed.
 * C4: no zone entered by any drone.
-* C5: no contact with anything but the ground (landing is a ground contact),
-  and no pair of drones closer than `min_separation_m` while one flew.
+* C5: no contact with another drone or an obstacle, and no pair of drones
+  closer than `min_separation_m` while one flew. A ground contact is a
+  landing; a contact with the spectator camera is someone watching
+  (`control.contacts.classify_contact`). Neither is a collision; camera
+  contacts are counted in the components.
 * C6: every functioning drone (not in `failed`; Phase 4 fails none) ends the
   window landed, within RETURN_RADIUS_M of its own start, with its battery
   at or above the reserve and never run flat. "Return" is to its pad: the
@@ -54,7 +57,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-from ..control.contacts import is_ground
+from ..control.contacts import classify_contact
 from ..core.scenario import Scenario
 from ..simulator.coverage import DEFAULT_CELL_M, Coverage, coverage
 from ..simulator.mission_world import MissionFacts, Target, observe
@@ -190,8 +193,11 @@ def evaluate(scenario: Scenario, trajectories: dict[str, Trajectory] | list[Traj
                              for e in entries))
 
     # C5
-    collisions = [c for c in as_contacts(contacts)
-                  if not is_ground(c.object) and start <= c.at <= until]
+    flown = [t.drone for t in trajs]
+    in_window = [c for c in as_contacts(contacts) if start <= c.at <= until]
+    kinds = [classify_contact(c.object, flown) for c in in_window]
+    collisions = [c for c, k in zip(in_window, kinds) if k in ("drone", "obstacle")]
+    camera = sum(k == "camera" for k in kinds)
     violations = [(s, v) for s in facts.separations for v in s.violations]
     closest = [s for s in facts.separations if s.min_m is not None]
     nearest = min(closest, key=lambda s: s.min_m) if closest else None
@@ -237,6 +243,7 @@ def evaluate(scenario: Scenario, trajectories: dict[str, Trajectory] | list[Traj
         "safe_return": round(len(returned) / len(functioning), 4) if functioning else None,
         "zone_entries": len(entries),
         "collisions": len(collisions),
+        "camera_contacts": camera,
         "separation_violations": len(violations),
         "min_separation_m": None if nearest is None else round(nearest.min_m, 3),
         "drones_flown": len(trajs),

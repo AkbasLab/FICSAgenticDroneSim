@@ -25,7 +25,8 @@ Mirrored from `AUV-22 — Phase Objectives Checklist`.
 
 **Met:** on the mock, 2026-10-21, 20 of 20 seeds · **Evidence:**
 [`evidence/exit-criterion-mock-2026-10-21.md`](evidence/exit-criterion-mock-2026-10-21.md).
-The optional live run (step 5) is not yet flown.
+Re-met after the lane-end overrun (step 5): 20 of 20, recorded as a dated
+note in the same evidence file. The optional live run is not yet flown.
 
 Planned evidence: the scripted controller completing the canonical scenario on
 the mock across 20 seeds (target layouts), every success criterion passed.
@@ -40,7 +41,7 @@ airspace Phase 1 flew.
 | The mission world: targets, detection, restricted zones, battery, connectivity, an observer | `agentic_uav/simulator/` | **Done** 2026-10-21; goldens unedited |
 | The evaluator: one mission report, every criterion | `agentic_uav/experiments/evaluation.py`, `agentic_uav/simulator/coverage.py` | **Done** 2026-10-21; goldens unedited |
 | The scripted controller, run across 20 seeds | `agentic_uav/control/routing.py`, `agentic_uav/control/scripted.py`, `agentic_uav/experiments/search_relay.py`, `scripts/search_relay_exit.py` | **Done** 2026-10-21; exit met on the mock, 20/20 |
-| Optional live run; close | `results/`, `evidence/` | step 5 |
+| Optional live run; close | `configs/scenarios/search_relay_live_small.toml`, `agentic_uav/experiments/search_relay.py` (`fly_live`), `results/`, `evidence/` | In progress: the live variant and its plumbing ready, mock gate 20/20; the live flights not yet flown |
 
 ## Plan
 
@@ -442,6 +443,137 @@ of this step must reproduce.
 **The goldens did not move.** `record_golden.py --check` matches all four.
 430 tests pass, 15 skipped (live only); audit clean.
 
+### 2026-10-21 — step 5, before flying: a corner the lanes missed, the live variant, and the live plumbing
+
+**The live variant failed its mock gate on one seed, and the plan was at
+fault.** The first draft of `search_relay_live_small` met 19 of 20 seeds on
+the mock. Seed 15 put T2 at (19.62, −25.73), the far corner of S1, and no pass
+held it for 2 s. Yet C1 read 1.0: on the 1 m grid the nearest cell centre,
+(19.5, −25.5), is held just over 2 s, and the true point, 0.27 m further into
+the corner, just under. Measured before changing anything:
+
+| | Coverage, 1 m grid | Coverage, 0.25 m grid | Seeds 1–2000 missing a target |
+|---|---|---|---|
+| Live variant (first draft) | 1.0000 | 0.9984 | 8 (0.40 %) |
+| Canonical | 0.99953 | 0.99951 | 3 (0.15 %) |
+
+The cause was the lane ends. A lane stopped at the sector's edge, and a point
+on the edge is in view over a chord centred on it, so a lane ending there
+flies only half that chord. Choosing other gate seeds would have been
+choosing the evidence, and changing the threshold was ruled out in the plan.
+A geometry-only fix can't reach a corner either.
+
+**The fix, in the controller: lanes run on past each end.** The overrun is
+v·T/2, 5 m, wherever the zones' 2 m clearance allows; otherwise one end, or
+neither (`lane_end_overrun`, `searched_region` in `control/scripted.py`).
+`DronePlan.searched` records each sector's flown extent. For the canonical
+plan, S3 and S4 run on at both ends (115 to 205). S1 and S2 run on at x = 120
+only (to 125): 5 m back from x = 40 would come within 2 m of R1's grown edge
+at x = 37.
+
+| After the fix | Coverage, 0.25 m grid | Seeds 1–2000 missing a target |
+|---|---|---|
+| Live variant | 1.00000 | 0 |
+| Canonical | 0.99978 | 1 |
+
+The canonical miss left is at S1/S2's x = 40 end, the one the zone stops
+from running on.
+
+**The canonical exit was flown again with the fix**
+(`results/search-relay-exit-mock-20261021-183608-overrun`): 20 of 20, every
+criterion on every seed, 380/380 skills.
+
+| | Before the fix | After |
+|---|---|---|
+| Completion | 182.2 s | 192.1 s |
+| Coverage | 0.9995 | 0.99977 |
+| Closest pair | 3.31 m | 3.36 m |
+| Lowest battery | 73.9 % | 72.4 % |
+
+The step-4 evidence stands for the code that produced it. The re-run is a
+dated note at its foot, not an edit.
+
+**The live variant** (`configs/scenarios/search_relay_live_small.toml`)
+keeps the canonical file's rules and changes only the geometry, the team,
+the radio range and the deadline:
+
+* **Two drones** on the first two spawn pads, at 12 and 16 m. Drone2 is
+  spawned at runtime, as in M09.
+* **Two sectors, each 18 × 16 m.** One lane each, at y = ±18, flown from
+  x = −8 to 20: the sectors end 5 m short of that, so the overrun stays
+  inside the flown path.
+* **R1 sits across Drone1's straight line** to its lane start; the route
+  bends at R1's grown corner (0.1, −11.1).
+* **A 20 m radio from a base at (−6, 0).** It reaches the lane starts but not
+  the far ends.
+* **A 300 s deadline.**
+
+Every point of both paths lies in x −8…20, y ±18, at most 26.9 m from the
+origin. Those are the four corners of a box whose corners M09 and M10 reached
+live: about (21, −21), (22, 17), (−9.5, 18) and (−6, −17.5). The middle of the
+box is crossed by Phase 3's ±20 m sideways legs. A test holds the plan to
+that box.
+
+**Its mock gate** (`results/search-relay-exit-mock-20261021-183614-gate`):
+20 of 20 seeds. Completion 31.1 s, coverage 1.0, closest pair 4.0 m, lowest
+battery 96.3 %, 180/180 skills. 20 of the 40 reports were relayed.
+
+**The live plumbing:**
+
+* `PollingObserver` keeps raw NED samples. Grounds can be given after the
+  flight, and `trajectories_from_samples` rebuilds trajectories from a saved
+  record.
+* `fly_live`:
+  * refuses a scenario whose pads are not the spawn layout;
+  * resets the scene, places the drones (`ensure_vehicles`), and starts the
+    poller and the Phase 1 `SeparationMonitor`, each on its own connection;
+  * flies the plan, then converts the samples with the ground each drone's
+    TAKE_OFF measured;
+  * puts the monitor's contact times on the flight's clock.
+* `LiveFlight` holds what any seed is judged on. `judge(seed)` gives one
+  report per layout, `as_json`/`from_json` save and reload it, and
+  `compare_to_mock` sets it beside the mock flight of the same plan: off-track
+  distance, height error at cruise, pad error, completion, coverage, closest
+  pair, battery against the estimate.
+* `scripts/search_relay_exit.py --sim airsim` flies once and judges every
+  seed. `--judge FILE` re-judges a saved flight.
+
+**C5 no longer counts the spectator camera.** `classify_contact` has long
+called it "someone watching". The evaluator had counted it as a collision,
+which would fail a live run for being looked at. It now counts drone and
+obstacle contacts only, and reports camera contacts in the components.
+
+**Dry run of the live path**, with the mock in real time standing in for
+CarlaAir:
+
+* 37.6 s of wall time, every skill succeeded;
+* Drone2 spawned at runtime and placed at (4, 0);
+* 279 polls per drone, and 20 of 20 seeds met on the one flight;
+* the JSON round trip gives the same verdicts.
+
+It is a test, `RealTimeLiveFlightTest`, skipped unless `AUV_SLOW_TESTS=1`.
+
+**Not verifiable before a live run:** the offset that puts the monitor's
+contact times on the flight's clock. A mock flight never touches anything
+but the ground, so no test sees a mid-flight contact's time.
+
+**Tests: 17 new.** 16 are in `tests/test_live_flight.py`: lane ends (5),
+the live flight and its record (10), and the real-time flight (1, skipped by
+default). One more is in `tests/test_evaluation.py`, for the camera.
+
+**Mutations: 19, all caught**, against the full suite. The two `fly_live`
+mutations ran with the real-time test on. The first pass caught 15. Three
+survivors shared one cause: the synthetic flight started at t = 0, so
+forgetting to count from the flight's start changed nothing, and nothing
+checked which seed's targets were judged. The fourth was that no test asked
+for a drone without a ground. The synthetic flight now starts at a 1000 s
+clock origin, and both are tested.
+
+Also fixed: `zones =[` in `plan_mission`, a space lost by an earlier edit.
+
+**The goldens did not move.** `record_golden.py --check` matches all four.
+447 tests pass, 16 skipped (live, and the real-time test); audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -461,6 +593,10 @@ of this step must reproduce.
 | 2026-10-21 | **The mock is observed exactly; live is polled** | The mock knows its own motion and records it; a live simulator can only be sampled. The record will say which observer judged each run. |
 | 2026-10-21 | **The scripted plan: one drone per sector, its own height, lanes at 95 % of the detection limit, routes with 2 m zone clearance** | The naive allocation AUV-05 names as the baseline; heights already flown live in Phase 3, so crossings never conflict; the 5 % and the 2 m are for live flight, which does not hold a line exactly. |
 | 2026-10-21 | **Exit seeds 1–20, fixed before flying; met = mission success and every planned skill succeeded** | Fixed in code before the first run so no seed can be chosen after the fact. A mission rescued by a safety landing is the safety net working, not the script. |
+| 2026-10-21 | **Lanes run on 5 m past each sector end, where the zones allow** | The detection rule's own geometry: a point on the edge is in view over a chord centred on it. Found by a corner target the 1 m coverage grid had rounded up; fixed in the plan, not by choosing seeds or moving the threshold. |
+| 2026-10-21 | **The live run is two drones in a variant sized to the airspace already flown** | The live run tests the observer, the evaluator and the routing against a real simulator. Two drones do that in the box M09, M10 and Phase 3 flew, without the four-drone plan's 3.3 m pad crossing. |
+| 2026-10-21 | **One live flight is judged against every seed** | The controller never sees the targets, so its path cannot depend on them: one recorded flight judged on 20 layouts is the same as 20 flights. Repeats measure the simulator, not the layouts. |
+| 2026-10-21 | **The spectator camera is not a collision** | `classify_contact` already says so. Counting it would fail a live run for being watched. |
 
 ## Open questions
 

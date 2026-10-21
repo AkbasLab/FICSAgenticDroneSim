@@ -184,6 +184,12 @@ class EvaluatorTests(unittest.TestCase):
         self.assertEqual(failing(report), ["C5"])
         self.assertEqual(report.criterion("C5").measured["collisions"], 1)
 
+    def test_the_spectator_camera_is_not_a_collision(self):
+        camera = Contact("Drone1", "SpectatorPawn_0", 50.0)
+        report = evaluate(CANONICAL, hand_flown(), 0, 2000, contacts=[camera])
+        self.assertEqual(failing(report), [])
+        self.assertEqual(report.components["camera_contacts"], 1)
+
     def test_contacts_outside_the_window_do_not_count(self):
         before = Contact("Drone2", "SM_Building_12", -5.0)
         after = Contact("Drone2", "SM_Building_12", 2500.0)
