@@ -37,7 +37,14 @@ from .mock_adapter import MockWorld
 from .trajectory import Knot, Trajectory
 
 DEFAULT_POLL_HZ = 10.0
-DEFAULT_AIRBORNE_ABOVE_M = 0.5
+# Above this, a polled drone is flying. NOT a small margin: CarlaAir reports
+# a LANDED drone 1.16-1.17 m above the ground its take-off measured (Phase 3,
+# live; v6 the same), so anything under that height would call every landed
+# drone airborne. 3 m is the skill layer's own line, `skills.LANDED_ALTITUDE_M`
+# ("above this, LAND did not land"), repeated rather than imported:
+# simulator/ depends on core/ only. The cost: the first and last 3 m of each
+# flight count as ground, a second or two of hover drain at 2 m/s climb.
+DEFAULT_AIRBORNE_ABOVE_M = 3.0
 
 
 def _altitude(z: float, ground_z: float) -> float:

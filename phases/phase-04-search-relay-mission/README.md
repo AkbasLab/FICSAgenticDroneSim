@@ -573,6 +573,20 @@ Also fixed: `zones =[` in `plan_mission`, a space lost by an earlier edit.
 
 **The goldens did not move.** `record_golden.py --check` matches all four.
 447 tests pass, 16 skipped (live, and the real-time test); audit clean.
+Committed as `c0e5ac4`.
+
+**Caught before the first live flight: the poller's airborne line.**
+Re-reading Phase 3's live numbers before flying: CarlaAir reports a landed
+drone 1.16–1.17 m above the ground its take-off measured. The poller called
+anything above 0.5 m airborne, so every live drone would have read as still
+flying after landing, failing C6 on every live run. The mock never shows
+this, because it lands at exactly 0.
+
+The poller's line is now 3.0 m, the skill layer's own
+`LANDED_ALTITUDE_M` ("above this, LAND did not land"). The cost is that the
+first and last 3 m of each flight count as ground, a second or two of hover
+drain. A test lands a polled drone at 1.17 m and requires C6 to pass, and
+holds the two constants equal; with the old 0.5 m it fails. 448 tests pass.
 
 ## Decisions
 

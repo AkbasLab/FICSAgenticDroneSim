@@ -151,6 +151,19 @@ class LiveFlightTests(unittest.TestCase):
         self.assertEqual(row["contacts"], [{"drone": "Drone1", "object": "SM_Building_3", "at_s": 12.5}])
         self.assertFalse(LiveFlight.from_json(row, LIVE).judge(17).criterion("C5").passed)
 
+    def test_a_landed_drone_reads_1_17_m_up_in_carlaair(self):
+        # Phase 3, live: landed drones read 1.16-1.17 m above their take-off
+        # ground. They must still count as landed, home on their pads.
+        from agentic_uav.control.skills import LANDED_ALTITUDE_M
+        from agentic_uav.simulator.observer import DEFAULT_AIRBORNE_ABOVE_M
+        self.assertEqual(DEFAULT_AIRBORNE_ABOVE_M, LANDED_ALTITUDE_M)
+        last = {d: rows[-1][0] for d, rows in self.flight.samples.items()}
+        lifted = {d: [(t, x, y, z) for t, x, y, z in rows] + [(last[d] + 1.0, rows[-1][1], rows[-1][2], G - 1.17)]
+                  for d, rows in self.flight.samples.items()}
+        flight = dataclasses.replace(self.flight, samples=lifted, end=self.flight.end + 1.0)
+        report = flight.judge(17)
+        self.assertTrue(report.criterion("C6").passed, report.criterion("C6").detail)
+
     def test_a_drone_with_no_ground_is_refused(self):
         from agentic_uav.simulator.observer import trajectories_from_samples
         with self.assertRaisesRegex(ValueError, "Drone2"):
