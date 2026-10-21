@@ -26,7 +26,9 @@ Mirrored from `AUV-22 — Phase Objectives Checklist`.
 **Met:** on the mock, 2026-10-21, 20 of 20 seeds · **Evidence:**
 [`evidence/exit-criterion-mock-2026-10-21.md`](evidence/exit-criterion-mock-2026-10-21.md).
 Re-met after the lane-end overrun (step 5): 20 of 20, recorded as a dated
-note in the same evidence file. The optional live run is not yet flown.
+note in the same evidence file. The optional live run is flown: three flights
+of a small variant in CarlaAir, each met on all 20 seeds,
+[`evidence/live-run-2026-10-21.md`](evidence/live-run-2026-10-21.md).
 
 Planned evidence: the scripted controller completing the canonical scenario on
 the mock across 20 seeds (target layouts), every success criterion passed.
@@ -41,7 +43,7 @@ airspace Phase 1 flew.
 | The mission world: targets, detection, restricted zones, battery, connectivity, an observer | `agentic_uav/simulator/` | **Done** 2026-10-21; goldens unedited |
 | The evaluator: one mission report, every criterion | `agentic_uav/experiments/evaluation.py`, `agentic_uav/simulator/coverage.py` | **Done** 2026-10-21; goldens unedited |
 | The scripted controller, run across 20 seeds | `agentic_uav/control/routing.py`, `agentic_uav/control/scripted.py`, `agentic_uav/experiments/search_relay.py`, `scripts/search_relay_exit.py` | **Done** 2026-10-21; exit met on the mock, 20/20 |
-| Optional live run; close | `configs/scenarios/search_relay_live_small.toml`, `agentic_uav/experiments/search_relay.py` (`fly_live`), `results/`, `evidence/` | In progress: the live variant and its plumbing ready, mock gate 20/20; the live flights not yet flown |
+| Optional live run; close | `configs/scenarios/search_relay_live_small.toml`, `agentic_uav/experiments/search_relay.py` (`fly_live`), `results/`, `evidence/` | Live run **done** 2026-10-21: three CarlaAir flights, 20/20 seeds each; the close remains |
 
 ## Plan
 
@@ -648,6 +650,55 @@ steady within 0.05 m between polls 0.3 s apart, at most 15 s. How long each
 drone took is recorded in the flight's layout. Two tests use a scene whose
 drones fall for a while; four mutations, all caught (one with the real-time
 test on). 450 tests pass, 16 skipped; goldens unedited; audit clean.
+Committed as `2fd0e32`.
+
+### 2026-10-21 — step 5, live flights 2 and 3: 20 of 20 each, repeatable to 0.22 m
+
+The same simulator session, without a restart. Drone2 was left from flight
+1, which the leftover-drone check allows because the flight uses it. Both
+flights used the same command, with `--block live2` and `--block live3`:
+
+* **Flight 2:** `results/search-relay-exit-airsim-20261021-190637-live2`, at
+  `2fd0e32`, clean.
+* **Flight 3:** `results/search-relay-exit-airsim-20261021-190827-live3`, at
+  `2fd0e32`, recorded as dirty: flight 2's result files were not yet
+  committed, and provenance counts untracked files. Its `agentic_uav` digest,
+  `2804500b7254c856`, is flight 2's, so the code is the same.
+
+In both:
+
+* **20 of 20 seeds met**, every skill succeeded, contacts only SM_seaM.
+* Both drones waited 2.5 s to come to rest before observing began, and the
+  first polls read 0.0 m.
+
+| | Flight 2 | Flight 3 |
+|---|---|---|
+| Completion | 37.5 s | 37.4 s |
+| Closest pair | 4.047 m | 4.047 m |
+| Pad errors | 0.26 / 0.18 m | 0.32 / 0.17 m |
+| Max off track | 2.76 / 2.75 m | 2.78 / 2.74 m |
+| Max height error at cruise | 2.48 / 2.07 m | 2.49 / 2.07 m |
+| Battery used | 3.83 / 3.92 % | 3.82 / 3.91 % |
+
+For comparison, the mock gives 3.44 / 3.66 % battery used and the plan
+estimates 4.13 / 4.40 %. **Flights 2 and 3 repeat each other**: at the same
+instant the drones were at most 0.20 and 0.22 m apart, median 0.08 and
+0.07 m.
+
+**A range boundary in the record.** On seed 6, Drone1 detected T2 at 13.3 s
+in both flights. In flight 2 it was 19.999 m from the base, inside the
+radio's 20 m, so T2 was reported at once. In flight 3 it was 20.028 m away,
+and the report waited for the way home, at 27.9 s. Three centimetres of drift
+moved a report by 14.6 s. The verdict is the same; under degraded
+communications it might not be.
+
+The three flights side by side, generated from the records:
+[`evidence/live-run-2026-10-21.md`](evidence/live-run-2026-10-21.md).
+
+**Step 5's live run is done: three flights, 60 of 60 seed judgements met.**
+The mock exit (step 4, re-met after the overrun) is the exit criterion; the
+live flights show the same controller, observer and evaluator working in
+CarlaAir.
 
 ## Decisions
 
@@ -679,7 +730,21 @@ test on). 450 tests pass, 16 skipped; goldens unedited; audit clean.
   inbound leg passes 3.21 m from Drone2's pad while Drone2 descends; that is
   1.3 m clear of the minimum, with no position error. Live, Phase 1 measured
   drift, so a live flight of the full plan could come closer. Not a question
-  for the mock exit; one for step 5, if the full plan is ever flown live.
+  for the mock exit; the live run flew the two-drone variant, which has no
+  such crossing. Open for whenever the four-drone plan flies live.
+- **Reports near the radio's edge depend on centimetres.** Live, seed 6's
+  report moved 14.6 s on 3 cm of drift (19.999 against 20.028 m). The perfect
+  network has a hard range. Phase 10's degraded profiles should decide
+  whether range is a hard edge or a fall-off, before any result leans on it.
+- **CarlaAir climbs and overshoots at turns.** Live, the drones rose up to
+  2.5 m above cruise height and ran about 1.3 m past each lane end. Harmless
+  here, since detection is horizontal and lanes run on 5 m. But the
+  four-drone plan's 4 m height spacing has less room than it looks, if two
+  drones turn near each other.
+- **Provenance calls a tree with uncommitted result files dirty.** Flight 3
+  recorded `dirty: true` with the same code as flight 2. The package digest
+  settled it; a provenance that ignored `phases/*/results/` would not need
+  to. This is the Phase 2 "dirty-flag quirk" again.
 
 ---
 
