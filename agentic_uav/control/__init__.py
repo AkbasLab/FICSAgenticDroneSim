@@ -4,4 +4,6 @@
 `ground`    the session's ground reference, which every altitude depends on
 `contacts`  classifying what a collision was with
 `monitor`   separation and collision polling during a flight
+`navigation` altitude above ground to NED and back, headings, tolerance,
+            coverage paths -- the skill layer's only sign handling (Phase 3)
 """

@@ -36,7 +36,7 @@ the user.
 | Artifact | Location | State |
 |---|---|---|
 | Primitives renamed `Primitive*`; turn, cancel and heading in the adapter | `agentic_uav/core/models.py`, `agentic_uav/simulator/` | **Done** 2026-10-20; Phase 2 goldens pass unedited |
-| NED conversion, heading, tolerance, coverage paths; a clock | `agentic_uav/control/navigation.py`, `agentic_uav/core/clock.py` | step 2 |
+| NED conversion, heading, tolerance, coverage paths; a clock | `agentic_uav/control/navigation.py`, `agentic_uav/core/clock.py` | **Done** 2026-10-20 |
 | The eleven skills and their contracts | `agentic_uav/control/skills.py` | step 3 |
 | `MockVehicleAdapter`, and one contract suite for every adapter | `agentic_uav/simulator/mock_adapter.py`, `tests/` | step 4 |
 | The four-drone exit script | `scripts/` | step 5 |
@@ -115,6 +115,59 @@ six of the seven angles against AirSim); heading in radians — the same 2;
 **The goldens did not move.** `record_golden.py --check` matches all four
 after the rename and after the additions. 169 tests pass; audit clean.
 
+### 2026-10-20 — step 2: navigation, and a clock with one shared simulated timeline
+
+Two new modules, both pure enough to test without a simulator.
+
+**`agentic_uav/control/navigation.py`** — the skill layer's only sign
+handling, as AUV-04 asks. Above it, a mission speaks map metres and
+**altitude above the ground, positive up**; below it, NED. Every conversion
+takes the measured ground as an argument, because NED's zero is not the
+ground (Town10HD's is z = +29.25) and the ground differs per drone (29.25,
+29.28, 27.29 under M10's spawns).
+
+| Name | What |
+|---|---|
+| `altitude_to_z(altitude_m, ground_z)`, `z_to_altitude` | the conversion; a negative altitude is refused |
+| `Waypoint(x, y, altitude_m)` | the mission's point; no `z` field — the only way to NED is `to_position(ground_z)` |
+| `horizontal_distance`, `distance`, `reached(current, target, tolerance_m, vertical_tolerance_m=None)` | 3.2's reached-within-tolerance, as a sphere or a cylinder |
+| `normalise_heading`, `heading_to`, `heading_error` | AirSim's heading convention, (−180, 180], shortest signed turn |
+| `standoff_point(target, origin, radius_m)` | where to stand to inspect a point |
+| `Region`, `lawnmower(region, spacing_m, altitude_m)` | boustrophedon coverage of a rectangle; every point within `spacing/2` of a leg |
+| `travel_time(distance_m, speed_mps)` | the floor for any timeout |
+
+**`agentic_uav/core/clock.py`** — `Clock` (`now`, `sleep`), `RealClock`
+(monotonic, for AirSim) and `SimClock`. The mock's drones will fly in their
+own threads, as real flights do, and a separation check needs their positions
+at one instant, so `SimClock` gives them one timeline: threads that fly
+together enter `participate()`, a sleeping participant waits until every
+participant sleeps, and time then jumps to the earliest wake-up. Time never
+passes while a participant computes, so a run's simulated times do not depend
+on the machine. Whether model thinking time should be charged to simulated
+time (AUV-19's question) is left to Phase 12: this clock charges nothing
+unless a caller sleeps for it.
+
+**Tests: 34 new** (`tests/test_navigation.py` 21, `tests/test_clock.py` 13),
+pinned to Phase 1's measured numbers (12 m → z 17.25, 30 m → z −0.75 over
+29.25). The clock's shared timeline is checked with four threads of uneven
+sleeps, 20 repeated runs giving identical wake times, a participant computing
+in real time while another sleeps (simulated time stays at 0), and a
+participant leaving.
+
+One test of mine was wrong: a point placed "exactly" 0.5 m away
+(10.3 − 10 is 0.3000000000000007) failed the 0.5 m tolerance. A test on an
+exact floating-point boundary proves nothing; it now uses a point clearly
+inside.
+
+**Mutations** (failures counted with sub-tests): altitude sign flipped — 28;
+NED z sent as minus the altitude, Phase 1's own bug — 23; heading axes
+swapped — 2; headings normalised to [−180, 180) — 5; tolerance ignoring
+height — 2; coverage legs a spacing in from the edge — 19; the clock
+advancing without waiting for every participant — 3; jumping to the latest
+wake-up instead of the earliest — 3.
+
+The four Phase 2 goldens match unedited. 203 tests pass; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -122,6 +175,8 @@ after the rename and after the additions. 169 tests pass; audit clean.
 | 2026-10-20 | **The Phase 2 primitives become `PrimitiveKind`, `PrimitiveCommand`, `PrimitiveResult`, and `execute_skill` becomes `execute_primitive`** | AUV-04 names the mission skills' types `SkillCommand` and `SkillResult`. Two layers each with a "skill result" would be read wrongly. The adapter runs primitives; the skill layer runs skills. A mechanical rename, proved behaviour-free by the goldens. |
 | 2026-10-20 | **Exit evidence is the mock run and one live CarlaAir flight** | The criterion says "a deterministic script", not "in the mock". A live flight shows the skills on the real platform, not only against a model of it. No model runs in Phase 3, so no Vega job. |
 | 2026-10-20 | **The mock is a constant-speed point mass, with separation and collisions** | AUV-04 asks for a lightweight mock for coordination questions. Acceleration and wind would cost more than they tell; the coordination phases do need separation and contact. |
+| 2026-10-20 | **Above the navigation module, altitude is metres above the ground, positive; below it, NED** | AUV-04's coordinate trap, and Phase 1's two-week altitude error. One module converts, always against a measured ground, and a mission's `Waypoint` has no `z` to misuse. |
+| 2026-10-20 | **Simulated time is one timeline, advanced only when every flying thread waits** | Drones fly in their own threads; comparing their positions needs one instant. Advancing only when all wait makes simulated times independent of machine speed. |
 | 2026-10-20 | **`ACT_AS_RELAY` and `RENDEZVOUS` are geometric in Phase 3** | Go to a point and hold (until a deadline, for rendezvous). What makes them relay and rendezvous — messages — arrives in Phases 7 and 9. |
 
 ## Open questions
