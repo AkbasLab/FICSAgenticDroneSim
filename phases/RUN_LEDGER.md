@@ -247,6 +247,7 @@ and kept on purpose. Planning data from every 70B session stands.
 | **`20261021-093521-exit`** search-relay, mock | none | 20 seeds | **Phase 4 exit run** — the scripted controller on `search_relay_001`, seeds 1–20: 20/20 met |
 | `20261021-183608-overrun` search-relay, mock | none | 20 seeds | Phase 4 — the exit re-flown after lanes were made to run past sector ends: 20/20 met |
 | `20261021-183614-gate` search-relay, mock | none | 20 seeds | Phase 4 — the live variant `search_relay_live_small`'s mock gate: 20/20 met |
+| **`20261021-185737-live1`** search-relay, live | none | 1 flight, judged on 20 seeds | **Phase 4 live flight 1** — two drones in CarlaAir: 20/20 met, no contacts but the ground; its first 2 s caught the drones still falling, fixed before flight 2 |
 
 The `p2-` sessions are in `phases/phase-02-repository-architecture/results/`,
 not Phase 1's. They meet every condition in §1 and are the Phase 2 exit

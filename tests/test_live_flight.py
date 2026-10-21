@@ -213,6 +213,39 @@ class LiveFlightTests(unittest.TestCase):
             shutil.rmtree(out, ignore_errors=True)
 
 
+class _Falling:
+    """A scene whose drones fall for a while after being placed, as CarlaAir's do."""
+
+    def __init__(self, polls_falling, z_rest=29.25):
+        self.left = dict(polls_falling)
+        self.z_rest = z_rest
+
+    def get_pose(self, drone):
+        from agentic_uav.core.models import Position
+        if self.left.get(drone, 0) > 0:
+            self.left[drone] -= 1
+            return Position(0.0, 0.0, self.z_rest - 2.0 * self.left[drone])   # 2 m a poll, still dropping
+        return Position(0.0, 0.0, self.z_rest)
+
+
+class WaitAtRestTests(unittest.TestCase):
+
+    def test_observing_waits_for_the_drones_to_land(self):
+        from agentic_uav.core.clock import SimClock
+        from agentic_uav.experiments.search_relay import wait_at_rest
+        clock = SimClock()
+        settled = wait_at_rest(_Falling({"Drone1": 6, "Drone2": 2}), ["Drone1", "Drone2"], clock)
+        # Each is at rest once two polls 0.3 s apart agree; Drone1 fell for longer.
+        self.assertLess(settled["Drone2"], settled["Drone1"])
+        self.assertAlmostEqual(settled["Drone1"], 6 * 0.3, places=6)
+
+    def test_a_drone_that_never_settles_is_refused(self):
+        from agentic_uav.core.clock import SimClock
+        from agentic_uav.experiments.search_relay import wait_at_rest
+        with self.assertRaisesRegex(RuntimeError, "Drone1 did not come to rest"):
+            wait_at_rest(_Falling({"Drone1": 10_000}), ["Drone1"], SimClock())
+
+
 @unittest.skipUnless(os.environ.get("AUV_SLOW_TESTS"), "real time: set AUV_SLOW_TESTS=1 (about 40 s)")
 class RealTimeLiveFlightTest(unittest.TestCase):
 
@@ -225,6 +258,7 @@ class RealTimeLiveFlightTest(unittest.TestCase):
             flight = fly_live(LIVE, MockVehicleAdapter(world), lambda: MockVehicleAdapter(world), clock)
         self.assertTrue(flight.skills_ok)
         self.assertEqual(flight.layout["added"], ["Drone2"])
+        self.assertEqual(sorted(flight.layout["at_rest_s"]), ["Drone1", "Drone2"])
         self.assertEqual(flight.grounds, {"Drone1": G, "Drone2": G})
         self.assertGreater(min(len(v) for v in flight.samples.values()), 200)
         self.assertTrue(all(flight.met(flight.judge(s)) for s in EXIT_SEEDS))

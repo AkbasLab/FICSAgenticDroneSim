@@ -587,6 +587,67 @@ The poller's line is now 3.0 m, the skill layer's own
 first and last 3 m of each flight count as ground, a second or two of hover
 drain. A test lands a polled drone at 1.17 m and requires C6 to pass, and
 holds the two constants equal; with the old 0.5 m it fails. 448 tests pass.
+Committed as `8a3adb0`.
+
+### 2026-10-21 — step 5, live flight 1: met on all 20 seeds, and the record caught the drones still falling
+
+**The scene.** The user ran CarlaAir with `.\CarlaAir.ps1 Town10HD`, a fresh
+launch with `settings.json` declaring Drone1 only. A read-only check:
+`vehicles ['Drone1']`, Drone1 at z 29.25, x −0.05, y 0.05, not under API
+control.
+
+**The flight**, `python scripts\search_relay_exit.py --sim airsim --scenario
+search_relay_live_small --block live1`, at `8a3adb0` with a clean tree →
+`results/search-relay-exit-airsim-20261021-185737-live1`. Drone2 was spawned
+at runtime and placed at (4.0, 0.0), with Drone1 at (−0.02, 0.02). Every
+skill succeeded, and 378 polls were taken of each drone over 41.2 s.
+
+* **20 of 20 seeds met**, judged on the one flight: coverage 1.0, both
+  targets detected and reported on every seed, no zone entry.
+* **Contacts:** only SM_seaM, the floor mesh at the player start, which
+  counts as ground.
+* **Closest pair** 4.03 m; **pad errors** 0.34 and 0.17 m.
+* **Grounds measured:** 29.245 and 29.282, the values Phase 3 measured under
+  these pads.
+
+| | Live | Mock |
+|---|---|---|
+| Completion | 39.9 s | 31.1 s |
+| Max off track | 2.79 / 2.77 m | 0 |
+| Median off track | 0.1 m | 0 |
+| Battery used, Drone1 / Drone2 | 4.19 / 4.31 % | 3.44 / 3.66 % (estimated 4.13 / 4.40) |
+
+What the polls show of CarlaAir:
+
+* **Overshoot at the lane-end turn.** The drones overshoot by about 1.3 m
+  (x 21.3 for a lane ending at 20), and rise 1.5–2 m above cruise height
+  there.
+* **Landed height varies by drone.** Drone2 reads 1.18 m after landing, as
+  Phase 3 measured; Drone1 reads 0.01 m.
+* **Live is slower.** Completion was 39.9 s against the mock's 31.1 s.
+
+**What the record got wrong.** The comparison reported a "max height error
+at cruise" of 8.9 m and 12.9 m. The raw polls explain it. `ensure_vehicles`
+places each drone at NED z = 0, about 29 m up, and waits a fixed 1.5 s. At
+the first poll both drones were still falling, at 17.0 and 17.3 m, and they
+reached the ground about 2 s later. TAKE_OFF waits for rest before measuring
+the ground, so the flight and the grounds were right. But the observation
+window began during the fall, which caused three errors:
+
+* the cruise-height window opened as the falling drone passed cruise height;
+* the fall counted as airborne time and flown distance, which is most of why
+  live battery use (4.19 %) exceeded the estimate (4.13 %);
+* the first 2 s of the window are the drop.
+
+No criterion depends on those seconds, so the verdicts stand. The live1
+record is kept as flown.
+
+**The fix:** `wait_at_rest`. Before the observer and the flight start,
+`fly_live` waits until every drone is at rest, by TAKE_OFF's own rule: z
+steady within 0.05 m between polls 0.3 s apart, at most 15 s. How long each
+drone took is recorded in the flight's layout. Two tests use a scene whose
+drones fall for a while; four mutations, all caught (one with the real-time
+test on). 450 tests pass, 16 skipped; goldens unedited; audit clean.
 
 ## Decisions
 

@@ -37,6 +37,7 @@ from typing import Any, Callable
 
 from ..control.monitor import SeparationMonitor
 from ..control.scripted import DronePlan, plan_mission
+from ..control.skills import GROUND_SETTLE_INTERVAL_S, GROUND_SETTLE_TIMEOUT_S, GROUND_SETTLE_TOLERANCE_M
 from ..core.clock import Clock
 from ..core.scenario import Scenario
 from ..core.models import Position
@@ -229,12 +230,43 @@ def check_live_pads(scenario: Scenario) -> list[str]:
     return [v.id for v in drones]
 
 
+def wait_at_rest(scene: Any, drones: list[str], clock: Clock) -> dict[str, float]:
+    """Wait until every drone has stopped moving; the seconds each took.
+
+    `ensure_vehicles` places each drone at NED z = 0, about 29 m up, and waits
+    a fixed 1.5 s for it to drop. In CarlaAir that is not enough: the first
+    live flight's first polls caught both drones still falling at 17 m
+    (2026-10-21). The record must start with the drones on their pads, so this
+    applies the skill layer's own rule for a drone at rest (TAKE_OFF's ground
+    measurement): z changes by less than GROUND_SETTLE_TOLERANCE_M between
+    polls GROUND_SETTLE_INTERVAL_S apart, within GROUND_SETTLE_TIMEOUT_S.
+    """
+    began = clock.now()
+    previous = {d: scene.get_pose(d).z for d in drones}
+    settled: dict[str, float] = {}
+    while len(settled) < len(drones):
+        if clock.now() - began >= GROUND_SETTLE_TIMEOUT_S:
+            moving = [d for d in drones if d not in settled]
+            raise RuntimeError(f"{', '.join(moving)} did not come to rest within "
+                               f"{GROUND_SETTLE_TIMEOUT_S:g} s of being placed")
+        clock.sleep(GROUND_SETTLE_INTERVAL_S)
+        for d in drones:
+            if d in settled:
+                continue
+            z = scene.get_pose(d).z
+            if abs(z - previous[d]) < GROUND_SETTLE_TOLERANCE_M:
+                settled[d] = round(clock.now() - began, 2)
+            previous[d] = z
+    return settled
+
+
 def fly_live(scenario: Scenario, scene: Any, connect: Callable[[], Any], clock: Clock,
              poll_hz: float = DEFAULT_POLL_HZ, settle_s: float = RESET_SETTLE_S) -> LiveFlight:
     """Reset the scene, place the drones, fly the plan once, and keep what was seen.
 
     The flight threads, the observer and the separation monitor each have
-    their own connection (Phase 1: one per thread).
+    their own connection (Phase 1: one per thread). Observing starts only
+    once every drone is at rest on its pad.
     """
     drones = check_live_pads(scenario)
     plan = plan_mission(scenario.brief())
@@ -242,6 +274,7 @@ def fly_live(scenario: Scenario, scene: Any, connect: Callable[[], Any], clock: 
     clock.sleep(settle_s)
     scene.confirm_connection()
     layout = ensure_vehicles(scene, drones, settle=clock.sleep)
+    layout["at_rest_s"] = wait_at_rest(scene, drones, clock)
     observer = PollingObserver(connect, drones, clock=clock, hz=poll_hz)
     monitor = SeparationMonitor(connect(), drones)
     observer.start()
@@ -262,7 +295,8 @@ def fly_live(scenario: Scenario, scene: Any, connect: Callable[[], Any], clock: 
     summary = {k: watched.get(k) for k in ("samples", "min_separation_m", "per_pair_min_m")}
     return LiveFlight(scenario, plan, skills_json(records), skills_ok, samples,
                       measured_grounds(records, samples), contacts, start, end, poll_hz,
-                      {"added": layout.get("added", []), "layout": layout.get("layout", {})}, summary)
+                      {"added": layout.get("added", []), "layout": layout.get("layout", {}),
+                       "at_rest_s": layout.get("at_rest_s", {})}, summary)
 
 
 def compare_to_mock(flight: LiveFlight, mock: ScriptedRun) -> dict[str, Any]:
