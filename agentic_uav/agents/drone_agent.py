@@ -143,7 +143,8 @@ class DroneAgent:
         return Observation(state.t, state.x, state.y, state.altitude_m, state.airborne, self.sensors.battery(),
                            self.sensors.sightings(), self.sensors.base_link(),
                            latest.command.skill.value if running else None,
-                           0 if latest is None else latest.serial, status)
+                           0 if latest is None else latest.serial, status,
+                           None if latest is None else latest.command.skill.value)
 
     # ------------------------------------------------------------ internal
 
