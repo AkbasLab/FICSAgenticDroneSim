@@ -1,7 +1,7 @@
 # Phase 5 — Replace one-shot planning with a persistent single-drone agent
 
 **Stage:** 2 · One agent · **Vault note:** `AUV-06 — The Persistent Agent Loop`
-**Started:** 2026-10-21 · **Completed:** —
+**Started:** 2026-10-21 · **Completed:** 2026-10-21
 
 > Before any team, and before any LLM: one drone that is given a task, not
 > a list of actions, and works out each next step itself — noticing when a
@@ -16,9 +16,9 @@
 
 Mirrored from `AUV-22 — Phase Objectives Checklist`.
 
-- [ ] **5.1** Implement the agent lifecycle — Observe → Update belief → Select objective → Choose skill → Validate → Execute → Verify
-- [ ] **5.2** Make replanning event-driven — nine triggers; **low-level motion must never depend on LLM response time**
-- [ ] **5.3** Implement a deterministic policy first — accept a task, navigate, search, report, return home, react to low battery, recover from a failed skill
+- [x] **5.1** Implement the agent lifecycle — Observe → Update belief → Select objective → Choose skill → Validate → Execute → Verify *(steps 1–3: `core/sensing.py` behind the truth/belief boundary, `agents/belief_state.py`, `agents/drone_agent.py` — observe every 0.5 s tick, decide only on events, validate, execute, verify — with every decision traced on the belief it was made on)*
+- [x] **5.2** Make replanning event-driven — nine triggers; **low-level motion must never depend on LLM response time** *(steps 2–3: `core/events.py`, AUV-06's nine triggers plus a periodic check, all raised from Phase 5 except MESSAGE and TEAMMATE_FAILED (Phases 7 and 9); skills fly on their own thread in `control/action_executor.py`, so motion never waits on the decision-maker)*
+- [x] **5.3** Implement a deterministic policy first — accept a task, navigate, search, report, return home, react to low battery, recover from a failed skill *(step 4: `agents/rule_policy.py`; battery and deadline costed at the speed made good)*
 
 ## Exit criterion
 
@@ -26,16 +26,28 @@ Mirrored from `AUV-22 — Phase Objectives Checklist`.
 > receiving a complete preflight action list**, recognises success or
 > failure, and decides what to do next.
 
-**Met:** on the mock, 2026-10-21 — 20 of 20 seeds completed from the task
-alone; 5 of 5 kinds of trouble recognised and answered as fixed beforehand ·
-**Evidence:** [`evidence/exit-criterion-2026-10-21.md`](evidence/exit-criterion-2026-10-21.md).
-The optional live run (step 6) is not yet flown.
+**Met:** **yes, 2026-10-21** · **Evidence:**
+[`evidence/exit-criterion-2026-10-21.md`](evidence/exit-criterion-2026-10-21.md)
+and [`evidence/live-run-2026-10-21.md`](evidence/live-run-2026-10-21.md).
 
-Planned evidence: the rule-based agent, given only a search task, completing
-it on the mock across 20 seeds, judged by Phase 4's evaluator. Then the same
-agent under injected trouble — a failed navigation skill, a battery running
-low, a target sighted mid-search — with its decision trace showing what
-triggered each decision and what it chose. Optionally, a small live run.
+**On the mock**, the rule-based agent, told only `"search S3"` and given no
+plan, completed `search_single_001` on all 20 exit seeds: mission success by
+all six of AUV-05's criteria, finished by its own decision, every skill
+chosen in answer to an event. Under five kinds of trouble, each with its
+expected answer fixed in code before flying, it did what was expected every
+time: it retried a passing fault, gave up on a lasting one and landed,
+turned back on battery and on time, and refused a search it could not
+finish. Re-run on the closing code, the reports and decision traces are
+identical.
+
+**In CarlaAir**, flown by the user, a small single-drone variant inside the
+airspace Phase 4 flew: three nominal flights, each succeeding on all 20
+seeds, repeatable to 0.29 m, with the mock's own decisions on the same
+events; and one flight with a passing fault injected in our code, which the
+agent recovered from as on the mock, at a cost of half a second.
+
+The plan was the mock across 20 seeds and the troubles, with an optional
+small live run. Both were done.
 
 ## Deliverables
 
@@ -46,7 +58,7 @@ triggered each decision and what it chose. Optionally, a small live run.
 | Events, a minimal belief, and the agent loop | `agentic_uav/core/events.py`, `agentic_uav/agents/` | **Done** 2026-10-21; goldens unedited |
 | The rule-based policy | `agentic_uav/agents/rule_policy.py` | **Done** 2026-10-21; goldens unedited |
 | The exit: nominal and injected-trouble runs | `configs/scenarios/search_single_001.toml`, `agentic_uav/experiments/single_agent.py`, `scripts/single_agent_exit.py`, `results/`, `evidence/` | **Done** 2026-10-21; exit met on the mock |
-| Optional live run; close | `configs/scenarios/search_single_live_small.toml`, `agentic_uav/simulator/fault_injection.py`, `agentic_uav/experiments/single_agent.py` (live), `scripts/single_agent_exit.py --sim airsim`, `results/`, `evidence/` | step 6: plumbing done 2026-10-21, mock gate met; live flights to come |
+| Optional live run; close | `configs/scenarios/search_single_live_small.toml`, `agentic_uav/simulator/fault_injection.py`, `agentic_uav/experiments/single_agent.py` (live), `scripts/single_agent_exit.py --sim airsim`, `results/`, `evidence/` | **Done** 2026-10-21: three nominal CarlaAir flights and one with a passing fault, 4 of 4 met; phase closed |
 
 ## Plan
 
@@ -666,7 +678,7 @@ ground measured 29.245, as in Phase 4. 351 polls over 38.5 s.
 
 **What the polls show:**
 
-* **R1 kept clear:** no poll inside it; the closest came 1.97 m from its edge,
+* **R1 kept clear:** no poll inside it; the closest came 2.00 m from it,
   on the route east of it.
 * **The lane ends overshoot, as in Phase 4:** x from −9.43 to 21.95 for a lane
   from −8 to 20, y down to −19.07, at most 28.3 m from the pad, 14.3 m up.
@@ -765,7 +777,7 @@ CarlaAir was not touched.
   follows nominal flight 3 to within 0.39 m (median 0.20 m) from the retry to
   the landing. Completion 37.7 s against 37.2–37.3 s nominal; battery left
   96.1 %, as nominal; reports reached the base at 29.3 s.
-* **R1 kept clear** by 1.97 m, as in every flight; x flown −9.43 to 21.93.
+* **R1 kept clear** by 2.00 m, as in every flight; x flown −9.43 to 21.93.
 * **Landing:** 1.13 m from the pad, and this time 0.05 m up, not 1.17:
   Drone1's landed height varies from launch to launch and flight to flight,
   as Phase 4 found. Below the 3 m line, either reads as landed.
@@ -773,6 +785,47 @@ CarlaAir was not touched.
 **Step 6's live flights are done: 4 of 4 met** — three nominal, each on 20 of
 20 seeds and repeatable to 0.3 m, and one with an injected passing fault,
 recovered as on the mock.
+
+### 2026-10-21 — close: Phase 5 complete
+
+**The exit holds at the closing code.** The mock exit, re-run on `47f1460`
+(the code of the closing commit; only this record and the evidence are
+edited since), gave mission reports and decision traces (events, beliefs,
+decisions, verdicts) identical, seed by seed and trouble by trouble, to the
+run of record `single-agent-exit-20261021-215820-exit`. Step 6 added a live
+path beside the mock one and touched nothing a mock flight runs through;
+this shows it rather than assuming it. The re-run is not kept: it is the
+same record.
+
+**The live evidence**, [`evidence/live-run-2026-10-21.md`](evidence/live-run-2026-10-21.md),
+is generated from the four flight records. Making it corrected one figure in
+this record: R1's clearance was first given as 1.97 m, the larger of the two
+axis distances; the distance from the polls to the zone is 2.00 m in every
+flight, and the entries above now say so.
+
+**What Phase 5 leaves for Phase 6 onwards:**
+
+* **An agent that works from a task, not a plan.** `DroneAgent` runs the
+  lifecycle on events and keeps a trace of every decision with the belief it
+  was made on: Phase 6's "what it knew" logger starts from it.
+* **A boundary that holds.** The agent's code reaches no ground truth; a
+  test reads the imports and fails on a breach. Phase 6's belief grows
+  behind it.
+* **A policy to beat.** The rule policy's decisions are what an LLM
+  (Phase 12) has to match or improve on, on the same events, judged the same
+  way.
+* **Troubles as data.** Each kind of trouble is written with its expected
+  answer before it is flown; later phases add theirs to the same list.
+* **A live path for an agent.** A connection per skill, faults injected in
+  our code rather than in the simulator, readings from the poller, and a
+  flight kept and judged on any seed beside its mock twin.
+
+**Test and check totals at close:** 566 tests, 17 skipped (live-only, plus
+the two real-time flights), 116 more than at Phase 4's close. The four
+Phase 2 goldens are unedited through every step, and the audit is clean.
+Mutations: 12, 10, 19, 17, 13 and 18 by step, 89 in all, every one caught;
+the survivors on the way were each fixed in the tests or removed as
+redundant code.
 
 ## Decisions
 
@@ -788,6 +841,19 @@ recovered as on the mock.
 | 2026-10-21 | **The exit is on the mock, judged by Phase 4's evaluator; live is optional** | As Phase 4: the mock runs seeds and injected faults exactly and repeatably; a small live run inside the flown airspace can follow |
 
 ## Open questions
+
+- **Drone1 lands 1.1–1.5 m from its pad in Phase 5's flights,** against
+  0.26–0.34 m in Phase 4's. Both controllers end the way home at the pad and
+  land where they are. Whether the difference is the last leg home (from the
+  far side of S1 here) or CarlaAir's settling should be found before
+  Phase 9's agents land near one another.
+- **Polled battery is charged only above 3 m.** The agent's readings and the
+  judge agree, but both read about 0.4 % high over a 38 s flight. Harmless
+  with a 20 % reserve; if a later phase cuts reserves fine, the climb and
+  descent should be charged another way.
+- **The rule policy carries on through every sighting.** That is what makes
+  one live flight valid for every seed. A policy that reacts to sightings
+  (Phase 6 onwards) needs a live flight per seed, or a different argument.
 
 ---
 

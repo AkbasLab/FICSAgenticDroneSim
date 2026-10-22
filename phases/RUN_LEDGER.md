@@ -251,6 +251,10 @@ and kept on purpose. Planning data from every 70B session stands.
 | **`20261021-190637-live2`** search-relay, live | none | 1 flight, judged on 20 seeds | **Phase 4 live flight 2** — 20/20 met, no contacts but the ground; drones at rest before observing |
 | **`20261021-190827-live3`** search-relay, live | none | 1 flight, judged on 20 seeds | **Phase 4 live flight 3** — 20/20 met; within 0.22 m of flight 2 throughout; recorded dirty only for flight 2's uncommitted results |
 | **`20261021-215820-exit`** single-agent, mock | none (rule-based agent) | 20 seeds + 5 troubles | **Phase 5 exit run** — one agent told only "search S3": 20/20 seeds met, 5/5 troubles met their checks |
+| **`20261021-232652-live1`** single-agent, live | none (rule-based agent) | 1 flight, judged on 20 seeds | **Phase 5 live flight 1** — Drone1 in CarlaAir told only "search S1": met, 20/20 seeds; the mock twin's ten decisions on the same events |
+| **`20261021-232940-live2`** single-agent, live | none (rule-based agent) | 1 flight, judged on 20 seeds | **Phase 5 live flight 2** — met, 20/20; within 0.29 m of flight 1 throughout |
+| **`20261021-233315-live3`** single-agent, live | none (rule-based agent) | 1 flight, judged on 20 seeds | **Phase 5 live flight 3** — met, 20/20; within 0.22 and 0.13 m of flights 1 and 2 |
+| **`20261021-233618-fault1`** single-agent, live | none (rule-based agent) | 1 flight, judged on 20 seeds | **Phase 5 fault-once flight** — the first horizontal move refused once in our code: retried at once, "fault once" check met, 20/20 |
 
 The `p2-` sessions are in `phases/phase-02-repository-architecture/results/`,
 not Phase 1's. They meet every condition in §1 and are the Phase 2 exit
@@ -342,7 +346,7 @@ vertical movement. That GPU load is in the protocol deliberately.
 
 ---
 
-## 4. Phases 2 to 4 have no run inventory
+## 4. Phases 2 to 5 have no run inventory
 
 None is a measurement phase, so none has a run count. Their exit criteria
 are demonstrations.
@@ -352,6 +356,7 @@ are demonstrations.
 | **2** — Repository architecture | Baseline examples run through the modular structure unchanged | A refactor plus a demonstration that behaviour is unchanged. No scored runs. **Done 2026-10-20**: a 30-run re-flight of the mission set (plus a plan-only pass), every drone-plan identical to v6, every outcome equal; see §3 |
 | **3** — Flight-skill layer | Four drones take off, navigate, hold, return, land, each skill returning a structured result | Flights, but a capability demonstration rather than a scored matrix. **Done 2026-10-21**: one live four-drone run, 20/20 skills, no contacts; see §3 |
 | **4** — Search-and-relay mission | A scripted, non-agentic controller completes the canonical mission | A feasibility check (AUV-19's gate G1), judged against AUV-05's six criteria on fixed seeds, not a scored comparison. **Done 2026-10-21**: 20/20 exit seeds on the mock (twice: before and after a controller fix), and three live flights of a small variant, 20/20 each; see §3 |
+| **5** — Persistent single agent | One agent completes a search task with no preflight action list, recognises success or failure, and decides what next | A demonstration on fixed seeds and fixed troubles, judged by Phase 4's evaluator, not a scored comparison. **Done 2026-10-21**: 20/20 seeds and 5/5 troubles on the mock; three nominal live flights of a small variant, 20/20 each, and one live flight with an injected fault, met; see §3 |
 
 > **Phase 3's exit criterion names four drones**, and on the evidence of M09 it
 > is not blocked: multi-drone flight works when the extra drones are spawned at
