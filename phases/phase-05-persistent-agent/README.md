@@ -737,6 +737,43 @@ gaps all come on the way home, 25–28 s in.
 seeds,** with the mock's decisions, about 7 s slower than the mock, and
 repeatable to 0.3 m.
 
+### 2026-10-21 — step 6, the fault-once live flight: met; the fault cost half a second
+
+The same session. `python scripts\single_agent_exit.py --sim airsim
+--fault-once --block fault1`, at `c6423be` with a clean tree (`agentic_uav`
+digest `df188376eee4268a`, unchanged) →
+`results/single-agent-live-20261021-233618-fault1`. The first horizontal move
+the skills sent was refused once in our code, in front of the adapter;
+CarlaAir was not touched.
+
+* **MET: the mock's "fault once" check passed live.** The agent ended the
+  task itself, decided at once after the failure, the mission succeeded and
+  it came home safe. **20 of 20 seeds succeed** on the flight.
+* **The fault struck exactly once:** `Drone1 move_to_position`, on the first
+  leg towards S1.
+* **What the agent did, from the trace:**
+  * 9.6 s: TAKE_OFF succeeded → start FOLLOW_WAYPOINTS to S1, passing east of R1.
+  * 10.1 s: SKILL_FAILED, "RuntimeError: injected passing fault on
+    move_to_position (0 more to come)", error code SIMULATOR_ERROR → at the
+    same tick, start FOLLOW_WAYPOINTS again from where the drone hovered:
+    "retry 1".
+  * 13.7 s on: the nominal flight, its decisions in the same order: search,
+    carry on through the link loss and both sightings, home, land, finish.
+* **11 decisions, the mock twin's 11 in the same order;** the twin met the
+  same fault at the same point and retried the same way.
+* **The fault cost about half a second.** Shifted by 0.5 s, the flight
+  follows nominal flight 3 to within 0.39 m (median 0.20 m) from the retry to
+  the landing. Completion 37.7 s against 37.2–37.3 s nominal; battery left
+  96.1 %, as nominal; reports reached the base at 29.3 s.
+* **R1 kept clear** by 1.97 m, as in every flight; x flown −9.43 to 21.93.
+* **Landing:** 1.13 m from the pad, and this time 0.05 m up, not 1.17:
+  Drone1's landed height varies from launch to launch and flight to flight,
+  as Phase 4 found. Below the 3 m line, either reads as landed.
+
+**Step 6's live flights are done: 4 of 4 met** — three nominal, each on 20 of
+20 seeds and repeatable to 0.3 m, and one with an injected passing fault,
+recovered as on the mock.
+
 ## Decisions
 
 | Date | Decision | Why |
