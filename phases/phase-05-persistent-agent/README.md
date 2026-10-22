@@ -40,7 +40,7 @@ triggered each decision and what it chose. Optionally, a small live run.
 |---|---|---|
 | Sensing behind the truth/belief boundary | `agentic_uav/core/sensing.py`, `agentic_uav/simulator/sensing.py` | **Done** 2026-10-21; goldens unedited |
 | A non-blocking action executor | `agentic_uav/control/action_executor.py` | **Done** 2026-10-21; goldens unedited |
-| Events, a minimal belief, and the agent loop | `agentic_uav/core/events.py`, `agentic_uav/agents/` | step 3 |
+| Events, a minimal belief, and the agent loop | `agentic_uav/core/events.py`, `agentic_uav/agents/` | **Done** 2026-10-21; goldens unedited |
 | The rule-based policy | `agentic_uav/agents/rule_policy.py` | step 4 |
 | The exit: nominal and injected-trouble runs; optional live; close | `configs/scenarios/`, `scripts/`, `results/`, `evidence/` | steps 5–6 |
 
@@ -235,7 +235,122 @@ The fourth: `abort()` returning True after a skill had already ended, which
 no test had covered.
 
 **The goldens did not move.** `record_golden.py --check` matches all four.
-480 tests pass, 16 skipped; audit clean.
+480 tests pass, 16 skipped; audit clean. Committed as `06d20aa`.
+
+### 2026-10-21 — step 3: events, the minimal belief, and the agent loop
+
+**Events** (`agentic_uav/core/events.py`): `Trigger` and `Event(trigger, at,
+detail)`.
+
+* **Raised in Phase 5:**
+  * task assigned;
+  * skill succeeded;
+  * skill failed (failed or timed out);
+  * target detected;
+  * communication changed (for one drone, its base link coming or going);
+  * battery threshold;
+  * guard rejected.
+* **Two more that complete the picture:** the agent's own abort completing,
+  and AUV-06's slow periodic check.
+* **Defined for later phases:** a message changing mission state (Phase 7)
+  and a teammate failing (Phase 9). `RAISED_IN_PHASE_5` says which is which.
+
+**The belief** (`agentic_uav/agents/belief_state.py`) holds AUV-06's first
+three blocks:
+
+| Block | Holds |
+|---|---|
+| `self` | position, airborne, battery, home, base link, current skill, current task |
+| `mission` | id, objective, absolute deadline, reserve, progress |
+| `local_map` | searched regions, observed targets, known hazards, targets reported |
+
+* **Every field comes from a sensor reading, the agent's own executor or
+  decisions, or the public brief.** "Reported" means seen while the base
+  link was up: the agent's belief, not the evaluator's fact.
+* **`update(observation)`** returns what changed: new sightings, the base
+  link, the battery.
+* **`snapshot()`** is plain data for the trace.
+
+**Decisions** (`agentic_uav/agents/decision.py`) come in four kinds: START a
+skill (replacing any running one), ABORT, CONTINUE, FINISH. Each carries an
+objective (the lifecycle's "Select objective"), a command ("Choose skill")
+and a reason. `Policy` is the protocol every policy will implement, rule now
+and LLM in Phase 12.
+
+**Validation** (`agentic_uav/agents/validation.py`) applies two hard rules
+that need only the belief; the guardian proper is Phase 11:
+
+* **No restricted zone.** The skill's ground track, from where the drone is
+  through its waypoints (a search's whole lawnmower), must not touch a zone.
+* **Home on what is left.** After flying the skill and then straight home,
+  the battery, by the brief's model, must stay at or above the reserve.
+
+Going home, landing and holding are always allowed: refusing them would be
+worse than the risk.
+
+**The loop** (`agentic_uav/agents/drone_agent.py`), `DroneAgent(brief,
+sensors, executor, policy)`:
+
+1. **Every 0.5 s tick** it observes (sensors plus its own executor) and
+   updates its belief.
+2. **It decides only when an event fired.** The periodic check (10 s by
+   default) fires only when nothing else has.
+3. **The policy proposes, and the validation step checks.** A refused
+   decision is fed back to the policy as GUARD_REJECTED, up to three times
+   more; after the fourth refusal the agent stops whatever is flying and
+   holds.
+4. **An accepted START replaces any running skill** (abort, wait, start).
+   The agent watches only its latest skill, so a replaced skill's ending is
+   never false news.
+5. **Every decision goes into `agent.trace`:** time, events, the belief as
+   it stood BEFORE the decision, the decision, the verdict, and what the
+   agent then did.
+
+**Tests: 20, in `tests/test_drone_agent.py`**, driven by small scripted test
+policies (the rule-based policy is step 4):
+
+* **Gating.** A task, then exactly one decision per skill ending: five
+  decisions over more than 40 observations.
+* **The periodic check** fires every 10 s in a quiet 25 s hold, and never
+  alongside other news.
+* **The trace holds the belief from before each decision.**
+* **Each event fires once at the right moment:**
+  * a sighting, used to stop a leg mid-flight;
+  * battery levels, each once as it is crossed;
+  * the base link lost at 100 m and regained;
+  * a failed skill, with its error code and message.
+* **A new START replaces a running leg** without false news.
+* **A refusal is fed back and the agent asks again.** Refused every time
+  while flying, it stops the leg and holds.
+* **The battery rule** worked through (9 % out and back, from 25 %).
+* **The way home is never refused**, from 150 m out on 21 %.
+* **A search's lanes are checked.**
+* **Belief updates and reports.**
+* **Motion goes on while the agent thinks.** In real time, a policy taking
+  0.3 s to decide mid-leg: the drone flew on more than 2 m meanwhile.
+
+**A finding: an abort during TAKE_OFF's settle is reported as success.**
+TAKE_OFF waits 3 s for the drone to settle with a plain sleep, so an abort
+asked for then goes unseen and the skill ends in success, with the drone
+already holding at height. An agent asking to abort there hears
+"succeeded". A test pins the behaviour, so changing it is a decision rather
+than an accident. Phase 3's skill is unchanged.
+
+**Mutations: 19, all caught.** The first pass caught 16 of 20:
+
+* **One was equivalent and its code was removed.** A set suppressing a
+  replaced skill's abort could never matter, because the agent never sees a
+  replaced skill end.
+* **Three were test gaps, now tested:**
+  * the periodic check riding along with other news;
+  * repeated refusals while a skill flies;
+  * the way home from far out.
+
+  The last needed two attempts. My first version started the belief out
+  there, which made that spot its home, so going home cost nothing.
+
+**The goldens did not move.** `record_golden.py --check` matches all four.
+500 tests pass, 16 skipped; audit clean.
 
 ## Decisions
 
