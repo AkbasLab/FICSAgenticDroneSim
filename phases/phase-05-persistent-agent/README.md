@@ -679,6 +679,35 @@ ground measured 29.245, as in Phase 4. 351 polls over 38.5 s.
 * **Landing:** 1.17 m up when landed (CarlaAir's known landed height), 1.35 m
   from the pad; Phase 4's Drone1 landed 0.34 m from it.
 
+### 2026-10-21 — step 6, live flight 2: met, and a repeat of flight 1 to 0.29 m
+
+The same simulator session, without a restart; the script's reset put
+Drone1 back on its pad. `python scripts\single_agent_exit.py --sim airsim
+--block live2`, at `bcfdebb` with a clean tree (`agentic_uav` digest
+`df188376eee4268a`, flight 1's) →
+`results/single-agent-live-20261021-232940-live2`.
+
+* **MET; 20 of 20 seeds succeed.** The same five skills, all succeeded;
+  contacts only SM_seaM.
+* **The same ten decisions on the same events as flight 1**, each within
+  0.1 s of flight 1's time.
+* **Flight 2 repeats flight 1:** at the same instant the two drones were at
+  most 0.29 m apart (27.6 s in, on the way home), median 0.06 m.
+
+| | Flight 1 | Flight 2 |
+|---|---|---|
+| At rest after reset | 2.47 s | 2.45 s |
+| Completion | 37.2 s | 37.2 s |
+| Battery left | 96.13 % | 96.12 % |
+| Reports reached the base | 28.8 s | 28.9 s |
+| x flown (lane −8 to 20) | −9.43 to 21.95 | −9.42 to 22.04 |
+| Landed from the pad | 1.35 m | 1.46 m |
+
+**The landing offset repeats**, so it is CarlaAir's, not chance: both
+flights landed about 1.4 m from the pad, Phase 4's Drone1 0.26–0.34 m. No
+criterion turns on it (C6 asks for home, landed, above the reserve), so it
+is noted, not changed.
+
 ## Decisions
 
 | Date | Decision | Why |
