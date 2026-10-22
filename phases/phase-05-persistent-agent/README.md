@@ -708,6 +708,35 @@ flights landed about 1.4 m from the pad, Phase 4's Drone1 0.26–0.34 m. No
 criterion turns on it (C6 asks for home, landed, above the reserve), so it
 is noted, not changed.
 
+### 2026-10-21 — step 6, live flight 3: met; the three nominal flights agree to 0.29 m
+
+The same session again. `python scripts\single_agent_exit.py --sim airsim
+--block live3`, at `cf4f58b` with a clean tree (`agentic_uav` digest
+`df188376eee4268a`, unchanged since flight 1) →
+`results/single-agent-live-20261021-233315-live3`.
+
+* **MET; 20 of 20 seeds succeed.** The same five skills, all succeeded;
+  contacts only SM_seaM.
+* **The same ten decisions on the same events** as flights 1 and 2, each
+  within 0.1 s.
+
+| | Flight 1 | Flight 2 | Flight 3 |
+|---|---|---|---|
+| At rest after reset | 2.47 s | 2.45 s | 2.47 s |
+| Completion | 37.2 s | 37.2 s | 37.3 s |
+| Battery left | 96.13 % | 96.12 % | 96.12 % |
+| Reports reached the base | 28.8 s | 28.9 s | 28.8 s |
+| x flown (lane −8 to 20) | −9.43 to 21.95 | −9.42 to 22.04 | −9.43 to 22.02 |
+| Landed from the pad | 1.35 m | 1.46 m | 1.38 m |
+
+**Apart at the same instant** (most, median): flights 1 and 2, 0.29 and
+0.06 m; 1 and 3, 0.22 and 0.04 m; 2 and 3, 0.13 and 0.03 m. The largest
+gaps all come on the way home, 25–28 s in.
+
+**The three nominal live flights are done: 3 of 3 met, each on 20 of 20
+seeds,** with the mock's decisions, about 7 s slower than the mock, and
+repeatable to 0.3 m.
+
 ## Decisions
 
 | Date | Decision | Why |
