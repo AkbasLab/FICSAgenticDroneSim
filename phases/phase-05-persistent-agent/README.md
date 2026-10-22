@@ -46,7 +46,7 @@ triggered each decision and what it chose. Optionally, a small live run.
 | Events, a minimal belief, and the agent loop | `agentic_uav/core/events.py`, `agentic_uav/agents/` | **Done** 2026-10-21; goldens unedited |
 | The rule-based policy | `agentic_uav/agents/rule_policy.py` | **Done** 2026-10-21; goldens unedited |
 | The exit: nominal and injected-trouble runs | `configs/scenarios/search_single_001.toml`, `agentic_uav/experiments/single_agent.py`, `scripts/single_agent_exit.py`, `results/`, `evidence/` | **Done** 2026-10-21; exit met on the mock |
-| Optional live run; close | `results/`, `evidence/` | step 6 |
+| Optional live run; close | `configs/scenarios/search_single_live_small.toml`, `agentic_uav/simulator/fault_injection.py`, `agentic_uav/experiments/single_agent.py` (live), `scripts/single_agent_exit.py --sim airsim`, `results/`, `evidence/` | step 6: plumbing done 2026-10-21, mock gate met; live flights to come |
 
 ## Plan
 
@@ -78,6 +78,20 @@ unedited. Module names follow AUV-03's tree (`agents/drone_agent.py`,
 5. **The exit.** A single-agent scenario; the agent given only its task,
    across 20 seeds on the mock; then injected trouble, one kind at a time.
 6. **Close**: an optional live run, the record, the vault report, the tag.
+
+**Step 6, as approved 2026-10-21** (written here after approval; see the record):
+
+* **Three nominal live flights plus one with an injected passing fault**, in
+  CarlaAir, of a live-sized scenario: Drone1 alone, told only "search S1".
+* **First, the live-sized scenario and its mock gate**: it must stay in the
+  airspace already flown live and meet on all 20 seeds, and recover from the
+  fault, on the mock before anything flies.
+* **Then the live plumbing**: each skill on its own connection; the fault
+  injected in our code, never in the simulator; the agent's readings built
+  from the poller; one function that flies the agent live; the exit script's
+  `--sim airsim` and `--fault-once`.
+* **Then the close**: the record and evidence, AUV-22, AUV-06, the MOC, and
+  the vault report; the tag and the push only on the user's go-ahead.
 
 ## Record
 
@@ -548,6 +562,76 @@ Step 4's 17 mutations were re-run against the changed policy: all caught.
 **The goldens did not move.** `record_golden.py --check` matches all four.
 541 tests pass, 16 skipped; audit clean.
 
+### 2026-10-21 — step 6, part 1: the live-sized scenario, its mock gate, and the live plumbing
+
+**The plan for step 6 was approved before its text had been shown**, as
+happened with the Phase 5 plan: the message asking which live run to fly
+ended at the question, without the plan. It is now under *Plan* above, so it
+can still be read and changed.
+
+**The scenario** (`configs/scenarios/search_single_live_small.toml`) is
+Phase 4's live variant cut to Drone1 and S1, every other value unchanged but
+the targets' spacing. S1's lane runs at y = −18 from x = −8 to 20, the line
+Phase 4's Drone1 flew three times in CarlaAir, at most 26.9 m from the pad.
+R1 stands across the straight line from the pad to the lane, so the agent
+has to route round it. The base's radio reaches 20 m, so a target seen at
+the lane's far end is reported on the way home. The spacing is 10 m, not
+20 m: an 18 × 16 m sector's diagonal is 24 m, and placement gave up after
+10,000 draws trying to fit two targets 20 m apart.
+
+**The mock gate is met:** told "search S1", the agent met on all 20 seeds,
+the flight stayed inside the flown box, and with the first horizontal move
+refused once it retried and completed the task ("fault once" check met).
+
+**The live plumbing:**
+
+* **A connection per skill** (`ActionExecutor(connect=...)`): each skill's
+  thread opens its own connection before it flies (Phase 1: an AirSim client
+  cannot be shared between threads); the runner's ground and home carry over.
+* **A fault injected in our code** (`simulator/fault_injection.py`):
+  `FaultyAdapter` sits between the skills and the adapter and refuses a
+  chosen primitive with an error a set number of times, then passes
+  everything through. Nothing refused reaches the simulator; CarlaAir is
+  never tampered with. `PassingFaults` is shared by every connection of one
+  flight, so "once" means once in the whole flight. It is thread-safe.
+* **Readings from the poller** (`polled_sensors`): the same rules as the
+  mock's sensors, applied to the poller's samples, so a reading lags by up to
+  one poll and agrees with what the evaluator will say of the same polls.
+* **`fly_agent_live`**: check the pad, reset, place, wait for rest, measure
+  the ground, start the poller and the separation monitor, wait for the
+  first poll, run the agent on its task, keep everything (`LiveAgentFlight`,
+  saved and judged again the same).
+* **The script** (`single_agent_exit.py --sim airsim [--fault-once]`): one
+  flight, judged on every seed, set beside the mock's flight of the same
+  scenario, task and fault; nominal must meet as on the mock, fault-once must
+  pass the mock's "fault once" check. `--fault-once` without `--sim airsim`
+  is refused: the mock flies it among the troubles.
+
+**Dry runs, the mock in real time standing in for CarlaAir:** nominal and
+fault-once both MET, 20 of 20 seeds succeed on each flight, about 35 s each.
+Live and mock twin flew the same skills (the fault-once flight: the first
+FOLLOW_WAYPOINTS failed, retried, then as nominal).
+
+**One difference to expect live, already seen in Phase 4:** a polled flight
+counts less battery than the mock's exact trace (96.8 % against 96.5 % left
+here). Below the poller's 3 m airborne line nothing counts as airborne, so
+the climb and descent through it are not charged. A test first held the
+polled reading to the mock's figure and failed by 0.5 %; it now holds it to
+the evaluator on the same polls, which is what the module promises.
+
+**Tests: 25 new** in `tests/test_single_agent_live.py`: the scenario and its
+gate, the fault injection (counts, pass-through, shared across connections,
+thread-safe), the executor's connection per skill, the polled readings, the
+live flight's record, the script's live record (nominal, failing, fault-once,
+refusal), and one real-time test of the whole live path behind
+`AUV_SLOW_TESTS` (passed, 70 s).
+
+**Mutations: 18, all caught.** The first pass caught 16. Two were untested:
+a flight read back and saved again lost its trace, and the script's seed
+rows could all have been judged on one seed.
+
+**The goldens did not move.** 566 tests pass, 17 skipped; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -558,6 +642,7 @@ Step 4's 17 mutations were re-run against the changed policy: all caught.
 | 2026-10-21 | **The task is given, the plan is not** | The agent receives the brief's public facts it needs (its sector, the zones, the base, its own battery model) and one task, "search this sector". Every skill it flies, it chose. That is the exit criterion's "without receiving a complete preflight action list" |
 | 2026-10-21 | **The task is S3, the far sector; troubles are fixed in code, with their expectations, before flying** | S3 needs everything a single agent does: routing round a zone, searching out of radio range, reporting on return. Writing each trouble's expected answer before running it is what keeps "recognises and decides" a test rather than a description. |
 | 2026-10-21 | **Cost what remains at the speed the drone makes good, never above the plan** | Time aloft is charged per second, so a slow drone pays more per metre; the planned speed brought one home under its reserve. Capped at the plan, so the estimate can only be conservative. |
+| 2026-10-21 | **Live faults are injected in our code, in front of the adapter** | CarlaAir cannot fail on demand and must not be tampered with. Refusing a primitive before it is sent is what a simulator's refusal looks like to the skills, and leaves the simulator untouched |
 | 2026-10-21 | **The exit is on the mock, judged by Phase 4's evaluator; live is optional** | As Phase 4: the mock runs seeds and injected faults exactly and repeatably; a small live run inside the flown airspace can follow |
 
 ## Open questions

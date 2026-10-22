@@ -1,0 +1,68 @@
+# One drone, one small sector, for a live CarlaAir flight of Phase 5's single agent.
+#
+# search_relay_live_small (Phase 4's live variant) cut to Drone1 and S1, every
+# other value unchanged but the targets' spacing (see [targets]). It fits inside the airspace Phases 1, 3 and 4 flew
+# live: the lane runs at y = -18 from x = -8 to 20, the line Phase 4's Drone1
+# flew three times in CarlaAir. R1 sits across the straight line from the pad
+# to the start of the lane, so the agent has to route round it; the base's
+# radio reaches 20 m, so a target seen at the lane's far end is reported on
+# the way home.
+
+scenario_id = "search_single_live_small"
+random_seed = 17
+description = """
+One drone, told only to search S1, routes round a restricted zone, searches
+an 18 x 16 m sector, reports to a base whose radio reaches 20 m, and lands on
+its pad, within 5 minutes.
+"""
+
+faults = []
+
+[mission]
+type = "distributed_search"
+deadline_s = 300
+required_coverage = 0.95
+targets_to_find = 2
+
+[base]
+position = [-6.0, 0.0]
+
+[network]
+profile = "perfect"
+communication_range_m = 20.0
+
+[detection]
+radius_m = 10.0
+min_observation_s = 2.0
+line_of_sight = false
+
+[battery]
+capacity = 100.0
+hover_drain_per_s = 0.05
+move_drain_per_m = 0.02
+reserve = 20.0
+
+[safety]
+min_separation_m = 2.0
+
+[targets]
+count = 2
+placement = "random_in_sectors"
+# Half the canonical 20 m: an 18 x 16 m sector's diagonal is only 24 m, so two
+# targets 20 m apart would almost never fit (placement gave up after 10,000
+# draws). With one sector, two targets can share a footprint; that is fine.
+min_spacing_m = 10.0
+
+[[vehicles]]
+id = "Drone1"
+start = [0.0, 0.0, 0.0]
+
+# Lane at y = -18, flown from x = -8 to 20: the sector ends 5 m short of that
+# at each end, because lanes run 5 m past a sector's edge.
+[[sectors]]
+id = "S1"
+bounds = [-3.0, -26.0, 15.0, -10.0]
+
+[[restricted_zones]]
+id = "R1"
+polygon = [[-8.0, -9.0], [-2.0, -9.0], [-2.0, -3.0], [-8.0, -3.0]]

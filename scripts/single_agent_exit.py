@@ -3,6 +3,8 @@
 
     python scripts/single_agent_exit.py                    # 20 seeds, then the five troubles
     python scripts/single_agent_exit.py --seeds 17 --block t
+    python scripts/single_agent_exit.py --sim airsim --block live1          # CarlaAir running, one flight
+    python scripts/single_agent_exit.py --sim airsim --fault-once --block f1
 
 AUV-06's exit criterion: "one deterministic persistent agent completes a
 search task without receiving a complete preflight action list, recognises
@@ -19,6 +21,14 @@ that caused it, the belief it was made on, the decision, the verdict and
 what the agent did.
 
 Exit code 0 only if every nominal seed met and every trouble met its check.
+
+LIVE (`--sim airsim`, Phase 5 step 6): one flight in CarlaAir of the live-sized
+scenario (`search_single_live_small`, told only "search S1"), judged on the
+poller's samples on every seed, and set beside the mock's flight of the same
+scenario, task and fault. With `--fault-once`, the first horizontal move the
+skills send is refused once in our code, and the flight must pass the mock's
+"fault once" check. Outputs single-agent-live-<stamp>[-<block>].jsonl and .md;
+exit code 0 only if the flight met.
 """
 
 from __future__ import annotations
@@ -40,6 +50,8 @@ from agentic_uav.experiments.search_relay import EXIT_SEEDS  # noqa: E402
 from agentic_uav.experiments.single_agent import EXIT_TASK, exit_runs, trouble_runs  # noqa: E402
 
 DEFAULT_OUT = os.path.join(REPO, "phases", "phase-05-persistent-agent", "results")
+LIVE_SCENARIO = "search_single_live_small"
+LIVE_TASK = "search S1"
 
 
 def seeds_arg(text: str) -> tuple[int, ...]:
@@ -55,20 +67,32 @@ def seeds_arg(text: str) -> tuple[int, ...]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--scenario", default="search_single_001")
-    parser.add_argument("--task", default=EXIT_TASK)
+    parser.add_argument("--scenario", default=None, help=f"default search_single_001; live {LIVE_SCENARIO}")
+    parser.add_argument("--task", default=None, help=f"default {EXIT_TASK!r}; live {LIVE_TASK!r}")
     parser.add_argument("--seeds", type=seeds_arg, default=EXIT_SEEDS)
     parser.add_argument("--no-trouble", action="store_true", help="the nominal seeds only")
     parser.add_argument("--out", default=DEFAULT_OUT)
     parser.add_argument("--block", metavar="LABEL")
+    parser.add_argument("--sim", choices=("mock", "airsim"), default="mock")
+    parser.add_argument("--fault-once", action="store_true", help="live: refuse the first horizontal move once")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=None)
+    parser.add_argument("--poll-hz", type=float, default=None)
     args = parser.parse_args(argv)
     try:
         sys.stdout.reconfigure(encoding="utf-8")
     except (AttributeError, OSError):
         pass
 
+    live_run = args.sim == "airsim"
+    if args.fault_once and not live_run:
+        parser.error("--fault-once is for --sim airsim; the mock flies it among the troubles")
+    args.scenario = args.scenario or (LIVE_SCENARIO if live_run else "search_single_001")
+    args.task = args.task or (LIVE_TASK if live_run else EXIT_TASK)
     started = time.strftime("%Y-%m-%dT%H:%M:%S")
     scenario = load_scenario(args.scenario)
+    if live_run:
+        return live(args, scenario, started)
     wall = time.perf_counter()
     runs = exit_runs(scenario, args.seeds, args.task)
     troubles = [] if args.no_trouble else trouble_runs(scenario, args.task)
@@ -124,6 +148,63 @@ def main(argv: list[str] | None = None) -> int:
     print(summary)
     print(f"raw     : {os.path.join(args.out, stem + '.jsonl')}")
     return 0 if ok else 1
+
+
+def live(args, scenario, started: str) -> int:
+    """One live flight of the agent in CarlaAir, judged on every seed, beside the mock's."""
+    from agentic_uav.core.clock import RealClock
+    from agentic_uav.simulator.airsim_adapter import AIRSIM_PORT, AirSimAdapter
+    port = args.port or AIRSIM_PORT
+    return report_live(args, scenario, started, lambda: AirSimAdapter.connect(args.host, port), RealClock())
+
+
+def report_live(args, scenario, started: str, connect, clock) -> int:
+    """Fly, judge, compare with the mock twin, write the record. `connect` opens one connection."""
+    from agentic_uav.experiments.single_agent import TROUBLES, fly_agent_live, fly_agent_on_mock
+    extra = {} if args.poll_hz is None else {"poll_hz": args.poll_hz}
+    flight = fly_agent_live(scenario, args.task, connect(), connect, clock, fault_once=args.fault_once, **extra)
+    run = flight.as_run("live")
+    once = next(t for t in TROUBLES if t.name == "fault once")
+    if args.fault_once:
+        ok, problems = once.check(run)
+    else:
+        failing = [c.id for c in run.report.criteria if not c.passed]
+        ok, problems = run.met, ([] if run.met else [f"not met: criteria failing {failing or 'none'}, finished {run.finished}, "
+                                                     f"chosen as it went {run.chosen_as_it_went()}"])
+    seeds = [(s, flight.judge(s)) for s in args.seeds]
+    mock = fly_agent_on_mock(scenario, args.task, "mock twin", once.prepare if args.fault_once else None)
+    rows = [{"kind": "header", "t": started, "sim": "airsim", "scenario": scenario.scenario_id,
+             "scenario_file": os.path.relpath(scenario_path(args.scenario), REPO).replace(os.sep, "/"), "task": args.task,
+             "fault_once": args.fault_once, "met": ok, "problems": problems, "code": provenance()},
+            flight.as_json(),
+            {"kind": "mock_twin", **mock.as_json()}]
+    rows += [{"kind": "seed", "seed": s, "success": r.success, "report": r.as_json()} for s, r in seeds]
+    lines = [f"# Single agent, live — {scenario.scenario_id}" + (" (fault once)" if args.fault_once else ""), "",
+             f"Run {started}. Told only {args.task!r}. Observer {flight.observer}.", "",
+             "| | Live | Mock twin |", "|---|---|---|",
+             f"| Skills | {', '.join(f'{s} {st}' for s, st in flight.skills)} | {', '.join(f'{s} {st}' for s, st in mock.skills)} |",
+             f"| Decisions | {len(flight.trace)} | {len(mock.trace)} |",
+             f"| Completion s | {secs(run.report.completion_s)} | {secs(mock.report.completion_s)} |",
+             f"| Coverage | {run.report.coverage.fraction:.4f} | {mock.report.coverage.fraction:.4f} |",
+             f"| Battery left % | {run.report.facts.batteries[0].remaining:.1f} | {mock.report.facts.batteries[0].remaining:.1f} |",
+             f"| Faults struck | {', '.join(f'{d} {k}' for d, k in flight.faults_struck) or '-'} | - |",
+             f"| Contacts | {', '.join(f'{c.drone}-{c.object}' for c in flight.contacts) or 'none'} | - |", "",
+             f"Seeds judged on this flight: {sum(r.success for _, r in seeds)} of {len(seeds)} succeed.", "",
+             f"**{'MET' if ok else 'NOT MET'}**" + ("" if ok else " — " + "; ".join(problems)), ""]
+    os.makedirs(args.out, exist_ok=True)
+    stem = f"single-agent-live-{time.strftime('%Y%m%d-%H%M%S')}" + (f"-{args.block}" if args.block else "")
+    with io.open(os.path.join(args.out, stem + ".jsonl"), "w", encoding="utf-8", newline="\n") as h:
+        for row in rows:
+            h.write(json.dumps(row, default=str) + "\n")
+    with io.open(os.path.join(args.out, stem + ".md"), "w", encoding="utf-8", newline="\n") as h:
+        h.write("\n".join(lines))
+    print("\n".join(lines))
+    print(f"raw     : {os.path.join(args.out, stem + '.jsonl')}")
+    return 0 if ok else 1
+
+
+def secs(value: float | None) -> str:
+    return "-" if value is None else f"{value:.1f}"
 
 
 if __name__ == "__main__":

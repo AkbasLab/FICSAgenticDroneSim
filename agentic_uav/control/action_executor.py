@@ -32,6 +32,11 @@ later; the drone holds where the skill left it meanwhile. That is the
 agent's reaction time, and it is the only difference from calling the
 skills directly: the same outcomes, durations and positions (tested).
 
+LIVE, pass `connect`: each skill's thread then opens its own connection
+before it flies, as every flying thread in this project does (Phase 1: an
+AirSim client cannot be shared between threads). The runner itself -- its
+measured ground, its home -- carries over from skill to skill.
+
 ABORT goes through `SkillRunner.request_abort`: the skill stops at its next
 check and holds where it is (every skill contract's abort behaviour). For
 AirSim pass `abort_via`, an adapter on the AGENT's own connection: one
@@ -43,7 +48,7 @@ from __future__ import annotations
 import contextlib
 import threading
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import Any, Callable
 
 from ..core.clock import Clock, SimClock
 from .skills import SkillCommand, SkillResult, SkillRunner
@@ -74,10 +79,15 @@ class Execution:
 class ActionExecutor:
     """Runs one drone's skills, one at a time, each on its own thread."""
 
-    def __init__(self, runner: SkillRunner, clock: Clock | None = None, abort_via: Any = None) -> None:
+    def __init__(self, runner: SkillRunner, clock: Clock | None = None, abort_via: Any = None,
+                 connect: Callable[[], Any] | None = None) -> None:
         self.runner = runner
         self.clock = clock if clock is not None else runner.clock
         self.abort_via = abort_via
+        # Live, every skill thread opens its own connection: AirSim's client
+        # cannot be used from more than one thread (Phase 1), and each skill
+        # runs on a new thread. The runner keeps its measured ground and home.
+        self.connect = connect
         self._lock = threading.Lock()
         self._history: list[Execution] = []
         self._thread: threading.Thread | None = None
@@ -152,6 +162,8 @@ class ActionExecutor:
         with (self.clock.participate() if sim else contextlib.nullcontext()):
             joined.set()
             try:
+                if self.connect is not None:
+                    self.runner.vehicle = self.connect()
                 result = self.runner.run(execution.command, clear_abort=False)
                 ended = {"result": result}
             except BaseException as exc:        # recorded, never silent

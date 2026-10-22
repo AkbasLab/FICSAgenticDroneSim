@@ -32,7 +32,7 @@ from ..core.scenario import Scenario
 from ..core.sensing import OwnState, Sensors, Sighting
 from .mission_world import battery, detections, place_targets
 from .mock_adapter import MockWorld
-from .observer import mock_trajectories
+from .observer import PollingObserver, mock_trajectories, trajectories_from_samples
 
 
 def mock_sensors(world: MockWorld, scenario: Scenario, drone: str,
@@ -75,6 +75,58 @@ def mock_sensors(world: MockWorld, scenario: Scenario, drone: str,
         now = world.clock.now()
         points = {n: paths[n].position_at(now) for n in names}
         return drone in _reach_base(points, base, range_m)
+
+    return Sensors(drone, now, own_state, battery_now, sightings_now, base_link_now)
+
+
+def polled_sensors(observer: PollingObserver, scenario: Scenario, drone: str, grounds: dict[str, float],
+                   start: float | None = None) -> Sensors:
+    """`drone`'s readings in a LIVE flight, built from the poller's samples so far.
+
+    The same rules as `mock_sensors`, on the poller's trajectory: straight
+    lines between polls taken every `observer.period` seconds, airborne above
+    the poller's line (3 m: CarlaAir reports a landed drone 1.17 m up). So
+    a reading lags the drone by up to one poll, and a dwell or a range edge
+    is judged on the polls -- the price of observing a simulator from
+    outside. `grounds` are each drone's NED ground, measured at rest.
+    """
+    names = [v.id for v in scenario.vehicles]
+    if drone not in names:
+        raise ValueError(f"{drone} is not one of {scenario.scenario_id}'s drones")
+    missing = [n for n in names if n not in observer.drones or n not in grounds]
+    if missing:
+        raise ValueError(f"not observed, or no measured ground: {missing}")
+    clock = observer.clock
+    t0 = clock.now() if start is None else start
+    targets = place_targets(scenario)
+    base = (scenario.base.x, scenario.base.y, 0.0)
+    range_m = scenario.network.communication_range_m
+
+    def now() -> float:
+        return clock.now()
+
+    def paths():
+        polled = trajectories_from_samples(observer.samples(), grounds)
+        empty = [n for n in names if n not in polled]
+        if empty:
+            raise RuntimeError(f"no poll yet of {empty}: start the observer and let it sample first")
+        return polled
+
+    def own_state() -> OwnState:
+        k = paths()[drone].knots[-1]
+        return OwnState(clock.now(), k.x, k.y, k.altitude_m, k.airborne)
+
+    def battery_now() -> float:
+        return battery(paths()[drone], scenario.battery, t0, clock.now()).remaining
+
+    def sightings_now() -> tuple[Sighting, ...]:
+        found = detections([paths()[drone]], targets, scenario.detection, t0, clock.now())
+        where = {t.id: t for t in targets}
+        return tuple(Sighting(d.target, where[d.target].x, where[d.target].y, d.detected_at) for d in found)
+
+    def base_link_now() -> bool:
+        latest = {n: path.knots[-1].point for n, path in paths().items()}
+        return drone in _reach_base(latest, base, range_m)
 
     return Sensors(drone, now, own_state, battery_now, sightings_now, base_link_now)
 
