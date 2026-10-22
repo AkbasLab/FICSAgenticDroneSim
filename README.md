@@ -94,8 +94,16 @@ model.
 
 ## Where the project is
 
-**Phase 1 is complete** (2026-10-20): the open-loop baseline is frozen and
-tagged `v0.1-open-loop-baseline`. **Phase 2, repository architecture, is next.**
+**Phases 1 to 5 are complete** (2026-10-20 to 2026-10-21), each tagged
+`phase-NN-complete`. **Phase 6, the belief state, is next.**
+
+| Phase | Done | What it left |
+|---|---|---|
+| 1 · Baseline freeze | 2026-10-20 | The open-loop baseline, frozen as `v0.1-open-loop-baseline`: 30 runs on `llama3.3:70b`, reproduced from a clean clone |
+| 2 · Repository architecture | 2026-10-20 | The baseline moved into `agentic_uav/` without changing what it does: goldens unedited, a 30-run re-flight identical |
+| 3 · Flight-skill layer | 2026-10-21 | Eleven skills with contracts and structured results, a mock simulator held to the same contract; four drones flown live |
+| 4 · Search-and-relay mission | 2026-10-21 | The canonical mission as data, a judge of AUV-05's six criteria, and a scripted controller that meets it on 20 of 20 seeds |
+| 5 · Persistent single agent | 2026-10-21 | One rule-based agent, told only its task, choosing each next skill on events: 20 of 20 seeds and 5 of 5 troubles on the mock, four live flights |
 
 Each phase keeps its own record in [`phases/`](phases/): objectives, the exit
 criterion and whether it is actually met, deliverables, decisions taken, and the
@@ -105,9 +113,9 @@ Objectives Checklist`; each phase also has a detail note `AUV-01` … `AUV-23`.
 
 | Stage | Phases | State |
 |---|---|---|
-| 0 · Foundations | 0–1 | Phase 0 deliverable done; **Phase 1 complete** |
-| 1 · Platform | 2–4 | Not started |
-| 2 · One agent | 5–6 | Not started |
+| 0 · Foundations | 0–1 | Phase 0 deliverable done, its exit (the one-minute explanation) untested; **Phase 1 complete** |
+| 1 · Platform | 2–4 | **Complete**: Phases 2, 3 and 4 |
+| 2 · One agent | 5–6 | **Phase 5 complete**; Phase 6 next |
 | 3 · The team | 7–9 | Not started |
 | 4 · Adversity | 10–11 | Not started |
 | 5 · Intelligence | 12 | Not started |
@@ -132,7 +140,8 @@ from scratch here as `baseline/open_loop_agent.py`. In it:
 - drones execute **concurrently**, one thread each;
 - **no replanning happens after launch.**
 
-That last property is the one everything from Phase 5 onward exists to remove.
+That last property is the one everything from Phase 5 onward exists to remove;
+Phase 5 removed it for one drone.
 The baseline stays runnable because every later architecture is measured against
 it, on the same ten missions. It is tagged `v0.1-open-loop-baseline` once it
 runs the mission set.
@@ -162,14 +171,16 @@ decisions get made.
 
 ```
 docs/         RESEARCH_PLAN · SETUP · CONTROLS · BASELINE_* · carlaair/ reference set · vega/
-configs/      missions/ — the mission set as data, edit here to add or change one
-agentic_uav/  the research modules, built in Phases 2 and 3 (see below)
+configs/      missions/ — the baseline's mission set as data; scenarios/ — the
+              search-and-relay mission and its variants (TOML), from Phase 4
+agentic_uav/  the research modules, built from Phase 2 on (see below)
 baseline/     open_loop_agent.py — the baseline's command line, now a thin entry
               point over agentic_uav/; the original single file is the tag
               v0.1-open-loop-baseline
 scripts/      experiment entry points: run_missions.py, the command line of
-              agentic_uav/experiments/runner.py; four_drone_skills.py, Phase 3's
-              exit script (--sim mock or airsim)
+              agentic_uav/experiments/runner.py; the exit scripts of Phases 3-5,
+              four_drone_skills.py, search_relay_exit.py and single_agent_exit.py
+              (each --sim mock or airsim)
 tools/        development tooling: audit_repo.py, fly_chat.py, record_golden.py,
               the doc generators
 tests/        unit tests, and the golden tests that pin the baseline's behaviour
@@ -212,29 +223,40 @@ The module tree is specified in `AUV-03 — Repository Architecture`. Its shape
 encodes the experimental design: policies, planners and simulators are all
 interchangeable, which is what makes selecting an architecture a configuration
 change rather than four separate codebases. Phase 2 built these parts of it,
-by moving the baseline without changing what it does, and Phase 3 added the
-flight-skill layer and the mock simulator:
+by moving the baseline without changing what it does; Phase 3 added the
+flight-skill layer and the mock simulator, Phase 4 the mission and its judge,
+and Phase 5 the agent:
 
 ```
 agentic_uav/
   core/         plain data shared by everything: positions, vehicle state,
                 primitive commands and results, protocol constants, errors;
-                the real and simulated clocks
+                the real and simulated clocks; geometry and the scenario;
+                what an agent can sense, and the events it replans on
   simulator/    the only code that talks to a simulator: the VehicleAdapter and
                 SceneAdapter protocols, the AirSim adapter, the mock adapter
                 (simulated time, contacts, injectable faults), the scenario
-                manager, AirSim's settings.json
+                manager, AirSim's settings.json; the mission world (ground
+                truth solved exactly from trajectories), coverage, the poller;
+                an agent's sensors; faults injected in front of an adapter
   control/      the open-loop executor, the ground reference, contact
                 classification, the separation monitor; navigation (the one
                 place altitude becomes NED) and the eleven mission-level skills,
-                each with a contract and a four-state SkillResult
+                each with a contract and a four-state SkillResult; routing and
+                the scripted controller; the action executor (a skill on its
+                own thread, watched and abortable)
   planners/     the MissionPlanner protocol: the plan schema and validation, the
                 prompt, the Ollama planner and a replay planner
-  experiments/  the mission runner, the agent log, provenance; team flight
+  agents/       the persistent agent: belief, decisions, validation, the
+                event-driven loop and the rule-based policy. It reaches no
+                ground truth, and a test enforces that
+  experiments/  the mission runner, the agent log, provenance; team flight;
+                scenarios, the evaluator (AUV-05's six criteria), and the exit
+                runs of Phases 4 and 5
 ```
 
-`agents/` and `coordination/` arrive with the phases that need them; they are
-not created empty. `tests/golden/` holds what the baseline did before any of
+`coordination/` arrives with the team phases, from Phase 7; it is not
+created empty. `tests/golden/` holds what the baseline did before any of
 it moved — every AirSim call, every model request, every runner and sandbox
 output — and the tests check the moved code against it.
 `tests/test_adapter_contract.py` holds every adapter to the same promises:
@@ -245,8 +267,9 @@ CarlaAir.
 
 ## Status, provenance and licensing
 
-> **This project is under active development.** Interfaces will change without
-> notice until Phase 2 settles the module structure. The Phase 1 baseline is
+> **This project is under active development.** Phases 1-5 are complete and
+> tagged; the module structure settled in Phase 2 and has only grown since,
+> but interfaces may still change as later phases need. The Phase 1 baseline is
 > frozen at `v0.1-open-loop-baseline`: flown in full on `llama3.3:70b` (block
 > `v6-polled`, 30 runs) and reproduced from a clean clone. See
 > [`docs/BASELINE_MISSIONS.md`](docs/BASELINE_MISSIONS.md) for the results and
