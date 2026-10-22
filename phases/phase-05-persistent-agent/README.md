@@ -632,6 +632,53 @@ rows could all have been judged on one seed.
 
 **The goldens did not move.** 566 tests pass, 17 skipped; audit clean.
 
+### 2026-10-21 — step 6, live flight 1: met, the same decisions as the mock, every phase slower
+
+**The scene.** CarlaAir launched fresh (`.\CarlaAir.ps1 Town10HD`),
+`settings.json` declaring Drone1 only. A read-only check by the user:
+`vehicles ['Drone1']`, Drone1 at x −0.05, y 0.05, z 29.25, not under API
+control.
+
+**The flight**, `python scripts\single_agent_exit.py --sim airsim --block
+live1`, at `e9afb20` with a clean tree →
+`results/single-agent-live-20261021-232652-live1`. The agent was told only
+"search S1". Drone1 came to rest 2.47 s after the reset at (−0.02, 0.02);
+ground measured 29.245, as in Phase 4. 351 polls over 38.5 s.
+
+* **MET; 20 of 20 seeds succeed** on the one flight: coverage 1.0, both
+  targets detected and reported, no entry into R1, home and landed on 96.1 %.
+* **The same ten decisions as the mock twin, on the same events, in the same
+  order:** take off; route to S1 east of R1; search; carry on through the
+  link loss and the two sightings; fly home when S1 was searched; carry on
+  through the link coming back; land; finish. Nothing in the live flight
+  made the agent decide differently.
+* **Contacts:** only SM_seaM, the floor mesh at the player start, which
+  counts as ground (as in Phase 4).
+
+| Phase | Live s | Mock s |
+|---|---|---|
+| Take off | 9.6 | 7.5 |
+| Route to S1 | 3.6 | 2.5 |
+| Search S1 | 10.8 | 8.0 |
+| Home | 7.3 | 5.5 |
+| Land | 7.2 | 6.5 |
+| **Completion** (the evaluator's) | **37.2** | **30.0** |
+
+**What the polls show:**
+
+* **R1 kept clear:** no poll inside it; the closest came 1.97 m from its edge,
+  on the route east of it.
+* **The lane ends overshoot, as in Phase 4:** x from −9.43 to 21.95 for a lane
+  from −8 to 20, y down to −19.07, at most 28.3 m from the pad, 14.3 m up.
+  The planned path stays inside the box flown in Phase 4; the flown one goes
+  1.4–2 m past both lane ends, as Phase 4's Drone1 did.
+* **Reports:** both targets reached the base at 28.8 s, on the way home. The
+  agent's own COMMS_CHANGED came at 29.2 s, the poll and the 0.5 s tick
+  later.
+* **Battery:** 96.1 % left against the mock's 96.5 %, live being slower.
+* **Landing:** 1.17 m up when landed (CarlaAir's known landed height), 1.35 m
+  from the pad; Phase 4's Drone1 landed 0.34 m from it.
+
 ## Decisions
 
 | Date | Decision | Why |
