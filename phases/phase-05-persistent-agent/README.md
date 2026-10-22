@@ -41,7 +41,7 @@ triggered each decision and what it chose. Optionally, a small live run.
 | Sensing behind the truth/belief boundary | `agentic_uav/core/sensing.py`, `agentic_uav/simulator/sensing.py` | **Done** 2026-10-21; goldens unedited |
 | A non-blocking action executor | `agentic_uav/control/action_executor.py` | **Done** 2026-10-21; goldens unedited |
 | Events, a minimal belief, and the agent loop | `agentic_uav/core/events.py`, `agentic_uav/agents/` | **Done** 2026-10-21; goldens unedited |
-| The rule-based policy | `agentic_uav/agents/rule_policy.py` | step 4 |
+| The rule-based policy | `agentic_uav/agents/rule_policy.py` | **Done** 2026-10-21; goldens unedited |
 | The exit: nominal and injected-trouble runs; optional live; close | `configs/scenarios/`, `scripts/`, `results/`, `evidence/` | steps 5–6 |
 
 ## Plan
@@ -350,7 +350,110 @@ than an accident. Phase 3's skill is unchanged.
   there, which made that spot its home, so going home cost nothing.
 
 **The goldens did not move.** `record_golden.py --check` matches all four.
-500 tests pass, 16 skipped; audit clean.
+500 tests pass, 16 skipped; audit clean. Committed as `d47a928`.
+
+### 2026-10-21 — step 4: the rule-based policy
+
+**`RulePolicy`** (`agentic_uav/agents/rule_policy.py`) is AUV-06 5.3's
+deterministic agent, and AUV-13's Architecture C. Told `"search S1"` and
+nothing else, it chooses each skill when the last has ended (or sooner, if
+something happens), from the belief as it stands then.
+
+**Its stages:** ready → taking off → to the sector (skipped when the first
+lane is in a straight, clear line) → searching → going home → landing →
+done. The geometry is Phase 4's: routes keep 2 m from zones, and lanes are
+spaced by the detection rule and run past the sector ends.
+
+* **Report.** The base stands by the pads, so the way home passes into radio
+  range, and whatever the drone saw is reported on the way back.
+* **Low battery and the deadline.** It checks before starting the outbound
+  work, then at every battery level crossed and every periodic check while
+  that work is ahead. It costs the rest of the transit, the rest of the
+  search, and the route home, using the brief's model. If that leaves less
+  than the reserve plus 2 %, or more time than is left, it drops the search
+  and goes home at once.
+* **A failed skill.** It re-plans from where the drone is and tries the
+  stage again, up to twice. Then:
+  * an unreachable sector or an unfinishable search sends it home;
+  * a way home that keeps failing ends in landing where it is;
+  * a take-off or landing that keeps failing ends the task.
+* **A refused decision.** Refused outbound work means going home; a refused
+  way home means landing where it is.
+
+It records its stage, sector, retries, and any reason it gave up in the
+belief's mission progress, so the trace shows them.
+
+**Flown on the mock, judged by Phase 4's evaluator**, single-drone,
+single-sector versions of the canonical mission:
+
+| Run | What the agent did | Verdict |
+|---|---|---|
+| "search S1" | took off, searched, flew home, landed: 4 skills, each chosen on the event before it | success, 155.5 s |
+| "search S3", beyond R1 and the radio | routed round R1, searched, reported both targets only once back in range | success, 187.5 s |
+| a fault that strikes once, in the search | retried the search | success |
+| a fault that strikes once, in the transit | re-planned from where it was | success |
+| a fault that never clears | two retries, gave up the search, landed: its reason in the trace | C1–C3 fail, home safe |
+| half speed, battery sized for full | at a periodic check, 53.2 % left against 31.6 % needed, dropped the search half done and flew home | C6 passes, landed on 37.8 %; coverage 0.53 |
+| half speed, ample battery, deadline for full speed | turned back on the periodic check alone: "short of time" | C6 passes |
+| a deadline it cannot meet | did not begin the search; landed | C6 passes |
+| battery too low to start | did not begin; landed | C6 passes |
+| a task it does not know | refused without flying | — |
+
+**Three changes made along the way:**
+
+* **Validation kept the way home out of zones.** Step 3's first version
+  waived both rules for the way home, and traced no path for RETURN_HOME at
+  all, so a straight line home through a zone would have passed. Now the
+  battery rule alone is waived (for going home, landing and holding, and
+  any route ending at home); the zone rule has no exceptions. Two tests:
+  RETURN_HOME through R1 is refused, and a route home on a low battery is
+  allowed.
+* **The low-battery estimate measures progress by position.** A first
+  version measured search progress by time at the nominal 5 m/s. A drone
+  slower than planned, which is exactly when the battery runs short, would
+  have looked further along than it was. Now it uses where the drone is on
+  its lanes (`remaining_along`), tested on its own and through the slow
+  drone.
+* **The mock gained a passing fault.** `MockFaults.raise_times` raises a set
+  number of times, then works, so recovery can be tested; `raise_on` only
+  ever fails. It has its own test.
+
+**Also found while choosing the test conditions:** the first short-deadline
+run started a search it could never finish, and turned back only at the
+first periodic check. The policy now checks before starting outbound work as
+well.
+
+**A serious slip in my own tests, caught by a mutation.** A helper in
+`BranchTests` was named `fail`, which shadows `unittest.TestCase.fail`.
+Every `assertEqual` calls that method to report a failure, so the helper
+returned a value instead of raising, and **every assertion in that class
+passed whatever the code did**. A mutation surviving against a test that
+plainly covered it is what showed it. The helper is now `failed_event`.
+`tests/test_suite_hygiene.py` checks every test class in the suite for a
+shadowed TestCase method, and checks that it can see one; none other
+exists.
+
+**Tests:**
+
+| File | Tests |
+|---|---|
+| `tests/test_rule_policy.py` | 21: nominal, recovery, low battery and deadline, refusal, the give-up branches, per-stage retries, the position-based estimate, `remaining_along` |
+| `tests/test_drone_agent.py` | 1 more, for validation |
+| `tests/test_mock_adapter.py` | 1 more, the passing fault |
+| `tests/test_suite_hygiene.py` | 2 |
+
+**Mutations: 17, all caught.** The first pass caught 12; of its five
+survivors:
+
+* **One was the shadowed `fail`.**
+* **Four were test gaps:**
+  * a task with an unknown verb and a known sector;
+  * retries never reset between stages;
+  * the deadline seen only by the periodic check;
+  * the estimate counting the whole search as still ahead.
+
+**The goldens did not move.** `record_golden.py --check` matches all four.
+525 tests pass, 16 skipped; audit clean.
 
 ## Decisions
 

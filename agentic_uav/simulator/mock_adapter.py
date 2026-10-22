@@ -51,7 +51,8 @@ world judges a flight by it (`simulator/observer.py`), with nothing sampled.
 
 FAULTS can be injected per drone (`world.faults`): a landing that does not
 descend (the 2026-10-06 and 2026-10-19 failure), moves that make no
-progress, a primitive that raises, a slower drone.
+progress, a primitive that raises -- every time, or a set number of times
+and then clears (`raise_times`, for testing recovery) -- and a slower drone.
 """
 
 from __future__ import annotations
@@ -129,6 +130,7 @@ class MockFaults:
     stuck_land: set[str] = field(default_factory=set)      # land and descents do nothing
     stalled: set[str] = field(default_factory=set)         # moves make no progress
     raise_on: dict[tuple[str, PrimitiveKind], str] = field(default_factory=dict)
+    raise_times: dict[tuple[str, PrimitiveKind], int] = field(default_factory=dict)   # raise this often, then work
     speed_factor: dict[str, float] = field(default_factory=dict)
 
 
@@ -283,6 +285,11 @@ class MockVehicleAdapter:
         with self.world.lock:
             v = self.world._vehicle(vehicle_id)
             message = self.world.faults.raise_on.get((vehicle_id, kind))
+            left = self.world.faults.raise_times.get((vehicle_id, kind), 0)
+            if message is None and left > 0:
+                # A passing fault: it strikes `left` more times, then clears.
+                self.world.faults.raise_times[(vehicle_id, kind)] = left - 1
+                message = f"injected passing fault ({left - 1} more to come)"
         if message is not None:
             raise RuntimeError(message)
         if kind is PrimitiveKind.TAKE_OFF:

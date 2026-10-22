@@ -290,11 +290,23 @@ class ValidationTests(unittest.TestCase):
         out_there = self._belief(battery=100.0, x=0.0, y=0.0)           # home is the pad
         out_there.update(Observation(60.0, 0.0, -150.0, 10.0, True, 21.0, (), False, None, 2, "success"))
         self.assertEqual(out_there.self_.home, (0.0, 0.0))
-        for command in (S.ReturnHomeCommand(), S.LandCommand(), S.HoldPositionCommand(5.0)):
+        route_home = S.FollowWaypointsCommand((Waypoint(0, -75, 10), Waypoint(0, 0, 10)))
+        for command in (S.ReturnHomeCommand(), S.LandCommand(), S.HoldPositionCommand(5.0), route_home):
             with self.subTest(skill=command.skill.value):
                 self.assertTrue(validate(Decision.start(command, "home"), out_there).ok)
         self.assertFalse(validate(Decision.start(S.GoToWaypointCommand(Waypoint(0, -10, 10)), "back"),
                                   out_there).ok)
+
+    def test_the_way_home_is_still_kept_out_of_zones(self):
+        # The battery rule waives the way home; the zone rule never does.
+        # From (50, 0), straight home to the pad crosses R1.
+        beyond = self._belief(battery=100.0, x=0.0, y=0.0)
+        beyond.update(Observation(30.0, 50.0, 0.0, 10.0, True, 90.0, (), True, None, 2, "success"))
+        verdict = validate(Decision.start(S.ReturnHomeCommand(), "home"), beyond)
+        self.assertFalse(verdict.ok)
+        self.assertIn("restricted zone R1", verdict.reasons[0])
+        self.assertTrue(validate(Decision.start(S.LandCommand(), "down"), beyond).ok)
+        self.assertEqual(ground_track(S.ReturnHomeCommand(), (50.0, 0.0), (0.0, 0.0)), [(50.0, 0.0), (0.0, 0.0)])
 
     def test_the_battery_rule_and_the_way_home(self):
         # 150 m out along -y (clear of R1) and 150 m back: 300 m and 60 s at

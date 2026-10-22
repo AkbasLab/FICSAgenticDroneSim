@@ -157,6 +157,17 @@ class FaultTests(unittest.TestCase):
         self.assertEqual(result.error_code, S.ErrorCode.SIMULATOR_ERROR)
         self.assertIn("BufferError", result.message)
 
+    def test_a_passing_fault_strikes_its_count_then_clears(self):
+        world = MockWorld()
+        adapter, runner = airborne(world)
+        world.faults.raise_times[("Drone1", PrimitiveKind.MOVE_TO_POSITION)] = 2
+        go = S.GoToWaypointCommand(Waypoint(40, 0, 10))
+        first, second, third = runner.run(go), runner.run(go), runner.run(go)
+        self.assertEqual([r.error_code for r in (first, second)], [S.ErrorCode.SIMULATOR_ERROR] * 2)
+        self.assertIn("1 more to come", first.message)
+        self.assertTrue(third.ok)
+        self.assertEqual(world.faults.raise_times[("Drone1", PrimitiveKind.MOVE_TO_POSITION)], 0)
+
     def test_a_slow_drone_takes_longer(self):
         world = MockWorld()
         adapter, runner = airborne(world)
