@@ -167,6 +167,24 @@ class LowBatteryAndDeadlineTests(unittest.TestCase):
         self.assertGreater(report.facts.batteries[0].remaining, tight.battery.reserve)
         self.assertLess(report.coverage.fraction, 0.95)
 
+    def test_a_slow_drone_is_costed_at_the_speed_it_makes_good(self):
+        # Found in Phase 5 step 5: costing the way home at the planned 5 m/s,
+        # a half-speed drone on S3 at 0.2 %/s turned back with 37.4 % and
+        # landed on 18.0 %, under the reserve -- each metre at half speed
+        # costs twice the hover drain. Costed at the speed it makes good, it
+        # sees the shortfall early and lands well above.
+        single_s3 = scenarios.load_scenario("search_single_001")
+        tight = dataclasses.replace(single_s3, battery=BatterySpec(100.0, 0.2, 0.02, 20.0))
+        def slow(world):
+            world.faults.speed_factor["Drone1"] = 0.5
+        agent, report, _ = fly(tight, "search S3", slow)
+        self.assertIn("low battery", agent.belief.mission.progress["gave_up"])
+        self.assertTrue(report.criterion("C6").passed, report.criterion("C6").detail)
+        self.assertGreater(report.facts.batteries[0].remaining, tight.battery.reserve)
+        # And at the planned speed the same battery finishes the task.
+        _, nominal, _ = fly(tight, "search S3")
+        self.assertTrue(nominal.success, nominal.summary())
+
     def test_a_slow_drone_turns_back_for_the_deadline_alone(self):
         # Plenty of battery, so no battery level is crossed: only the periodic
         # check can see that a half-speed drone will not finish in time.
@@ -274,6 +292,20 @@ class BranchTests(unittest.TestCase):
         retry = self.policy.decide(self.belief, self.failed_event("SEARCH_REGION"))
         self.assertEqual(retry.command.skill.value, "SEARCH_REGION")
         self.assertTrue(retry.reason.startswith("retry 1"))
+
+    def test_the_speed_made_good_is_measured_and_never_above_the_plan(self):
+        self.policy.stage = Stage.SEARCHING
+        start = self.policy.lanes[0]
+        self.policy.search_started_at, self.policy.search_path = 0.0, [start] + self.policy.lanes
+        # Before MIN_SPEED_SAMPLE_S: the planned speed.
+        self.belief.update(Observation(5.0, start[0] + 10.0, start[1], 12, True, 90.0, (), False, "SEARCH_REGION", 2, None))
+        self.assertEqual(self.policy._speed_made_good(self.belief), self.policy.speed_mps)
+        # 25 m along the first lane in 20 s: 1.25 m/s.
+        self.belief.update(Observation(20.0, start[0] + 25.0, start[1], 12, True, 90.0, (), False, "SEARCH_REGION", 2, None))
+        self.assertAlmostEqual(self.policy._speed_made_good(self.belief), 1.25)
+        # 80 m in 10 s would be 8 m/s: held to the planned 5.
+        self.belief.update(Observation(10.0, start[0] + 80.0, start[1], 12, True, 90.0, (), False, "SEARCH_REGION", 2, None))
+        self.assertEqual(self.policy._speed_made_good(self.belief), self.policy.speed_mps)
 
     def test_the_estimate_counts_from_where_the_drone_is(self):
         # Near the end of S1's lanes with 30 %: the last lane and the way home

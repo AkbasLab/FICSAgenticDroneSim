@@ -32,9 +32,12 @@ LOW BATTERY, AND THE DEADLINE. Before starting the outbound work, and then
 at each battery level the agent crosses and each periodic check while that
 work is still ahead: what remains (the rest of the transit, the rest of the
 search measured from where the drone is on its lanes, the route home) is
-costed with the brief's battery model. If it would leave less than the reserve plus
-BATTERY_MARGIN, or the time left would not cover it, the agent drops the
-search and goes home at once (a START replaces the running skill).
+costed with the brief's battery model, at the speed the drone is actually
+making good on its search (never more than planned): time aloft is charged
+by the second, so a slow drone pays more per metre. If it would leave less
+than the reserve plus BATTERY_MARGIN, or the time left would not cover it,
+the agent drops the search and goes home at once (a START replaces the
+running skill).
 
 A FAILED SKILL. Re-plan from where the drone is now and try the stage again,
 up to MAX_RETRIES times. Then give up that stage: an unreachable sector or an
@@ -72,6 +75,8 @@ DEFAULT_ALTITUDE_M = 12.0     # Phase 3's lowest live height
 MAX_RETRIES = 2               # per stage, before giving it up
 BATTERY_MARGIN = 2.0          # percent above the reserve the agent wants to keep
 LANDING_ALLOWANCE_S = 30.0    # time kept for the descent and landing, against the deadline
+MIN_SPEED_SAMPLE_S = 10.0     # a search this long before its speed made good is trusted
+MIN_SPEED_MPS = 0.5           # a floor, so a drone barely moving costs finite, not infinite
 
 
 def remaining_along(path: list[tuple[float, float]], here: tuple[float, float]) -> float:
@@ -115,6 +120,8 @@ class RulePolicy:
         self.region = None
         self.spacing = 0.0
         self.lanes: list[tuple[float, float]] = []
+        self.search_path: list[tuple[float, float]] = []     # where the search began, then its lanes
+        self.search_started_at: float | None = None
         self.retries = 0
         self.gave_up: str | None = None
 
@@ -252,6 +259,8 @@ class RulePolicy:
 
     def _search(self, belief: BeliefState, reason: str) -> Decision:
         self.stage = Stage.SEARCHING
+        self.search_started_at = belief.self_.updated_at
+        self.search_path = [(belief.self_.x, belief.self_.y)] + self.lanes
         return Decision.start(SearchRegionCommand(region=self.region, altitude_m=self.altitude_m,
                                                   spacing_m=self.spacing, speed_mps=self.speed_mps),
                               f"search {self.sector.id}", reason)
@@ -294,7 +303,8 @@ class RulePolicy:
         except NoRouteError:
             home = math.dist(self.lanes[-1], me.home)
         metres = ahead + home
-        seconds = metres / self.speed_mps
+        speed = self._speed_made_good(belief)
+        seconds = metres / speed
         battery = belief.brief.battery
         cost = battery.hover_drain_per_s * seconds + battery.move_drain_per_m * metres
         if me.battery - cost < battery.reserve + BATTERY_MARGIN:
@@ -304,3 +314,22 @@ class RulePolicy:
             return (f"short of time: {belief.time_left:.0f} s left, about {seconds + LANDING_ALLOWANCE_S:.0f} s "
                     f"to finish and get home")
         return None
+
+    def _speed_made_good(self, belief: BeliefState) -> float:
+        """The speed to cost the rest at: the planned speed, or less if the drone is making less.
+
+        Measured along the search's path (from where the search began,
+        through the lanes) by position, over the search so far. Time in the
+        air is charged by the second, so a drone at half speed spends twice
+        the hover drain per metre: costing the way home at the planned speed
+        would bring it in under the reserve. Not yet measurable (under
+        MIN_SPEED_SAMPLE_S into a search, or before one), the planned speed.
+        """
+        me = belief.self_
+        if self.stage is not Stage.SEARCHING or self.search_started_at is None:
+            return self.speed_mps
+        elapsed = me.updated_at - self.search_started_at
+        if elapsed < MIN_SPEED_SAMPLE_S:
+            return self.speed_mps
+        made = length(self.search_path) - remaining_along(self.search_path, (me.x, me.y))
+        return max(MIN_SPEED_MPS, min(self.speed_mps, made / elapsed))

@@ -250,6 +250,7 @@ and kept on purpose. Planning data from every 70B session stands.
 | **`20261021-185737-live1`** search-relay, live | none | 1 flight, judged on 20 seeds | **Phase 4 live flight 1** — two drones in CarlaAir: 20/20 met, no contacts but the ground; its first 2 s caught the drones still falling, fixed before flight 2 |
 | **`20261021-190637-live2`** search-relay, live | none | 1 flight, judged on 20 seeds | **Phase 4 live flight 2** — 20/20 met, no contacts but the ground; drones at rest before observing |
 | **`20261021-190827-live3`** search-relay, live | none | 1 flight, judged on 20 seeds | **Phase 4 live flight 3** — 20/20 met; within 0.22 m of flight 2 throughout; recorded dirty only for flight 2's uncommitted results |
+| **`20261021-215820-exit`** single-agent, mock | none (rule-based agent) | 20 seeds + 5 troubles | **Phase 5 exit run** — one agent told only "search S3": 20/20 seeds met, 5/5 troubles met their checks |
 
 The `p2-` sessions are in `phases/phase-02-repository-architecture/results/`,
 not Phase 1's. They meet every condition in §1 and are the Phase 2 exit

@@ -26,7 +26,10 @@ Mirrored from `AUV-22 — Phase Objectives Checklist`.
 > receiving a complete preflight action list**, recognises success or
 > failure, and decides what to do next.
 
-**Met:** no · **Evidence:** —
+**Met:** on the mock, 2026-10-21 — 20 of 20 seeds completed from the task
+alone; 5 of 5 kinds of trouble recognised and answered as fixed beforehand ·
+**Evidence:** [`evidence/exit-criterion-2026-10-21.md`](evidence/exit-criterion-2026-10-21.md).
+The optional live run (step 6) is not yet flown.
 
 Planned evidence: the rule-based agent, given only a search task, completing
 it on the mock across 20 seeds, judged by Phase 4's evaluator. Then the same
@@ -42,7 +45,8 @@ triggered each decision and what it chose. Optionally, a small live run.
 | A non-blocking action executor | `agentic_uav/control/action_executor.py` | **Done** 2026-10-21; goldens unedited |
 | Events, a minimal belief, and the agent loop | `agentic_uav/core/events.py`, `agentic_uav/agents/` | **Done** 2026-10-21; goldens unedited |
 | The rule-based policy | `agentic_uav/agents/rule_policy.py` | **Done** 2026-10-21; goldens unedited |
-| The exit: nominal and injected-trouble runs; optional live; close | `configs/scenarios/`, `scripts/`, `results/`, `evidence/` | steps 5–6 |
+| The exit: nominal and injected-trouble runs | `configs/scenarios/search_single_001.toml`, `agentic_uav/experiments/single_agent.py`, `scripts/single_agent_exit.py`, `results/`, `evidence/` | **Done** 2026-10-21; exit met on the mock |
+| Optional live run; close | `results/`, `evidence/` | step 6 |
 
 ## Plan
 
@@ -453,7 +457,96 @@ survivors:
   * the estimate counting the whole search as still ahead.
 
 **The goldens did not move.** `record_golden.py --check` matches all four.
-525 tests pass, 16 skipped; audit clean.
+525 tests pass, 16 skipped; audit clean. Committed as `cbb3913`.
+
+### 2026-10-21 — step 5: the exit, met on the mock
+
+**The task's scenario** (`configs/scenarios/search_single_001.toml`) is
+`search_relay_001` cut to one drone and the far sector S3, every other value
+unchanged (a test holds it to that). Reaching S3 means routing round R1;
+searching it is out of the base's radio; what is found there is reported
+only on the way home.
+
+**The exit runs** (`agentic_uav/experiments/single_agent.py`,
+`scripts/single_agent_exit.py`) give the agent the brief and the words
+`"search S3"`, nothing more. They fly it on a fresh mock per run, and judge
+it with Phase 4's evaluator. The criterion's parts are each a check:
+
+* **Completes a search task:** the mission report succeeds (all six of
+  AUV-05's criteria) and the agent itself decided it was finished.
+* **Without a preflight action list:** every skill was a START decision
+  made in answer to an event (`chosen_as_it_went`, read from the trace).
+* **Recognises success or failure, and decides:** five kinds of trouble,
+  each with what the agent must do written into `TROUBLES` before any was
+  flown. A trouble is met when the agent did that, ended the task itself,
+  decided something after every failed skill (`decided_after_every_failure`),
+  and came home safe.
+
+**Choosing the trouble conditions found a flaw in the policy.** The
+conditions were calibrated so that at the planned speed the task always
+fits, and only the trouble breaks it. At half speed on a 0.2 %/s battery,
+the agent turned back with 37.4 % left, estimating 15.8 % to get home, and
+**landed on 18.0 %, under the 20 % reserve**. Its estimate costed the time
+aloft at the planned 5 m/s; at half speed every metre costs twice the hover
+drain. The estimate now uses the speed the drone is actually **making good**
+on its search: measured by position along the path from where the search
+began (so the fly-out to the first lane counts as progress), after 10 s,
+and never above the planned speed. The same drone now turns back early and
+lands on 65.7 %. The deadline estimate uses the same speed. A regression
+test reproduces the original case, and another tests the measurement,
+including the cap.
+
+**The run of record**
+(`results/single-agent-exit-20261021-215820-exit`), at `cbb3913` with the
+step-5 files uncommitted (`agentic_uav` digest `218ab87329156ed8`), took
+4.3 s for 25 flights.
+
+* **Nominal, seeds 1–20: 20 of 20 met.** Each flew the same five skills,
+  each chosen when the last ended: take off; route round R1; search S3; fly
+  home, reporting both targets once back in range at 161.0 s; land. Every
+  run completed in 187.5 s with coverage 1.0, and 72.9 % of the battery left.
+* **Trouble: 5 of 5 met their checks:**
+
+| Trouble | What the agent did |
+|---|---|
+| a fault once, in the transit | retried from where it was; mission success |
+| a fault for good | three transit attempts, gave up, landed on its pad, with the reason in the trace |
+| half speed, 0.25 %/s | turned back 59.5 s in, still on the fly-out to its first lane, having measured that it could not finish; landed on 64.5 % |
+| half speed, 260 s deadline | turned back "short of time"; landed inside the deadline |
+| 0.5 %/s | did not begin the search; landed |
+
+The planned evidence named "a target sighted mid-search" among the
+troubles. It is not a separate run: every nominal run's trace has the
+TARGET_DETECTED events, and the rule policy carries on through them by
+design. Reporting is the way home.
+
+**Evidence:** [`evidence/exit-criterion-2026-10-21.md`](evidence/exit-criterion-2026-10-21.md),
+generated from the record, with the decision traces of seed 17 and of two
+troubles: each decision, its events, what the agent knew, and what it did.
+
+**A second shadowed TestCase name**, caught loudly this time.
+`cls.run = fly_agent_on_mock(...)` in the new tests replaced `TestCase.run`,
+which the runner then tried to call. It is renamed `flight`, and the hygiene
+test now also checks names assigned in a test class and attributes set on
+`self` or `cls`. It looks only at real test classes, since fake runners in
+the tests rightly have a `run` of their own, and it is shown to catch the
+`cls.run` case.
+
+**Tests: 16 new** — `tests/test_single_agent_exit.py` (14: the scenario, the
+nominal run and its record, the troubles, negative controls showing each
+check can fail, including a real run cut short by a 10 s deadline, the
+script) and 2 in `tests/test_rule_policy.py`.
+
+**Mutations: 13, all caught.** The first pass caught 11. Two were untested:
+
+* coming home safe, since no negative control had a run where C6 failed;
+* the cap on the speed made good, since the mock never flies faster than
+  planned.
+
+Step 4's 17 mutations were re-run against the changed policy: all caught.
+
+**The goldens did not move.** `record_golden.py --check` matches all four.
+541 tests pass, 16 skipped; audit clean.
 
 ## Decisions
 
@@ -463,6 +556,8 @@ survivors:
 | 2026-10-21 | **The truth/belief boundary is enforced now, in code and in tests** | It is objective 6.2, but it is cheapest before any agent code exists. Agent code imports nothing that holds ground truth (no scenario, no world, no targets), and what it is handed exposes nothing that leads back to them. AUV-06: "Enforce it in code, not by convention" |
 | 2026-10-21 | **Phase 5's belief is minimal: self, mission, local map** | The lifecycle needs a belief to update. The team and communication blocks, assumptions, staleness and the "what it knew" logger are Phase 6's objectives; building them now would fix their shape before the team exists to shape them. A per-decision trace starts now regardless |
 | 2026-10-21 | **The task is given, the plan is not** | The agent receives the brief's public facts it needs (its sector, the zones, the base, its own battery model) and one task, "search this sector". Every skill it flies, it chose. That is the exit criterion's "without receiving a complete preflight action list" |
+| 2026-10-21 | **The task is S3, the far sector; troubles are fixed in code, with their expectations, before flying** | S3 needs everything a single agent does: routing round a zone, searching out of radio range, reporting on return. Writing each trouble's expected answer before running it is what keeps "recognises and decides" a test rather than a description. |
+| 2026-10-21 | **Cost what remains at the speed the drone makes good, never above the plan** | Time aloft is charged per second, so a slow drone pays more per metre; the planned speed brought one home under its reserve. Capped at the plan, so the estimate can only be conservative. |
 | 2026-10-21 | **The exit is on the mock, judged by Phase 4's evaluator; live is optional** | As Phase 4: the mock runs seeds and injected faults exactly and repeatably; a small live run inside the flown airspace can follow |
 
 ## Open questions

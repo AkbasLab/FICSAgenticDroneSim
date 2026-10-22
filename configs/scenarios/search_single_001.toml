@@ -1,0 +1,65 @@
+# One drone, one sector: the canonical mission's rules, for Phase 5's single agent.
+#
+# AUV-06: "First build one reliable closed-loop agent." This is that agent's
+# task: search_relay_001 with everything a single drone does not need taken
+# away -- the other three drones and three sectors -- and everything that
+# makes the task worth an agent kept. The sector is S3, the far one: reaching
+# it means routing round R1, searching it is out of the base's radio, and
+# what is found there is reported only on the way home.
+#
+# Every other value is search_relay_001's, unchanged: the base, the radio, the
+# zone, detection, the battery, safety, the deadline, two targets.
+
+scenario_id = "search_single_001"
+random_seed = 17
+description = """
+One drone, told only to search S3, must route round a restricted zone to a
+sector out of the base's radio, find two targets, report them, and land on
+its pad, within 15 minutes and its battery.
+"""
+
+faults = []
+
+[mission]
+type = "distributed_search"
+deadline_s = 900
+required_coverage = 0.95
+targets_to_find = 2
+
+[base]
+position = [-8.0, 0.0]
+
+[network]
+profile = "perfect"
+communication_range_m = 100.0
+
+[detection]
+radius_m = 10.0
+min_observation_s = 2.0
+line_of_sight = false
+
+[battery]
+capacity = 100.0
+hover_drain_per_s = 0.05
+move_drain_per_m = 0.02
+reserve = 20.0
+
+[safety]
+min_separation_m = 2.0
+
+[targets]
+count = 2
+placement = "random_in_sectors"
+min_spacing_m = 20.0
+
+[[vehicles]]
+id = "Drone1"
+start = [0.0, 0.0, 0.0]
+
+[[sectors]]
+id = "S3"
+bounds = [120.0, -80.0, 200.0, 0.0]
+
+[[restricted_zones]]
+id = "R1"
+polygon = [[15.0, -15.0], [35.0, -15.0], [35.0, 15.0], [15.0, 15.0]]
