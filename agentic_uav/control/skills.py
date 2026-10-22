@@ -578,11 +578,22 @@ class SkillRunner:
         self._abort.set()
         (via or self.vehicle).cancel(self.vehicle_id)
 
-    def run(self, command: SkillCommand) -> SkillResult:
-        """Execute one skill to its end and report. Never raises for a flight."""
+    def clear_abort(self) -> None:
+        """Forget any abort requested before the next skill starts."""
+        self._abort.clear()
+
+    def run(self, command: SkillCommand, clear_abort: bool = True) -> SkillResult:
+        """Execute one skill to its end and report. Never raises for a flight.
+
+        `clear_abort=False` keeps an abort requested before the skill began,
+        for a caller that cleared it itself before handing the skill to
+        another thread (`ActionExecutor`): otherwise an abort arriving in
+        between would be lost.
+        """
         if not isinstance(command, SkillCommand):
             raise TypeError(f"not a skill command: {command!r}")
-        self._abort.clear()
+        if clear_abort:
+            self._abort.clear()
         skill = command.skill
         details: dict[str, Any] = {}
         started = self.clock.now()

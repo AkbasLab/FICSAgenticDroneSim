@@ -39,7 +39,7 @@ triggered each decision and what it chose. Optionally, a small live run.
 | Artifact | Location | State |
 |---|---|---|
 | Sensing behind the truth/belief boundary | `agentic_uav/core/sensing.py`, `agentic_uav/simulator/sensing.py` | **Done** 2026-10-21; goldens unedited |
-| A non-blocking action executor | `agentic_uav/control/action_executor.py` | step 2 |
+| A non-blocking action executor | `agentic_uav/control/action_executor.py` | **Done** 2026-10-21; goldens unedited |
 | Events, a minimal belief, and the agent loop | `agentic_uav/core/events.py`, `agentic_uav/agents/` | step 3 |
 | The rule-based policy | `agentic_uav/agents/rule_policy.py` | step 4 |
 | The exit: nominal and injected-trouble runs; optional live; close | `configs/scenarios/`, `scripts/`, `results/`, `evidence/` | steps 5–6 |
@@ -159,7 +159,83 @@ added, and the present always airborne.
 Python source no longer goes through heredocs.
 
 **The goldens did not move.** `record_golden.py --check` matches all four.
-465 tests pass, 16 skipped; audit clean.
+465 tests pass, 16 skipped; audit clean. Committed as `5a2e89f`.
+
+### 2026-10-21 — step 2: the action executor — a skill flies on its own thread while the agent watches
+
+**`ActionExecutor`** (`agentic_uav/control/action_executor.py`) runs one
+drone's skills one at a time, each on its own thread.
+
+* **`start(command)`** returns at once with an `Execution`: serial, command,
+  start time, and then the result, or the error if the skill's thread itself
+  raised. A second start while one runs is refused (`ExecutorBusy`): to
+  change course, abort, then start.
+* **`current()`**, **`history()`** and **`busy`** are readable at any moment.
+* **`abort()`** stops the running skill through Phase 3's
+  `SkillRunner.request_abort`, so the drone holds where it is. It records
+  `abort_requested`, and returns False when nothing is running. Live, pass
+  `abort_via`, an adapter on the agent's own connection.
+* **`wait(timeout_s)`** sleeps on the clock in 0.1 s slices until the skill
+  ends; **`close()`** joins the thread, from outside the simulated timeline.
+
+**Built for the shared simulated clock:**
+
+* **The skill's thread joins the timeline before `start` returns.**
+  Otherwise the agent could fall asleep first and time would jump with
+  nothing flying.
+* **A waiting agent sleeps on the clock rather than blocking on the
+  thread**, because a participant that blocks stops time for everyone.
+
+On a real clock the same code runs unchanged; a test flies a short leg with
+the mock in real time, and `start` returns in under 0.2 s.
+
+**One change to Phase 3's `SkillRunner`.** `run` cleared any pending abort as
+it began. An abort asked for between `start` returning and the skill's thread
+reaching `run` would be silently lost, and on the simulated clock that window
+is real. `run` now takes `clear_abort` (default True, as before), and
+`clear_abort()` is public. The executor clears once, before the thread
+starts, and runs with `clear_abort=False`. Every existing caller is
+unchanged, and so are the goldens.
+
+**The agent notices an ending within one slice.** Through the executor, a
+skill flies exactly as when called directly: the same outcomes, durations and
+final positions, tested across five skills. The one difference is that each
+next skill starts up to 0.1 s after the last ended, because `wait` checks
+every 0.1 s. That is the agent's reaction time, during which the drone
+holds. The first version of that test expected identical start times and
+failed on exactly this; it now asserts the bound. Waking the agent at the
+exact instant would need a new kind of sleep in `SimClock`, not worth 0.1 s.
+
+**Tests: 15, in `tests/test_action_executor.py`**, stable over repeated runs:
+
+* starting and watching mid-skill;
+* the same flight as direct calls;
+* determinism;
+* an abort mid-leg stops within a tick and holds;
+* an abort the instant a skill starts (20 runs, then forced);
+* nothing to abort, before and after a skill;
+* the skill after an aborted one runs;
+* one at a time; `wait` giving up; a raising thread recorded, not lost;
+* `SkillRunner`'s `clear_abort`;
+* real time.
+
+**Mutations: 10, all caught.** The first pass caught 6. Three of the four
+survivors were races the tests never forced:
+
+* **`start` not waiting for the thread to join.** In practice the thread
+  joins in time anyway. A clock whose participants pause before joining now
+  forces it.
+* **An instant abort being cleared away.** The thread usually cleared first.
+  A runner that pauses before running now makes the abort certain to arrive
+  first.
+* **A stale abort killing the next skill at birth.** This is a real bug if
+  the guard goes, and no test had started a skill after an aborted one.
+
+The fourth: `abort()` returning True after a skill had already ended, which
+no test had covered.
+
+**The goldens did not move.** `record_golden.py --check` matches all four.
+480 tests pass, 16 skipped; audit clean.
 
 ## Decisions
 
