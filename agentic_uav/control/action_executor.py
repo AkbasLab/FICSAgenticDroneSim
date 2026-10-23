@@ -37,6 +37,13 @@ before it flies, as every flying thread in this project does (Phase 1: an
 AirSim client cannot be shared between threads). The runner itself -- its
 measured ground, its home -- carries over from skill to skill.
 
+THE AGENT GETS A HANDLE, NOT THE EXECUTOR (Phase 6, 6.2). The executor
+holds the runner, and the runner holds the adapter, which in a mock flight
+holds the world: ground truth, one attribute chain away. `handle()` returns
+a `SkillHandle`, a bundle of plain functions -- start, abort, current,
+history, busy, wait -- and the clock, built the way `core.sensing.Sensors`
+is: no attribute of it leads to the runner. `DroneAgent` keeps only that.
+
 ABORT goes through `SkillRunner.request_abort`: the skill stops at its next
 check and holds where it is (every skill contract's abort behaviour). For
 AirSim pass `abort_via`, an adapter on the AGENT's own connection: one
@@ -74,6 +81,23 @@ class Execution:
     @property
     def running(self) -> bool:
         return self.result is None and self.error is None
+
+
+@dataclass(frozen=True)
+class SkillHandle:
+    """What an agent may do with its executor. Plain functions and the clock: no runner, no adapter."""
+
+    clock: Clock
+    start: Callable[[SkillCommand], Execution]
+    abort: Callable[[], bool]
+    current: Callable[[], "Execution | None"]
+    history: Callable[[], "tuple[Execution, ...]"]
+    is_busy: Callable[[], bool]
+    wait: Callable[..., "Execution | None"]
+
+    @property
+    def busy(self) -> bool:
+        return self.is_busy()
 
 
 class ActionExecutor:
@@ -149,6 +173,31 @@ class ActionExecutor:
             step = WAIT_SLICE_S if end is None else max(0.0, min(WAIT_SLICE_S, end - self.clock.now()))
             self.clock.sleep(step)
         return self.current()
+
+    def handle(self) -> SkillHandle:
+        """The agent's view of this executor: what it may do, and nothing that leads to the runner."""
+        executor = self
+
+        # Plain functions, not bound methods: a bound method's __self__ is the executor.
+        def start(command: SkillCommand) -> Execution:
+            return executor.start(command)
+
+        def abort() -> bool:
+            return executor.abort()
+
+        def current() -> Execution | None:
+            return executor.current()
+
+        def history() -> tuple[Execution, ...]:
+            return executor.history()
+
+        def is_busy() -> bool:
+            return executor.busy
+
+        def wait(timeout_s: float | None = None) -> Execution | None:
+            return executor.wait(timeout_s)
+
+        return SkillHandle(self.clock, start, abort, current, history, is_busy, wait)
 
     def close(self) -> None:
         """Join the skill thread. Only from a thread that is NOT on the simulated timeline."""

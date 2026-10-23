@@ -47,7 +47,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from ..control.action_executor import ActionExecutor
+from ..control.action_executor import ActionExecutor, SkillHandle
 from ..core.events import Event, Trigger
 from ..core.scenario import MissionBrief
 from ..core.sensing import Sensors
@@ -81,7 +81,7 @@ class TraceEntry:
 
 
 class DroneAgent:
-    def __init__(self, brief: MissionBrief, sensors: Sensors, executor: ActionExecutor, policy: Policy,
+    def __init__(self, brief: MissionBrief, sensors: Sensors, executor: ActionExecutor | SkillHandle, policy: Policy,
                  validator: Callable[[Decision, BeliefState], Verdict] = validate,
                  tick_s: float = DEFAULT_TICK_S, periodic_s: float = DEFAULT_PERIODIC_S,
                  battery_levels: tuple[float, ...] = DEFAULT_BATTERY_LEVELS) -> None:
@@ -89,13 +89,15 @@ class DroneAgent:
             raise ValueError("tick and periodic check must be positive")
         self.brief = brief
         self.sensors = sensors
-        self.executor = executor
+        # Only the handle: the executor itself leads, through its runner and
+        # adapter, to the simulator (6.2).
+        self.executor: SkillHandle = executor.handle() if isinstance(executor, ActionExecutor) else executor
         self.policy = policy
         self.validator = validator
         self.tick_s = tick_s
         self.periodic_s = periodic_s
         self.battery_levels = tuple(sorted(battery_levels, reverse=True))
-        self.clock = executor.clock
+        self.clock = self.executor.clock
         self.trace: list[TraceEntry] = []
         self.observations = 0
         self.finished = False

@@ -38,7 +38,7 @@ seen, and where teammates really were.
 |---|---|---|
 | The full belief schema | `agentic_uav/agents/belief_state.py` | **Done** 2026-10-22; goldens unedited; Phase 5's decisions unchanged |
 | Stale information: teammate records | `agentic_uav/core/team.py`, `agentic_uav/agents/belief_state.py` | **Done** 2026-10-22; goldens unedited; Phase 5's decisions unchanged |
-| The boundary, hardened | `agentic_uav/agents/`, `tests/` | step 3 |
+| The boundary, hardened | `agentic_uav/control/action_executor.py` (`SkillHandle`), `agentic_uav/agents/drone_agent.py`, `tests/test_sensing.py` | **Done** 2026-10-22; goldens unedited; Phase 5's decisions unchanged |
 | Assumptions, recorded by the policy | `agentic_uav/agents/rule_policy.py` | step 4 |
 | The knowledge log and the exit | `agentic_uav/experiments/`, `scripts/`, `results/`, `evidence/` | step 5 |
 | Optional live flight; close | `results/`, `evidence/` | step 6 |
@@ -206,6 +206,75 @@ reverted from the copy taken before them, never from git.
 **The goldens did not move.** `record_golden.py --check` matches all four.
 591 tests pass, 17 skipped; audit clean.
 
+### 2026-10-22 — step 3: the boundary, hardened (6.2)
+
+**Where the agent could reach the simulator.** A walk of a flying agent's
+ordinary attributes and containers (`search S3`, 30 s in, 493 objects) found
+exactly one path to a simulator object: `agent.executor.runner.vehicle`, the
+mock adapter, and through it the world. It was the one found while planning.
+Nothing else the agent held — brief, sensors, belief, policy, clock, trace —
+led anywhere.
+
+**The fix: the agent holds a handle, not the executor**
+(`control/action_executor.py`). `ActionExecutor.handle()` returns a
+`SkillHandle`: the clock and six plain functions — `start`, `abort`,
+`current`, `history`, `is_busy` (and a `busy` property), `wait` — built like
+`core.sensing.Sensors`, so no attribute leads to the runner (a bound method's
+`__self__` would have). `DroneAgent` turns an executor it is given into its
+handle and keeps only that; every caller is unchanged. The same walk of the
+agent now finds nothing (402 objects).
+
+**The source check refuses the ways round an import ban**
+(`tests/test_sensing.py`, applied to every module in `agents/` and to
+`core/sensing.py` and `core/team.py`):
+
+* any dunder attribute (`__closure__`, `__self__`, `__globals__`, …): a
+  closure or a bound method is how a bundle of functions could lead back;
+* the introspection modules `gc`, `inspect`, `ctypes`, `sys`, `importlib`,
+  `builtins`;
+* the dynamic built-ins `getattr`, `setattr`, `delattr`, `vars`, `globals`,
+  `locals`, `eval`, `exec`, `compile`, `__import__`, `breakpoint`.
+
+None of the agent code used any of them. Thirteen new breaches, one per way,
+are each caught, so the check cannot pass vacuously.
+
+**A runtime check beside the source check.** `ground_truth_reached(root)`
+walks ordinary attributes, lists, tuples, sets and dicts, and reports any
+world, scenario, adapter, target, runner, observer or monitor it meets. A
+test flies the rule agent 30 s into its search and requires the walk to find
+nothing; the same walk from the raw executor finds the runner, and a
+simulator object hidden in each kind of container is found, so the walk can
+see what it is looking for. What it deliberately does not follow: closures
+and other dunder attributes, which the source check forbids agent code to
+touch.
+
+**What is still true, and stated rather than hidden:** Python cannot make an
+object unreachable. The sensor and handle functions close over the world and
+the executor; code that read `__closure__` would get there. The boundary is
+that no agent code may, and two tests — one of the source, one of the
+running object — make sure it does not.
+
+**Phase 5's decisions still did not move:** its exit re-run (`agentic_uav`
+digest `bd3ccb44b2b4dd19`, not kept), on all 25 flights, identical to the run
+of record. The real-time live-path test (`AUV_SLOW_TESTS`), which builds the
+agent on a live-style executor with a connection per skill, passes with the
+handle.
+
+**Tests: 4 new, in `tests/test_sensing.py`:** the handle is functions and the
+clock; the handle does what the executor does (start, wait with and without a
+limit, busy, abort, history, current); a flying agent reaches nothing of the
+simulator; and the walk looks inside containers; plus thirteen more breaches in the
+existing check. Also removed while writing it: a skip for `from __future__`
+imports that could never matter.
+
+**Mutations: 16, all caught.** The first pass caught 14. Two were untested:
+the handle's `wait` ignoring its time limit (nothing called it with one), and
+the walk skipping lists (no simulator object sat in one). Each is tested now.
+Mutated files were restored from the text read just before, never from git.
+
+**The goldens did not move.** `record_golden.py --check` matches all four.
+595 tests pass, 17 skipped; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -214,6 +283,8 @@ reverted from the copy taken before them, never from git.
 | 2026-10-22 | **Velocity and heading are estimates from the drone's own positions, labelled as such** | Sensing gives position, not velocity; deriving it inside the belief keeps the boundary, and the label keeps a reader from taking it for a measurement |
 | 2026-10-22 | **A teammate report's age counts from when it was true, and an expired record is kept but never current** | 6.3: "Agents must not treat an old position report as current." Relayed news arrives late, so its arrival time says nothing about its age; keeping the expired record lets the agent say what it last heard, which the knowledge log needs |
 | 2026-10-22 | **Older news never replaces newer** | Under degraded links (Phase 10) delivery can be out of order; a late, older report must not roll the belief back |
+| 2026-10-22 | **The agent holds a handle of plain functions, never the executor** | The executor's runner holds the adapter, and the mock adapter holds the world: ground truth one attribute chain away. A handle built like `Sensors` gives the agent everything it does with skills and nothing that leads further |
+| 2026-10-22 | **The boundary is checked twice: in the source, and on the running agent** | Python cannot make an object unreachable, so the rule is that agent code may not reach through dunders, introspection or dynamic lookups (source check), and that nothing the agent holds through ordinary attributes is a simulator object (runtime walk) |
 
 ## Open questions
 

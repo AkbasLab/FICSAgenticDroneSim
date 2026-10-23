@@ -12,6 +12,13 @@ about the same instant. And the readings must be ALL the agent gets: AUV-06
 6.2 makes the truth/belief boundary the one mistake that silently invalidates
 the study, so it is enforced here, by walking what the agent is handed and
 by reading the agent package's imports.
+
+Phase 6 (6.2) hardened it. A walk of a flying agent's ordinary attributes
+found one path to the simulator -- agent.executor.runner.vehicle, the
+adapter -- so the agent now holds a handle of plain functions instead, and
+a test walks the whole agent mid-flight. The source check also refuses the
+ways round an import ban: dunder attributes (`__closure__`, `__self__`,
+`__globals__`, ...), the introspection modules, and the dynamic built-ins.
 """
 
 import ast
@@ -217,6 +224,87 @@ class BoundaryTests(unittest.TestCase):
             with self.subTest(module=os.path.basename(path)):
                 self.assertEqual(boundary_violations(path, "agentic_uav.agents"), [])
 
+    def test_the_executor_handle_is_functions_and_the_clock(self):
+        from agentic_uav.control.action_executor import ActionExecutor, SkillHandle
+        world = MockWorld(declared=["Drone1"])
+        handle = ActionExecutor(S.SkillRunner(MockVehicleAdapter(world), "Drone1", world.clock)).handle()
+        self.assertIsInstance(handle, SkillHandle)
+        for f in dataclasses.fields(handle):
+            value = getattr(handle, f.name)
+            with self.subTest(field=f.name):
+                if f.name == "clock":
+                    self.assertIs(value, world.clock)
+                else:
+                    self.assertIsInstance(value, types.FunctionType)
+                    self.assertFalse(hasattr(value, "__self__"))
+        self.assertEqual({f.name for f in dataclasses.fields(SkillHandle)},
+                         {"clock", "start", "abort", "current", "history", "is_busy", "wait"})
+
+    def test_the_handle_does_what_the_executor_does(self):
+        from agentic_uav.control.action_executor import ActionExecutor
+        world = MockWorld(declared=["Drone1"])
+        MockVehicleAdapter(world).place_vehicle("Drone1", Position(0, 0, world.ground_z))
+        executor = ActionExecutor(S.SkillRunner(MockVehicleAdapter(world), "Drone1", world.clock))
+        handle = executor.handle()
+        out = {}
+
+        def agent():
+            with world.clock.participate():
+                handle.start(S.TakeOffCommand(altitude_m=10))
+                out["up"] = handle.wait().result.ok
+                handle.start(S.GoToWaypointCommand(Waypoint(50, 0, 10)))       # 10 s at 5 m/s
+                early = handle.wait(timeout_s=3.0)                              # gives up while it flies
+                out["early"] = (early.running, handle.busy)
+                out["aborted"] = handle.abort()
+                out["ended"] = handle.wait().result.status.value
+
+        thread = threading.Thread(target=agent)
+        thread.start()
+        thread.join()
+        executor.close()
+        self.assertEqual(out, {"up": True, "early": (True, True), "aborted": True, "ended": "aborted"})
+        self.assertEqual(handle.history(), executor.history())
+        self.assertEqual(handle.current(), executor.current())
+
+    def test_the_walk_looks_inside_containers(self):
+        # A simulator object tucked into a list, tuple, set or dict is still found.
+        from types import SimpleNamespace
+        adapter = MockVehicleAdapter(MockWorld(declared=["Drone1"]))
+        for holder in ([1, adapter], (adapter,), {"k": adapter}, SimpleNamespace(inner=[{"k": (adapter,)}])):
+            with self.subTest(holder=type(holder).__name__):
+                self.assertEqual([name for name, _ in ground_truth_reached(holder)], ["MockVehicleAdapter"])
+
+    def test_a_flying_agent_reaches_nothing_of_the_simulator(self):
+        # Mid-flight, every ordinary attribute, recursively: no world, no
+        # scenario, no adapter, no target. The same walk from the raw
+        # executor does reach the adapter, so the walk can see one.
+        from agentic_uav.agents.drone_agent import DroneAgent
+        from agentic_uav.agents.rule_policy import RulePolicy
+        from agentic_uav.control.action_executor import ActionExecutor
+        world = MockWorld(declared=["Drone1"])
+        MockVehicleAdapter(world).place_vehicle("Drone1", Position(0, 0, world.ground_z))
+        executor = ActionExecutor(S.SkillRunner(MockVehicleAdapter(world), "Drone1", world.clock))
+        sensors = mock_sensors(world, ONE, "Drone1")
+        out = {}
+
+        def fly():
+            with world.clock.participate():
+                agent = DroneAgent(ONE.brief(), sensors, executor, RulePolicy())
+                agent.assign("search S3")
+                for _ in range(60):                  # 30 s: taken off, routed, searching
+                    agent.step()
+                    world.clock.sleep(agent.tick_s)
+                out["agent"] = agent
+
+        thread = threading.Thread(target=fly)
+        thread.start()
+        thread.join()
+        executor.close()
+        agent = out["agent"]
+        self.assertEqual(agent.executor.current().command.skill.value, "SEARCH_REGION")
+        self.assertEqual(ground_truth_reached(agent), [])
+        self.assertEqual(ground_truth_reached(executor), [("SkillRunner", "root.runner")])     # and on, to the adapter
+
     def test_the_check_would_catch_a_breach(self):
         # It must not pass vacuously: each way of breaking the rule is caught.
         import shutil
@@ -227,7 +315,20 @@ class BoundaryTests(unittest.TestCase):
                            "from ..simulator import sensing\n",
                            "from ..core.scenario import Scenario\n",
                            "import agentic_uav.experiments.evaluation\n",
-                           "def f(s):\n    return s.random_seed\n"):
+                           "def f(s):\n    return s.random_seed\n",
+                           "def f(fn):\n    return fn.__closure__\n",
+                           "def f(m):\n    return m.__self__\n",
+                           "def f(fn):\n    return fn.__globals__['world']\n",
+                           "import gc\n",
+                           "import inspect as look\n",
+                           "from ctypes import cast\n",
+                           "import sys\n",
+                           "from importlib import import_module\n",
+                           "def f(x):\n    return getattr(x, 'runner')\n",
+                           "def f():\n    return globals()\n",
+                           "def f(x):\n    return vars(x)\n",
+                           "def f(code):\n    return eval(code)\n",
+                           "def f():\n    return __import__('agentic_uav.simulator')\n"):
                 path = os.path.join(folder, "breach.py")
                 with open(path, "w", encoding="utf-8") as h:
                     h.write(source)
@@ -237,8 +338,45 @@ class BoundaryTests(unittest.TestCase):
             shutil.rmtree(folder, ignore_errors=True)
 
 
-FORBIDDEN_MODULES = ("agentic_uav.simulator", "agentic_uav.experiments")
-FORBIDDEN_NAMES = {"Scenario", "TargetSpec", "place_targets", "MockWorld", "random_seed"}
+FORBIDDEN_MODULES = ("agentic_uav.simulator", "agentic_uav.experiments",
+                     # the ways round an import ban (Phase 6, 6.2)
+                     "gc", "inspect", "ctypes", "sys", "importlib", "builtins")
+FORBIDDEN_NAMES = {"Scenario", "TargetSpec", "place_targets", "MockWorld", "random_seed",
+                   "getattr", "setattr", "delattr", "vars", "globals", "locals", "eval", "exec",
+                   "compile", "__import__", "breakpoint"}
+
+
+def is_dunder(name):
+    return len(name) > 4 and name.startswith("__") and name.endswith("__")
+
+
+GROUND_TRUTH_TYPES = ("MockWorld", "Scenario", "MockVehicleAdapter", "AirSimAdapter", "Target",
+                      "PollingObserver", "SeparationMonitor", "SkillRunner")
+
+
+def ground_truth_reached(root):
+    """Every simulator object reachable from `root` through ordinary attributes and containers."""
+    from collections import deque
+    seen, found, queue = {id(root)}, [], deque([("root", root)])
+    while queue:
+        path, obj = queue.popleft()
+        if type(obj).__name__ in GROUND_TRUTH_TYPES:
+            found.append((type(obj).__name__, path))
+            continue
+        if isinstance(obj, dict):
+            steps = [(f"[{k!r}]", v) for k, v in obj.items()]
+        elif isinstance(obj, (list, tuple, set, frozenset, deque)):
+            steps = [(f"[{i}]", v) for i, v in enumerate(obj)]
+        elif isinstance(obj, (str, bytes, int, float, bool, type(None))):
+            steps = []
+        else:
+            attrs = getattr(obj, "__dict__", None)
+            steps = [(f".{k}", v) for k, v in attrs.items()] if isinstance(attrs, dict) else []
+        for step, child in steps:
+            if id(child) not in seen:
+                seen.add(id(child))
+                queue.append((path + step, child))
+    return found
 
 
 def boundary_violations(path, package):
@@ -260,6 +398,8 @@ def boundary_violations(path, package):
                 found.append(f"names {node.id}")
             elif isinstance(node, ast.Attribute) and node.attr in FORBIDDEN_NAMES:
                 found.append(f"reads .{node.attr}")
+            elif isinstance(node, ast.Attribute) and is_dunder(node.attr):
+                found.append(f"reaches through .{node.attr}")
             continue
         for module, name in imported:
             if any(module == m or module.startswith(m + ".") for m in FORBIDDEN_MODULES):
