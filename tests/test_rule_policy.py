@@ -325,6 +325,130 @@ class BranchTests(unittest.TestCase):
                 self.assertEqual(d.kind, DecisionKind.CONTINUE)
 
 
+class AssumptionTests(unittest.TestCase):
+    """Phase 6: the policy records what each decision rests on, and decides exactly as before."""
+
+    def start(self, scenario, task="search S1", at=(0.0, 0.0), airborne=False):
+        brief = scenario.brief()
+        belief = BeliefState.start(brief, "Drone1", Observation(0.0, at[0], at[1], 12.0 if airborne else 0.0,
+                                                                airborne, 100.0, (), True, None, 0, None))
+        policy = RulePolicy()
+        policy.decide(belief, (Event(Trigger.TASK_ASSIGNED, 0.0, {"task": task}),))
+        return policy, belief
+
+    def held(self, belief):
+        return {k: (a.statement, a.evidence, a.confidence) for k, a in belief.assumptions.items()}
+
+    def test_an_accepted_task_records_what_it_takes_from_the_brief(self):
+        _, belief = self.start(single("S1"))
+        held = self.held(belief)
+        self.assertEqual(sorted(held), ["battery_model", "hazards", "reporting", "teammates"])
+        self.assertEqual(held["battery_model"][1], "linear: 0.05 %/s aloft and 0.02 %/m moving, from the brief, uncalibrated")
+        self.assertEqual(held["hazards"][1], "zones in the brief: R1; no hazard sensed")
+        self.assertEqual(held["reporting"], ("what it sees reaches the base on the way home",
+                                             "home is 8.0 m from the base, inside its 100 m radio", 0.8))
+        self.assertEqual(held["teammates"], ("separation is not its concern: it flies alone",
+                                             "no other drone on the brief's roster", 1.0))
+
+    def test_a_home_beyond_the_radio_is_said_so(self):
+        far = single("S1", network=dataclasses.replace(BASE.network, communication_range_m=5.0))
+        _, belief = self.start(far)
+        self.assertEqual(self.held(belief)["reporting"][:2], ("what it sees may never reach the base",
+                                                              "home is 8.0 m from the base, beyond its 5 m radio"))
+
+    def test_teammates_on_the_roster_unheard_then_heard(self):
+        from agentic_uav.core.team import TeamReport
+        policy, belief = self.start(BASE)                                  # four on the roster
+        self.assertEqual(self.held(belief)["teammates"][1:], ("Drone2, Drone3, Drone4 on the roster, none heard", 0.5))
+        belief.receive(TeamReport("Drone3", 0.5, "message"), now=1.0)
+        belief.update(Observation(1.0, 0, 0, 0, False, 100.0, (), True, None, 0, None))
+        policy.decide(belief, (Event(Trigger.PERIODIC, 1.0),))
+        self.assertEqual(self.held(belief)["teammates"][1], "current reports from Drone3; this policy does not plan around them")
+
+    def test_a_task_it_does_not_know_assumes_nothing(self):
+        _, belief = self.start(single("S1"), task="dance")
+        self.assertEqual(belief.assumptions, {})
+
+    def test_speed_planned_then_measured_capped_and_floored(self):
+        policy, belief = self.start(single("S1"))
+        policy._shortfall(belief)
+        self.assertEqual(self.held(belief)["speed"],
+                         ("the drone keeps making 5.00 m/s for the rest",
+                          "the planned speed; not measured until the search is under way", 0.5))
+        policy.stage = Stage.SEARCHING
+        start = policy.lanes[0]
+        policy.search_started_at, policy.search_path = 0.0, [start] + policy.lanes
+        cases = [(5.0, 10.0, "the planned speed; the search is 5 s old, under the 10 s needed to measure it", 5.0, 0.5),
+                 (20.0, 25.0, "made good 1.25 m/s over 20 s of search", 1.25, 0.9),
+                 (10.0, 80.0, "made good 8.00 m/s over 10 s of search, capped at the planned 5", 5.0, 0.9),
+                 (40.0, 4.0, "made good 0.10 m/s over 40 s of search, floored at 0.5", 0.5, 0.9)]
+        for t, along, evidence, speed, confidence in cases:
+            with self.subTest(t=t):
+                belief.update(Observation(t, start[0] + along, start[1], 12, True, 90.0, (), False, "SEARCH_REGION", 2, None))
+                policy._shortfall(belief)
+                self.assertEqual(self.held(belief)["speed"],
+                                 (f"the drone keeps making {speed:.2f} m/s for the rest", evidence, confidence))
+
+    def test_fits_is_held_while_it_does_and_dropped_when_not(self):
+        policy, belief = self.start(single("S1"))
+        policy.stage = Stage.SEARCHING
+        x, y = policy.lanes[-2]
+        belief.update(Observation(60.0, x, y, 12.0, True, 30.0, (), False, "SEARCH_REGION", 2, None))
+        self.assertIsNone(policy._shortfall(belief))
+        statement, evidence, confidence = self.held(belief)["fits"]
+        self.assertEqual(statement, "the battery and the time cover the rest of the task")
+        self.assertIn("30.0 % (reserve 20 + 2)", evidence)
+        self.assertEqual(confidence, 0.5)                    # no better than the speed it was costed at
+        belief.update(Observation(61.0, *policy.lanes[0], 12.0, True, 30.0, (), False, "SEARCH_REGION", 2, None))
+        self.assertIn("low battery", policy._shortfall(belief))
+        self.assertNotIn("fits", belief.assumptions)
+
+    def test_short_of_time_drops_fits_too(self):
+        policy, belief = self.start(single("S1"))
+        self.assertIsNone(policy._shortfall(belief))
+        self.assertIn("fits", belief.assumptions)             # it fits, with 900 s to go
+        belief.mission.deadline_at = 10.0                     # nowhere near enough
+        self.assertIn("short of time", policy._shortfall(belief))
+        self.assertNotIn("fits", belief.assumptions)
+
+    def test_a_retry_is_assumed_and_let_go(self):
+        policy, belief = self.start(single("S3"), task="search S3", airborne=True)
+        self.assertIs(policy.stage, Stage.TO_SECTOR)
+        failed = (Event(Trigger.SKILL_FAILED, 1.0, {"skill": "FOLLOW_WAYPOINTS", "status": "failed", "message": "no"}),)
+        policy.decide(belief, failed)
+        self.assertEqual(self.held(belief)["retry"],
+                         ("the to_sector failure was passing: trying again from here",
+                          "FOLLOW_WAYPOINTS failed: no; retry 1 of 2", 0.5))
+        policy.decide(belief, (Event(Trigger.SKILL_SUCCEEDED, 5.0, {"skill": "FOLLOW_WAYPOINTS"}),))
+        self.assertNotIn("retry", belief.assumptions)
+        for _ in range(MAX_RETRIES):                          # the search fails, and is retried
+            policy.decide(belief, (Event(Trigger.SKILL_FAILED, 6.0, {"skill": "SEARCH_REGION", "status": "failed"}),))
+        self.assertIn("retry", belief.assumptions)
+        policy.decide(belief, (Event(Trigger.SKILL_FAILED, 7.0, {"skill": "SEARCH_REGION", "status": "failed"}),))
+        self.assertIn("gave up", policy.gave_up)
+        self.assertNotIn("retry", belief.assumptions)          # given up: no longer assumed passing
+
+    def test_an_unchanged_assumption_keeps_its_time(self):
+        policy, belief = self.start(single("S1"))
+        first = belief.assumptions["teammates"].at
+        belief.update(Observation(30.0, 0, 0, 12, True, 99.0, (), True, None, 0, None))
+        policy.decide(belief, (Event(Trigger.PERIODIC, 30.0),))
+        self.assertEqual(belief.assumptions["teammates"].at, first)
+        self.assertEqual(belief.snapshot()["assumptions"][-1]["age_s"], 30.0)
+
+    def test_in_flight_the_trace_says_what_each_decision_rested_on(self):
+        tight = single("S1", battery=BatterySpec(100.0, 0.3, 0.02, 20.0))
+        def slow(world):
+            world.faults.speed_factor["Drone1"] = 0.5
+        agent, _, _ = fly(tight, "search S1", slow)
+        turned = next(e for e in agent.trace if e.decision.reason.startswith("low battery"))
+        held = {a["key"]: a for a in turned.belief["assumptions"]}      # what it held as it decided
+        self.assertEqual(sorted(held), ["battery_model", "fits", "hazards", "reporting", "speed", "teammates"])
+        self.assertTrue(held["speed"]["evidence"].startswith("made good 2.50 m/s"))
+        after = {a["key"] for a in agent.trace[agent.trace.index(turned) + 1].belief["assumptions"]}
+        self.assertNotIn("fits", after)                       # it no longer fits: let go
+
+
 class RemainingAlongTests(unittest.TestCase):
 
     LANES = [(0.0, 0.0), (10.0, 0.0), (10.0, 5.0), (0.0, 5.0)]     # 25 m in all

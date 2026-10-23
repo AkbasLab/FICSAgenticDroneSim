@@ -39,7 +39,7 @@ seen, and where teammates really were.
 | The full belief schema | `agentic_uav/agents/belief_state.py` | **Done** 2026-10-22; goldens unedited; Phase 5's decisions unchanged |
 | Stale information: teammate records | `agentic_uav/core/team.py`, `agentic_uav/agents/belief_state.py` | **Done** 2026-10-22; goldens unedited; Phase 5's decisions unchanged |
 | The boundary, hardened | `agentic_uav/control/action_executor.py` (`SkillHandle`), `agentic_uav/agents/drone_agent.py`, `tests/test_sensing.py` | **Done** 2026-10-22; goldens unedited; Phase 5's decisions unchanged |
-| Assumptions, recorded by the policy | `agentic_uav/agents/rule_policy.py` | step 4 |
+| Assumptions, recorded by the policy | `agentic_uav/agents/rule_policy.py` | **Done** 2026-10-23; goldens unedited; Phase 5's decisions unchanged |
 | The knowledge log and the exit | `agentic_uav/experiments/`, `scripts/`, `results/`, `evidence/` | step 5 |
 | Optional live flight; close | `results/`, `evidence/` | step 6 |
 
@@ -275,6 +275,53 @@ Mutated files were restored from the text read just before, never from git.
 **The goldens did not move.** `record_golden.py --check` matches all four.
 595 tests pass, 17 skipped; audit clean.
 
+### 2026-10-23 — step 4: assumptions, recorded by the policy
+
+**What the rule policy takes to be true without checking it**, now recorded
+in the belief's `assumptions` block where it starts to rely on each
+(`agents/rule_policy.py`):
+
+| Key | Statement | Evidence it records | When |
+|---|---|---|---|
+| `battery_model` | the brief's battery model holds | the brief's drain rates, uncalibrated | an accepted task |
+| `hazards` | the brief's zones are all the hazards, 2 m clear is safe | the zones listed; no hazard sensed | an accepted task |
+| `reporting` | what it sees reaches the base on the way home — or, if home is out of range, that it may never | home's distance from the base against its radio | an accepted task |
+| `teammates` | separation is not its concern | alone on the roster; or who is on it, unheard; or whose reports are current | every decision |
+| `speed` | the drone keeps making v m/s for the rest | planned (and why not yet measured), or made good over t s, capped or floored | every estimate |
+| `fits` | the battery and the time cover the rest of the task | percent and seconds needed against those left | every estimate that fits; dropped when it does not |
+| `retry` | the failure was passing | the failure, and which retry | a retry; dropped on success or when the stage is given up |
+
+* **Confidences are the policy's own, fixed per kind of evidence**
+  (`CONFIDENCE`: the brief 0.8, a planned number 0.5, a measured one 0.9,
+  alone 1.0, unheard teammates 0.5, a retry 0.5), and not calibrated. `fits`
+  is held no more confidently than the speed it was costed at.
+* **An unchanged assumption keeps its time**, so its age says how long it has
+  been held. In the slow-battery trouble, the drone turned back at 59.5 s on
+  a `fits` it had held for 19.5 s: about 62 % needed, from the check at 40 s,
+  costed at 2.50 m/s measured over 20 s of search. The next decision no
+  longer holds `fits`.
+* **It changes no decision.** Phase 5's exit re-run (`agentic_uav` digest
+  `71cb73c48559b233`, not kept), on all 25 flights: decisions, events,
+  verdicts, actions and reports identical to the run of record.
+
+**Tests: 10, in `tests/test_rule_policy.py` (`AssumptionTests`):** what an
+accepted task takes from the brief; a home beyond the radio; teammates
+unheard, then heard; an unknown task assuming nothing; the speed planned,
+too early to measure, measured, capped and floored; `fits` held, then
+dropped for battery and for time; a retry assumed and let go on success and
+on give-up; an unchanged assumption keeping its time; and, in a real
+slow-battery flight, what the turning-back decision rested on.
+
+**Mutations: 20, all caught.** The first pass caught 19. The survivor: the
+short-of-time test never held `fits` before the shortfall, so dropping it
+could not be seen; it now checks `fits` is held first. Also: the first run
+stopped at its fourth mutant, whose target text I had written with a blank
+line the file does not have; the file was untouched, and the rest ran after
+every target was checked to occur exactly once.
+
+**The goldens did not move.** `record_golden.py --check` matches all four.
+605 tests pass, 17 skipped; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -285,6 +332,7 @@ Mutated files were restored from the text read just before, never from git.
 | 2026-10-22 | **Older news never replaces newer** | Under degraded links (Phase 10) delivery can be out of order; a late, older report must not roll the belief back |
 | 2026-10-22 | **The agent holds a handle of plain functions, never the executor** | The executor's runner holds the adapter, and the mock adapter holds the world: ground truth one attribute chain away. A handle built like `Sensors` gives the agent everything it does with skills and nothing that leads further |
 | 2026-10-22 | **The boundary is checked twice: in the source, and on the running agent** | Python cannot make an object unreachable, so the rule is that agent code may not reach through dunders, introspection or dynamic lookups (source check), and that nothing the agent holds through ordinary attributes is a simulator object (runtime walk) |
+| 2026-10-23 | **The policy records its assumptions where it starts to rely on them; their confidences are fixed per kind of evidence, not calibrated** | 6.1's assumptions block exists so a reader can audit a decision. Fixed confidences say how much the policy leans on each without pretending to a calibration nothing here has done; an LLM policy (Phase 12) will have to state its own |
 
 ## Open questions
 

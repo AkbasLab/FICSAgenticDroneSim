@@ -48,6 +48,25 @@ the task with the reason in the trace.
 A REFUSED DECISION (the validation step said no). Outbound work refused --
 it would not leave enough battery -- means going home. A way home refused
 means landing where it is.
+
+WHAT IT ASSUMES (Phase 6; AUV-06 6.1's `assumptions` block). Each decision
+rests on things the policy takes to be true without checking them. It
+records each in the belief -- statement, evidence, when, how confidently --
+where it starts to rely on it, so a reader of the trace can audit it:
+
+    battery_model   the brief's linear battery model holds             accepted task
+    hazards         the brief's zones are all the hazards; 2 m clear   accepted task
+    reporting       what it sees reaches the base on the way home      accepted task
+    teammates       separation is not its concern                      every decision
+    speed           the drone keeps the speed it is costed at          every estimate
+    fits            the rest of the task fits the battery and time     every estimate; dropped when not
+    retry           the failure was passing                            a retry; dropped on success or give-up
+
+The confidences are the policy's own, fixed per kind of evidence (CONFIDENCE),
+and not calibrated: they say how much the policy leans on each, for the
+reader. An assumption whose statement and evidence have not changed keeps
+its time, so its age says how long it has been held. None of this changes a
+decision: the policy decides exactly as before, and says what it assumed.
 """
 
 from __future__ import annotations
@@ -77,6 +96,14 @@ BATTERY_MARGIN = 2.0          # percent above the reserve the agent wants to kee
 LANDING_ALLOWANCE_S = 30.0    # time kept for the descent and landing, against the deadline
 MIN_SPEED_SAMPLE_S = 10.0     # a search this long before its speed made good is trusted
 MIN_SPEED_MPS = 0.5           # a floor, so a drone barely moving costs finite, not infinite
+CONFIDENCE = {
+    "brief": 0.8,             # what the public brief says, uncalibrated (Phase 4's models)
+    "planned": 0.5,           # the plan's own number, not yet measured
+    "measured": 0.9,          # measured in this flight
+    "alone": 1.0,             # the roster has no one else on it
+    "unheard": 0.5,           # teammates exist, none heard: they could be anywhere
+    "retry": 0.5,             # a skill failed once; the next try may fail too
+}
 
 
 def remaining_along(path: list[tuple[float, float]], here: tuple[float, float]) -> float:
@@ -129,6 +156,8 @@ class RulePolicy:
 
     def decide(self, belief: BeliefState, events: tuple[Event, ...]) -> Decision:
         decision = self._decide(belief, events)
+        if self.sector is not None and self.stage is not Stage.DONE:
+            self._assume_teammates(belief)
         progress = belief.mission.progress
         progress.update(stage=self.stage.value, sector=None if self.sector is None else self.sector.id,
                         retries=self.retries)
@@ -170,6 +199,7 @@ class RulePolicy:
         self.region = searched_region(r, self.spacing, self.altitude_m,
                                       lane_end_overrun(belief.brief.detection, self.speed_mps), obstacles)
         self.lanes = [(w.x, w.y) for w in nav.lawnmower(self.region, self.spacing, self.altitude_m)]
+        self._assume_from_brief(belief)
         if belief.self_.airborne:
             return self._to_sector(belief, f"task {task!r}, already airborne")
         self.stage = Stage.TAKING_OFF
@@ -178,6 +208,7 @@ class RulePolicy:
 
     def _succeeded(self, belief: BeliefState) -> Decision:
         self.retries = 0
+        belief.drop_assumption("retry")
         if self.stage in (Stage.TAKING_OFF, Stage.TO_SECTOR):
             # Before starting outbound work, not only during it: never begin
             # a search the battery or the time cannot finish.
@@ -204,6 +235,10 @@ class RulePolicy:
         retry = self.retries < MAX_RETRIES
         if retry:
             self.retries += 1
+            self._assume(belief, "retry", f"the {self.stage.value} failure was passing: trying again from here",
+                         f"{why}; retry {self.retries} of {MAX_RETRIES}", CONFIDENCE["retry"])
+        else:
+            belief.drop_assumption("retry")
         stage = self.stage
         if stage is Stage.TAKING_OFF:
             if retry:
@@ -304,16 +339,87 @@ class RulePolicy:
             home = math.dist(self.lanes[-1], me.home)
         metres = ahead + home
         speed = self._speed_made_good(belief)
+        self._assume_speed(belief, speed)
         seconds = metres / speed
         battery = belief.brief.battery
         cost = battery.hover_drain_per_s * seconds + battery.move_drain_per_m * metres
         if me.battery - cost < battery.reserve + BATTERY_MARGIN:
+            belief.drop_assumption("fits")
             return (f"low battery: {me.battery:.1f} % left, about {cost:.1f} % to finish and get home, "
                     f"under the {battery.reserve:g} % reserve plus {BATTERY_MARGIN:g}")
         if belief.time_left < seconds + LANDING_ALLOWANCE_S:
+            belief.drop_assumption("fits")
             return (f"short of time: {belief.time_left:.0f} s left, about {seconds + LANDING_ALLOWANCE_S:.0f} s "
                     f"to finish and get home")
+        self._assume(belief, "fits", "the battery and the time cover the rest of the task",
+                     f"about {cost:.1f} % and {seconds + LANDING_ALLOWANCE_S:.0f} s needed for {metres:.0f} m; "
+                     f"{me.battery:.1f} % (reserve {battery.reserve:g} + {BATTERY_MARGIN:g}) and "
+                     f"{belief.time_left:.0f} s left", min(CONFIDENCE["brief"], self._speed_confidence(belief)))
         return None
+
+    # -------------------------------------------------- what it assumes
+
+    @staticmethod
+    def _assume(belief: BeliefState, key: str, statement: str, evidence: str, confidence: float) -> None:
+        """Record an assumption; one unchanged in statement and evidence keeps its time."""
+        held = belief.assumptions.get(key)
+        if held is not None and (held.statement, held.evidence) == (statement, evidence):
+            return
+        belief.assume(key, statement, evidence, at=belief.self_.updated_at, confidence=confidence)
+
+    def _assume_from_brief(self, belief: BeliefState) -> None:
+        brief = belief.brief
+        b = brief.battery
+        self._assume(belief, "battery_model", "the brief's battery model holds",
+                     f"linear: {b.hover_drain_per_s:g} %/s aloft and {b.move_drain_per_m:g} %/m moving, "
+                     f"from the brief, uncalibrated", CONFIDENCE["brief"])
+        zones = ", ".join(z.id for z in brief.restricted_zones) or "none"
+        self._assume(belief, "hazards", f"the brief's zones are all the hazards, and {ZONE_CLEARANCE_M:g} m clear of them is safe",
+                     f"zones in the brief: {zones}; no hazard sensed", CONFIDENCE["brief"])
+        home, base = belief.self_.home, (brief.base.x, brief.base.y)
+        reach, range_m = math.dist(home, base), brief.network.communication_range_m
+        if reach <= range_m:
+            self._assume(belief, "reporting", "what it sees reaches the base on the way home",
+                         f"home is {reach:.1f} m from the base, inside its {range_m:g} m radio", CONFIDENCE["brief"])
+        else:
+            self._assume(belief, "reporting", "what it sees may never reach the base",
+                         f"home is {reach:.1f} m from the base, beyond its {range_m:g} m radio", CONFIDENCE["brief"])
+
+    def _assume_teammates(self, belief: BeliefState) -> None:
+        roster = sorted(belief.team.members)
+        if not roster:
+            self._assume(belief, "teammates", "separation is not its concern: it flies alone",
+                         "no other drone on the brief's roster", CONFIDENCE["alone"])
+            return
+        current = sorted(belief.current_teammates())
+        if current:
+            self._assume(belief, "teammates", "separation is not its concern: its teammates keep clear",
+                         f"current reports from {', '.join(current)}; this policy does not plan around them",
+                         CONFIDENCE["unheard"])
+        else:
+            self._assume(belief, "teammates", "separation is not its concern: its teammates keep clear",
+                         f"{', '.join(roster)} on the roster, none heard", CONFIDENCE["unheard"])
+
+    def _assume_speed(self, belief: BeliefState, speed: float) -> None:
+        me = belief.self_
+        if self.stage is not Stage.SEARCHING or self.search_started_at is None:
+            evidence = "the planned speed; not measured until the search is under way"
+        elif me.updated_at - self.search_started_at < MIN_SPEED_SAMPLE_S:
+            evidence = (f"the planned speed; the search is {me.updated_at - self.search_started_at:.0f} s old, "
+                        f"under the {MIN_SPEED_SAMPLE_S:g} s needed to measure it")
+        else:
+            elapsed = me.updated_at - self.search_started_at
+            made = length(self.search_path) - remaining_along(self.search_path, (me.x, me.y))
+            evidence = (f"made good {made / elapsed:.2f} m/s over {elapsed:.0f} s of search"
+                        + (f", capped at the planned {self.speed_mps:g}" if made / elapsed > self.speed_mps else "")
+                        + (f", floored at {MIN_SPEED_MPS:g}" if made / elapsed < MIN_SPEED_MPS else ""))
+        self._assume(belief, "speed", f"the drone keeps making {speed:.2f} m/s for the rest", evidence,
+                     self._speed_confidence(belief))
+
+    def _speed_confidence(self, belief: BeliefState) -> float:
+        measured = (self.stage is Stage.SEARCHING and self.search_started_at is not None
+                    and belief.self_.updated_at - self.search_started_at >= MIN_SPEED_SAMPLE_S)
+        return CONFIDENCE["measured"] if measured else CONFIDENCE["planned"]
 
     def _speed_made_good(self, belief: BeliefState) -> float:
         """The speed to cost the rest at: the planned speed, or less if the drone is making less.
