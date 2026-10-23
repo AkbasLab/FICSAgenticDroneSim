@@ -131,7 +131,11 @@ class BriefTests(unittest.TestCase):
         snap = fresh().snapshot()
         self.assertEqual(snap["mission"]["constraints"],
                          {"restricted_zones": ["R1"], "reserve": TEAM.battery.reserve,
-                          "min_separation_m": TEAM.safety.min_separation_m, "deadline_s": TEAM.mission.deadline_s})
+                          "min_separation_m": TEAM.safety.min_separation_m, "deadline_s": TEAM.mission.deadline_s,
+                          "targets_to_find": 2,
+                          "sectors": [{"id": s.id, "bounds": [s.region.x_min, s.region.y_min, s.region.x_max,
+                                                              s.region.y_max]} for s in TEAM.sectors]})
+        self.assertEqual(snap["mission"]["constraints"]["sectors"][2], {"id": "S3", "bounds": [120.0, -80.0, 200.0, 0.0]})
         r1 = TEAM.restricted_zones[0].polygon.vertices
         self.assertEqual(snap["local_map"]["restricted_zones"], {"R1": [list(p) for p in r1]})
 

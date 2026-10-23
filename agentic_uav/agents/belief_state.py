@@ -194,7 +194,10 @@ class BeliefState:
         constraints = {"restricted_zones": [z.id for z in brief.restricted_zones],
                        "reserve": brief.battery.reserve,
                        "min_separation_m": brief.safety.min_separation_m,
-                       "deadline_s": brief.mission.deadline_s}
+                       "deadline_s": brief.mission.deadline_s,
+                       "targets_to_find": brief.mission.targets_to_find,
+                       "sectors": [{"id": s.id, "bounds": [s.region.x_min, s.region.y_min, s.region.x_max, s.region.y_max]}
+                                   for s in brief.sectors]}
         mission = MissionBelief(brief.scenario_id, None, first.at + brief.mission.deadline_s,
                                 brief.battery.reserve, constraints=constraints)
         local_map = LocalMap(restricted_zones={z.id: z.polygon.vertices for z in brief.restricted_zones})

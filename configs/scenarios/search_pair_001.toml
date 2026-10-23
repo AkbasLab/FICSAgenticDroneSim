@@ -1,0 +1,72 @@
+# Two drones, two sectors, for Phase 6's knowledge log: two independent agents.
+#
+# search_relay_001 cut to Drone1 and Drone2 and the near sectors S1 and S2,
+# every other value unchanged (a test holds it to that). Each drone is given
+# its own task -- Drone1 "search S1", Drone2 "search S2" -- and neither can
+# hear the other: nothing yet carries a teammate's state (Phase 7's messages
+# will). So each flies knowing its teammate is on the roster and nothing
+# more, and the knowledge log can show exactly that: what each knew of the
+# other ("never heard") against where the other really was.
+
+scenario_id = "search_pair_001"
+random_seed = 17                 # places the targets; NOT in the controller's brief
+description = """
+Two drones on a start line each search one 80 m sector for two targets,
+report them to a base whose radio reaches 100 m, avoid a restricted zone on
+the direct path, and return, within 15 minutes and their batteries. Each
+knows only its own task; neither hears the other.
+"""
+
+faults = []
+
+[mission]
+type = "distributed_search"
+deadline_s = 900
+required_coverage = 0.95
+targets_to_find = 2
+
+[base]
+position = [-8.0, 0.0]
+
+[network]
+profile = "perfect"
+communication_range_m = 100.0
+
+[detection]
+radius_m = 10.0
+min_observation_s = 2.0
+line_of_sight = false
+
+[battery]
+capacity = 100.0
+hover_drain_per_s = 0.05
+move_drain_per_m = 0.02
+reserve = 20.0
+
+[safety]
+min_separation_m = 2.0
+
+[targets]
+count = 2
+placement = "random_in_sectors"
+min_spacing_m = 20.0
+
+[[vehicles]]
+id = "Drone1"
+start = [0.0, 0.0, 0.0]
+
+[[vehicles]]
+id = "Drone2"
+start = [4.0, 0.0, 0.0]
+
+[[sectors]]
+id = "S1"
+bounds = [40.0, -80.0, 120.0, 0.0]
+
+[[sectors]]
+id = "S2"
+bounds = [40.0, 0.0, 120.0, 80.0]
+
+[[restricted_zones]]
+id = "R1"
+polygon = [[15.0, -15.0], [35.0, -15.0], [35.0, 15.0], [15.0, 15.0]]

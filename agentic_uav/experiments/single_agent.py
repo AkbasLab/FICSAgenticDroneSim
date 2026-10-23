@@ -25,6 +25,13 @@ is shown:
 The seeds are Phase 4's EXIT_SEEDS (1-20). Each flight is a fresh mock
 world, the drone on its pad, the agent on its own thread on the shared
 simulated clock.
+
+SEVERAL INDEPENDENT AGENTS (Phase 6): `fly_agents_on_mock` flies one agent
+per drone, each told only its own task, on one mock world. They share the
+clock and the airspace, nothing else: no agent hears another (Phase 7's
+messages will change that), and each flies at its own height, Phase 4's
+12 m plus 4 m per drone. It is what Phase 6's knowledge log needs to show an
+agent that knows a teammate is on the roster and nothing more.
 """
 
 from __future__ import annotations
@@ -38,6 +45,7 @@ from ..agents.decision import DecisionKind
 from ..agents.drone_agent import DroneAgent, TraceEntry
 from ..agents.rule_policy import RulePolicy
 from ..control.action_executor import ActionExecutor
+from ..control.scripted import ALTITUDE_STEP_M, BASE_ALTITUDE_M
 from ..control.monitor import SeparationMonitor
 from ..control.skills import SkillRunner
 from ..core.clock import Clock
@@ -210,6 +218,86 @@ def trouble_runs(scenario: Scenario, task: str = EXIT_TASK,
         ok, problems = trouble.check(run)
         out.append((trouble, run, ok, problems))
     return out
+
+
+# ------------------------------------------------- several independent agents
+
+PAIR_TASKS = {"Drone1": "search S1", "Drone2": "search S2"}
+
+
+@dataclass(frozen=True)
+class TeamAgentRun:
+    """Several agents flown together on one mock world, each given only its own task."""
+
+    label: str
+    seed: int
+    tasks: dict[str, str]
+    report: MissionReport
+    traces: dict[str, tuple[TraceEntry, ...]]
+    finished: dict[str, bool]
+    skills: dict[str, tuple[tuple[str, str], ...]]
+    start: float
+    trajectories: dict[str, Trajectory] = field(default_factory=dict, repr=False)
+
+    @property
+    def met(self) -> bool:
+        """Mission success, every agent ended its task itself, every skill chosen as it went."""
+        chosen = all(any(e.decision.kind is DecisionKind.START for e in t)
+                     and all(e.events for e in t if e.decision.kind is DecisionKind.START)
+                     for t in self.traces.values())
+        return self.report.success and all(self.finished.values()) and chosen
+
+
+def fly_agents_on_mock(scenario: Scenario, tasks: dict[str, str] | None = None,
+                       label: str = "independent") -> TeamAgentRun:
+    """One agent per drone in `tasks` (default: every drone on PAIR_TASKS), together, none hearing another."""
+    tasks = dict(PAIR_TASKS if tasks is None else tasks)
+    drones = [v.id for v in scenario.vehicles]
+    unknown = sorted(set(tasks) - set(drones))
+    if unknown:
+        raise ValueError(f"not on {scenario.scenario_id}'s roster: {unknown}")
+    world = MockWorld(declared=drones)
+    adapter = MockVehicleAdapter(world)
+    for v in scenario.vehicles:
+        adapter.place_vehicle(v.id, Position(v.start_x, v.start_y, world.ground_z))
+    heights = {d: BASE_ALTITUDE_M + i * ALTITUDE_STEP_M for i, d in enumerate(drones)}
+    executors = {d: ActionExecutor(SkillRunner(MockVehicleAdapter(world), d, world.clock)) for d in tasks}
+    sensors = {d: mock_sensors(world, scenario, d) for d in tasks}
+    agents: dict[str, DroneAgent] = {}
+    errors: dict[str, BaseException] = {}
+    barrier = threading.Barrier(len(tasks))
+    start = world.clock.now()
+
+    def body(drone: str) -> None:
+        with world.clock.participate():
+            try:
+                barrier.wait()                    # every agent on the timeline before time moves
+                agent = DroneAgent(scenario.brief(), sensors[drone], executors[drone],
+                                   RulePolicy(altitude_m=heights[drone]))
+                agent.assign(tasks[drone])
+                agent.run(max_s=MAX_FLIGHT_S)
+                agents[drone] = agent
+            except BaseException as exc:          # recorded, never silent
+                errors[drone] = exc
+
+    threads = [threading.Thread(target=body, args=(d,), name=f"{d}-agent") for d in tasks]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    for e in executors.values():
+        e.close()
+    if errors:
+        drone, exc = next(iter(errors.items()))
+        raise RuntimeError(f"{drone}'s agent raised: {type(exc).__name__}: {exc}") from exc
+    trajectories = mock_trajectories(world, drones)
+    report = evaluate(scenario, trajectories, start, world.clock.now(), contacts=world.contacts())
+    skills = {d: tuple((e.command.skill.value, "running" if e.running else
+                        (e.result.status.value if e.result is not None else "error"))
+                       for e in executors[d].history()) for d in tasks}
+    return TeamAgentRun(label, scenario.random_seed, tasks, report,
+                        {d: tuple(a.trace) for d, a in agents.items()},
+                        {d: a.finished for d, a in agents.items()}, skills, start, trajectories)
 
 
 # ------------------------------------------------------------------- live

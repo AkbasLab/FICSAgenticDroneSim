@@ -24,7 +24,10 @@ Mirrored from `AUV-22 — Phase Objectives Checklist`.
 > The experiment logger can show, for each decision, **exactly what the agent
 > knew and what it did not know**.
 
-**Met:** no · **Evidence:** —
+**Met:** on the mock, 2026-10-23 — 1340 of 1340 decisions, in 40 flights,
+logged complete, correct and without a leak · **Evidence:**
+[`evidence/exit-criterion-2026-10-23.md`](evidence/exit-criterion-2026-10-23.md).
+The optional live flight (step 6) is not yet flown.
 
 Planned evidence: a knowledge log for every decision of the single agent's 20
 exit seeds, and of a two-drone run of two independent agents: what each knew
@@ -40,7 +43,7 @@ seen, and where teammates really were.
 | Stale information: teammate records | `agentic_uav/core/team.py`, `agentic_uav/agents/belief_state.py` | **Done** 2026-10-22; goldens unedited; Phase 5's decisions unchanged |
 | The boundary, hardened | `agentic_uav/control/action_executor.py` (`SkillHandle`), `agentic_uav/agents/drone_agent.py`, `tests/test_sensing.py` | **Done** 2026-10-22; goldens unedited; Phase 5's decisions unchanged |
 | Assumptions, recorded by the policy | `agentic_uav/agents/rule_policy.py` | **Done** 2026-10-23; goldens unedited; Phase 5's decisions unchanged |
-| The knowledge log and the exit | `agentic_uav/experiments/`, `scripts/`, `results/`, `evidence/` | step 5 |
+| The knowledge log and the exit | `agentic_uav/experiments/knowledge.py`, `agentic_uav/experiments/single_agent.py` (`fly_agents_on_mock`), `configs/scenarios/search_pair_001.toml`, `scripts/knowledge_exit.py`, `results/`, `evidence/` | **Done** 2026-10-23; exit met on the mock |
 | Optional live flight; close | `results/`, `evidence/` | step 6 |
 
 ## Plan
@@ -322,6 +325,106 @@ every target was checked to occur exactly once.
 **The goldens did not move.** `record_golden.py --check` matches all four.
 605 tests pass, 17 skipped; audit clean.
 
+### 2026-10-23 — step 5: the knowledge log, and the exit met on the mock
+
+**The logger** (`agentic_uav/experiments/knowledge.py`) sits on the
+experiments side of the boundary: it reads a flight's ground truth (`Truth`:
+the trajectories, the targets from the seed, the radio links solved exactly,
+each drone's detections) and joins it to the belief each decision was made
+on. Nothing it computes reaches an agent. For each decision:
+
+* **Known:** every field of the snapshot, by walking it, with its source —
+  sensing now, an estimate from its own positions, the brief, its own
+  executor, its own decisions, a teammate report, an assumption — and its age
+  where it has one (sightings, assumptions, teammate records).
+* **Unknown, as the agent records it:** fields held as "unknown" (with why:
+  velocity before two readings, heading when hovering, the link's latency,
+  loss and peers until Phase 7), teammates never heard, expired teammate
+  records, where the targets it has not found are, and sectors it has not
+  searched.
+* **The truth gap:** each target it has not seen — where, in which sector,
+  and when this drone will first see it, if ever — and each teammate's true
+  position against what it believed.
+
+**Three checks on every decision:** *complete* (the six blocks; every field
+has a known source), *correct* (position, battery and base link match the
+truth at that instant within 0.01 m and 0.01 %, since the snapshot rounds;
+its sightings are exactly what this drone had detected), and *no leak* (no
+unseen target's id or position, no teammate's true position, anywhere in what
+it knew).
+
+**Two public facts added to the belief,** so the agent's own record can say
+what it does not know: `mission.constraints` now carries the brief's
+`targets_to_find` and its sectors. "Where 2 more targets are" and "S2 not
+searched" are then the agent's own knowledge of its ignorance, not the
+logger's. Phase 5's decisions did not move (exit re-run, digest
+`7bb546fe63088f65`: identical on all 25 flights).
+
+**Two independent agents** (`fly_agents_on_mock`, `search_pair_001`: the
+canonical mission cut to Drone1, Drone2, S1 and S2, every other value
+unchanged, tested). One rule agent per drone, each told only its task,
+Drone1 "search S1" at 12 m and Drone2 "search S2" at 16 m, Phase 4's height
+spacing; they share the clock and the airspace and hear nothing of each
+other. 20 of 20 seeds met, deterministic. In seed 17 they came within
+3.25 m of each other at 148 s, on the way home, each holding the other as
+"never heard": their heights kept them apart, not anything either knew.
+That is the gap Phase 7 onwards exists to close.
+
+**The run of record** (`results/knowledge-exit-20261023-095034-exit`, at
+`8a5597f` with the step-5 files uncommitted, `agentic_uav` digest
+`7bb546fe63088f65`): **40 of 40 flights met their tasks; 1340 of 1340
+decisions passed all three checks** — 471 of the single agent's on seeds
+1–20, 869 of the pair's. Every decision of every flight is in the record,
+in full (7.3 MB): the claim is "for each decision", so none is sampled.
+
+**Evidence:** [`evidence/exit-criterion-2026-10-23.md`](evidence/exit-criterion-2026-10-23.md),
+generated from the record: every flight's counts; one decision in full (the
+single agent about to search: what it knew by source, its assumptions, what
+it recorded as unknown, and the two targets it had not seen, with when it
+would); how the gap closed over that flight; and every decision of the pair
+with what each believed of the other against where the other was.
+
+**Two checks of mine were wrong at first, and the agent right each time:**
+
+* **The flight's end.** The last decision, at the landing, failed
+  "correct": the belief said the base link was up, the truth said not. The
+  flight's last trajectory knot was at 187.49999999999963 s and the clock at
+  187.5 s; `Truth` ended the radio picture at the knot. It now takes the
+  end from the clock, as the evaluator does, and a test pins the case.
+* **A velocity read as a position.** The pair's decision at 154.5 s failed
+  "no leak" on every seed: Drone2, descending at `[0.0, 0.0, -1.0]` m/s,
+  appeared to know Drone1's true position, over its pad at `[0.0, 0.0, 1.0]`.
+  The leak check now leaves its own velocity out — a speed, not a place —
+  and a test pins that exact decision. I first described the case as a
+  velocity at rest; finding the actual match showed the descent, and the
+  comment and test say so.
+
+The completeness check also caught a gap of mine on its first run: the
+three link qualities held as unknown had no source in the logger's map.
+
+**Tests: 27, in `tests/test_knowledge.py`:** the pair scenario; the two
+agents (each completes its task, its own height, neither ever hears the
+other, deterministic, the roster enforced, met needs every agent to finish);
+the single log (every decision passes; sources and ages; what it did not
+know before searching; one target found, one to find; nothing unseen after;
+the first sighting counted from the flight's start, with the whole flight
+shifted 1000 s; the last decision at the flight's end; a logged entry read
+back the same); the pair log (both pass; in time order across both; a
+teammate never heard against where it was; the other's sector unknown; its
+own velocity not a teammate's position; a teammate heard, then expired); each
+check failing when broken; and the script. Also: `cls.run` in the new tests
+shadowed `TestCase.run` again, caught at once and renamed.
+
+**Mutations: 24, all caught.** The first pass caught 19. The five survivors
+were test gaps: exactly one target found; an expired teammate record; the
+first sighting counted from 0 rather than the flight's start (every mock
+flight starts at 0 — the trap Phase 4 met, met the same way); the log's time
+order; and a pair run met with one agent unfinished. Each is tested now.
+Every target was checked to occur exactly once before the run.
+
+**The goldens did not move.** `record_golden.py --check` matches all four.
+632 tests pass, 17 skipped; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -333,6 +436,9 @@ every target was checked to occur exactly once.
 | 2026-10-22 | **The agent holds a handle of plain functions, never the executor** | The executor's runner holds the adapter, and the mock adapter holds the world: ground truth one attribute chain away. A handle built like `Sensors` gives the agent everything it does with skills and nothing that leads further |
 | 2026-10-22 | **The boundary is checked twice: in the source, and on the running agent** | Python cannot make an object unreachable, so the rule is that agent code may not reach through dunders, introspection or dynamic lookups (source check), and that nothing the agent holds through ordinary attributes is a simulator object (runtime walk) |
 | 2026-10-23 | **The policy records its assumptions where it starts to rely on them; their confidences are fixed per kind of evidence, not calibrated** | 6.1's assumptions block exists so a reader can audit a decision. Fixed confidences say how much the policy leans on each without pretending to a calibration nothing here has done; an LLM policy (Phase 12) will have to state its own |
+| 2026-10-23 | **The knowledge log lives on the experiments side and never reaches an agent** | It reads ground truth to show the gap; if any of it flowed back, the boundary it is there to show would be the first thing it broke |
+| 2026-10-23 | **Every decision of every flight is kept in full** | The criterion is "for each decision"; a sample would show only that some were logged |
+| 2026-10-23 | **The pair flies independent agents at Phase 4's heights, hearing nothing** | Without messages (Phase 7) a teammate can only be "never heard"; the heights keep them apart while neither knows of the other, which the log now shows |
 
 ## Open questions
 
