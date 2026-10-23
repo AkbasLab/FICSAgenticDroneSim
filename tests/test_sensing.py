@@ -243,7 +243,8 @@ FORBIDDEN_NAMES = {"Scenario", "TargetSpec", "place_targets", "MockWorld", "rand
 
 def boundary_violations(path, package):
     """Every way the module at `path`, in `package`, reaches past the boundary."""
-    tree = ast.parse(open(path, encoding="utf-8").read(), path)
+    with open(path, encoding="utf-8") as h:
+        tree = ast.parse(h.read(), path)
     found = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):

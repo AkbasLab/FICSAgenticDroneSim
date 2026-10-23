@@ -12,16 +12,28 @@ THE SIX BLOCKS (AUV-06, 6.1):
 * `mission`: id, objective, constraints, deadline, progress.
 * `local_map`: searched regions, observed and reported targets, known
   hazards, restricted zones.
-* `team`: one entry per teammate on the brief's roster. Phase 6 leaves every
-  entry "never heard": nothing yet carries a teammate's state to this drone.
-  Phase 7's messages fill it.
+* `team`: one entry per teammate on the brief's roster, "never heard" until
+  a `core.team.TeamReport` about it is received (`receive`). Nothing in a
+  flight delivers one yet: Phase 7's messages will. See STALE INFORMATION.
 * `communication`: whether the base is reachable, from sensing. Latency,
   loss rate and connected peers are UNKNOWN until Phase 7 measures them, and
   are held as None, never as zero: a zero would claim a perfect link.
 * `assumptions`: what the agent is taking to be true, on what evidence, since
   when, how confidently. One per key; a newer one replaces the older.
 
-EVERY FIELD COMES FROM A READING OR FROM THE AGENT ITSELF. Position,
+STALE INFORMATION (6.3): "Agents must not treat an old position report as
+current." Every teammate record carries the report's timestamp (when the
+news was true at its source), its age now, its source, its confidence and
+its expiration (`at + ttl_s`). Confidence falls linearly with age, from the
+source's own value to zero at expiry. An expired record is KEPT, so the
+agent can still say what it last heard and when, but `current_teammates()`
+leaves it out and the snapshot marks it expired; the tick on which a record
+expires reports it (`changes["team_expired"]`). A report older than the one
+already held never replaces it: news arriving out of order is not newer.
+A report about itself, about a drone not on the roster, or dated in the
+future is refused, and the reason is returned.
+
+EVERY FIELD COMES FROM A READING, A RECEIVED REPORT OR THE AGENT ITSELF. Position,
 airborne, battery, sightings and the base link from `core.sensing`; the
 current skill and health from the agent's own executor; the task, progress
 and assumptions from its own decisions; zones, constraints, deadline,
@@ -40,6 +52,7 @@ from typing import Any
 from ..core.geometry import Region
 from ..core.scenario import MissionBrief
 from ..core.sensing import Sighting
+from ..core.team import TeamReport
 
 SCHEMA_VERSION = 2                     # 1 was Phase 5's three blocks
 ESTIMATED = "estimated from own positions"
@@ -112,11 +125,36 @@ class LocalMap:
     restricted_zones: dict[str, tuple[tuple[float, float], ...]] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class TeamRecord:
+    """The latest report held about one teammate, and when it arrived."""
+
+    report: TeamReport
+    received_at: float
+
+    @property
+    def expires_at(self) -> float:
+        return self.report.at + self.report.ttl_s
+
+    def age(self, now: float) -> float:
+        """How old the news is: counted from when it was true, not from when it arrived."""
+        return now - self.report.at
+
+    def current(self, now: float) -> bool:
+        return now < self.expires_at
+
+    def confidence(self, now: float) -> float:
+        """The source's confidence, falling linearly with age to zero at expiry."""
+        left = 1.0 - self.age(now) / self.report.ttl_s
+        return self.report.confidence * min(1.0, max(0.0, left))
+
+
 @dataclass
 class TeamBelief:
     """One entry per teammate on the roster; None means never heard from."""
 
-    members: dict[str, Any] = field(default_factory=dict)
+    members: dict[str, TeamRecord | None] = field(default_factory=dict)
+    expired: set[str] = field(default_factory=set)       # members whose record has been seen to expire
 
 
 @dataclass
@@ -187,7 +225,39 @@ class BeliefState:
         me.x, me.y, me.altitude_m, me.airborne = obs.x, obs.y, obs.altitude_m, obs.airborne
         me.battery, me.base_link, me.current_skill, me.updated_at = obs.battery, obs.base_link, obs.skill, obs.at
         self.communication.base_reachable = obs.base_link
+        expired = sorted(d for d, r in self.team.members.items()
+                         if r is not None and not r.current(obs.at) and d not in self.team.expired)
+        if expired:
+            self.team.expired.update(expired)
+            changes["team_expired"] = expired
         return changes
+
+    def receive(self, report: TeamReport, now: float) -> tuple[bool, str]:
+        """Take in one report about a teammate. Returns whether it was kept, and why."""
+        me = self.self_.vehicle_id
+        if report.drone == me:
+            return False, "about itself"
+        if report.drone not in self.team.members:
+            return False, f"{report.drone} is not on the roster"
+        if report.at > now:
+            return False, f"dated {report.at - now:.3f} s in the future"
+        held = self.team.members[report.drone]
+        if held is not None and report.at <= held.report.at:
+            return False, f"no newer than the report held (from {held.report.at:.3f})"
+        record = TeamRecord(report, now)
+        self.team.members[report.drone] = record
+        if record.current(now):
+            self.team.expired.discard(report.drone)
+        return True, "kept"
+
+    def teammate(self, drone: str) -> TeamRecord | None:
+        """The latest record held about `drone`, current or not; None if never heard."""
+        return self.team.members[drone]
+
+    def current_teammates(self) -> dict[str, TeamRecord]:
+        """Only the records still current now: what may be acted on as fact."""
+        now = self.self_.updated_at
+        return {d: r for d, r in self.team.members.items() if r is not None and r.current(now)}
 
     def assume(self, key: str, statement: str, evidence: str, at: float, confidence: float) -> Assumption:
         """Record what the agent is taking to be true; a newer assumption under `key` replaces the older."""
@@ -230,7 +300,7 @@ class BeliefState:
                           "reported_targets": sorted(lm.reported_targets),
                           "known_hazards": list(lm.known_hazards),
                           "restricted_zones": {k: [list(p) for p in v] for k, v in sorted(lm.restricted_zones.items())}},
-            "team": {d: (rec if rec is not None else "never heard") for d, rec in sorted(self.team.members.items())},
+            "team": {d: _team_view(rec, now) for d, rec in sorted(self.team.members.items())},
             "communication": {"base_reachable": c.base_reachable,
                               "base_reachable_for_s": round(now - c.base_reachable_since, 3),
                               "estimated_latency_s": _known(c.estimated_latency_s),
@@ -264,6 +334,18 @@ class BeliefState:
             h.skill_failures += 1
             h.last_failure = f"{obs.last_skill or 'skill'} {obs.last_skill_status}"
             h.last_failure_at = obs.at
+
+
+def _team_view(record: TeamRecord | None, now: float) -> Any:
+    if record is None:
+        return "never heard"
+    r = record.report
+    return {"position": _known(None if r.position is None else [round(v, 3) for v in r.position]),
+            "role": _known(r.role), "task": _known(r.task), "status": _known(r.status),
+            "source": r.source, "age_s": round(record.age(now), 3),
+            "received_age_s": round(now - record.received_at, 3),
+            "confidence": round(record.confidence(now), 3), "expires_in_s": round(record.expires_at - now, 3),
+            "current": record.current(now)}
 
 
 def _known(value: Any) -> Any:

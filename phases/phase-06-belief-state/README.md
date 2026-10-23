@@ -37,7 +37,7 @@ seen, and where teammates really were.
 | Artifact | Location | State |
 |---|---|---|
 | The full belief schema | `agentic_uav/agents/belief_state.py` | **Done** 2026-10-22; goldens unedited; Phase 5's decisions unchanged |
-| Stale information: teammate records | `agentic_uav/agents/belief_state.py` | step 2 |
+| Stale information: teammate records | `agentic_uav/core/team.py`, `agentic_uav/agents/belief_state.py` | **Done** 2026-10-22; goldens unedited; Phase 5's decisions unchanged |
 | The boundary, hardened | `agentic_uav/agents/`, `tests/` | step 3 |
 | Assumptions, recorded by the policy | `agentic_uav/agents/rule_policy.py` | step 4 |
 | The knowledge log and the exit | `agentic_uav/experiments/`, `scripts/`, `results/`, `evidence/` | step 5 |
@@ -144,12 +144,76 @@ seed 17 deciding as Phase 5's record.
 **The goldens did not move.** `record_golden.py --check` matches all four.
 582 tests pass, 17 skipped; audit clean.
 
+### 2026-10-22 — step 2: stale information (6.3)
+
+**What can be told about a teammate** (`agentic_uav/core/team.py`): a
+`TeamReport` — the teammate, `at` (when the news was TRUE at its source),
+`source` (`message`, `relay` or `base`), `confidence` (0..1, the source's),
+`ttl_s` (how long after `at` it may be treated as current; 10 s by default
+until Phase 7 sets heartbeat periods), and the content: position, role,
+task, status, any of which may be absent. It is the received-messages half of
+6.2's boundary, beside `core/sensing.py`, and like it needs nothing from the
+simulator (tested). Phase 7's network will deliver these; until then only
+tests do, so in every flight the team block stays "never heard".
+
+**What the belief does with one** (`BeliefState.receive(report, now)`,
+returning whether it was kept and why):
+
+* **A record carries all five of 6.3:** the report's timestamp, its age now,
+  its source, its confidence now, and when it expires (`at + ttl_s`).
+* **Age counts from when the news was true, not from when it arrived.** A
+  report relayed 7 s late is 7 s old on arrival.
+* **Confidence falls linearly with age**, from the source's own value to zero
+  at expiry, and stays at zero.
+* **An expired record is kept, never current.** The agent can still say what
+  it last heard and when; `current_teammates()` leaves it out, and the
+  snapshot marks it `current: false`. The tick on which a record expires
+  reports it once (`changes["team_expired"]`); fresh news clears that, and
+  a later expiry is reported again.
+* **Older news never replaces newer.** A report no newer than the one held is
+  refused: delivery out of order (Phase 10) cannot roll a belief back.
+* **Refused, with the reason:** a report about itself, about a drone not on
+  the roster, or dated in the future.
+
+The snapshot shows each teammate as "never heard" or as position, role,
+task, status (each "unknown" if absent), source, age, time since receipt,
+confidence, time to expiry, and whether it is current.
+
+**Phase 5's decisions still did not move:** its exit re-run (`agentic_uav`
+digest `f5a910e23aee77d8`, not kept), on all 25 flights, gave decisions,
+events, verdicts, actions and reports identical to the run of record.
+
+**Tests: 9 new, in `tests/test_belief_state.py`:** all five fields on a
+record; age from the source's time, for a relayed report; confidence
+falling to zero and staying there; an expired record kept but never current;
+expiry reported once, and again after fresh news expires; out-of-order news;
+the three refusals; a malformed report; and `core/team.py` needing nothing
+from the simulator. Also fixed: the boundary check left the file it parsed
+open (a `ResourceWarning`), now closed.
+
+**Mutations: 22, all caught.** The first pass caught 21. The survivor: the
+snapshot could have called every record's source "message", because the only
+test that read the snapshot used a direct message. A relayed report's
+snapshot is now checked too.
+
+**A slip of mine, caught before it cost anything.** Checking that the new
+test killed the survivor, I restored the mutated `belief_state.py` with
+`git checkout`, which put back the last COMMITTED version and silently
+dropped step 2's uncommitted work in that file. A copy taken just before the
+mutation restored it, identical, and the full suite passed. Mutations are
+reverted from the copy taken before them, never from git.
+
+**The goldens did not move.** `record_golden.py --check` matches all four.
+591 tests pass, 17 skipped; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
 |---|---|---|
 | 2026-10-22 | **What is not known is written as unknown, never as a default** | A zero latency or loss rate would claim a perfect link, and the knowledge log (step 5) must be able to say what the agent did not know |
 | 2026-10-22 | **Velocity and heading are estimates from the drone's own positions, labelled as such** | Sensing gives position, not velocity; deriving it inside the belief keeps the boundary, and the label keeps a reader from taking it for a measurement |
+| 2026-10-22 | **A teammate report's age counts from when it was true, and an expired record is kept but never current** | 6.3: "Agents must not treat an old position report as current." Relayed news arrives late, so its arrival time says nothing about its age; keeping the expired record lets the agent say what it last heard, which the knowledge log needs |
+| 2026-10-22 | **Older news never replaces newer** | Under degraded links (Phase 10) delivery can be out of order; a late, older report must not roll the belief back |
 
 ## Open questions
 

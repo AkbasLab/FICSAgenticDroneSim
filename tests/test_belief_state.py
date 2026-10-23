@@ -11,7 +11,10 @@ holds what AUV-06 asks, from where it should come: velocity and heading
 estimated from the drone's own positions and labelled so; health from its
 own skill results, each counted once; constraints, zones and the roster from
 the public brief; the link's unmeasured qualities held as unknown, never as
-a zero that would claim a perfect link; assumptions replaced by key and aged.
+a zero that would claim a perfect link; assumptions replaced by key and aged;
+and teammate records that know how old they are (6.3): aged from when the
+news was true, losing confidence to zero at expiry, kept but never current
+once expired, never replaced by older news.
 And that Phase 5's decisions do not move: the belief grew, the agent did not
 change its mind.
 """
@@ -30,6 +33,7 @@ from agentic_uav.agents.belief_state import (  # noqa: E402
     BeliefState,
     Observation,
 )
+from agentic_uav.core.team import DEFAULT_TTL_S, TeamReport  # noqa: E402
 from agentic_uav.experiments import scenarios  # noqa: E402
 from agentic_uav.experiments.single_agent import TROUBLES, fly_agent_on_mock  # noqa: E402
 
@@ -174,6 +178,89 @@ class AssumptionTests(unittest.TestCase):
         for bad in (-0.1, 1.5):
             with self.assertRaises(ValueError):
                 fresh().assume("k", "s", "e", at=0.0, confidence=bad)
+
+
+def heard(drone="Drone2", at=10.0, **kw):
+    kw.setdefault("source", "message")
+    return TeamReport(drone, at, **kw)
+
+
+class StaleInformationTests(unittest.TestCase):
+    """6.3: every teammate record carries timestamp, age, confidence, source, expiration."""
+
+    def setUp(self):
+        self.belief = fresh()                                    # Drone1, of four
+
+    def at(self, t):
+        self.belief.update(obs(t))
+        return self.belief.snapshot()["team"]
+
+    def test_a_record_carries_all_five(self):
+        kept = self.belief.receive(heard(at=10.0, position=(5.0, -3.0, 12.0), task="search S2", confidence=0.8),
+                                   now=12.0)
+        self.assertEqual(kept, (True, "kept"))
+        view = self.at(14.0)["Drone2"]
+        self.assertEqual(view, {"position": [5.0, -3.0, 12.0], "role": "unknown", "task": "search S2",
+                                "status": "unknown", "source": "message", "age_s": 4.0, "received_age_s": 2.0,
+                                "confidence": 0.48, "expires_in_s": 6.0, "current": True})
+        self.assertEqual(self.at(14.0)["Drone3"], "never heard")
+
+    def test_age_counts_from_when_it_was_true_not_when_it_arrived(self):
+        self.belief.receive(heard(at=10.0, source="relay"), now=17.0)              # relayed, 7 s late
+        record = self.belief.teammate("Drone2")
+        self.assertEqual((record.age(17.0), record.received_at), (7.0, 17.0))
+        self.assertAlmostEqual(record.confidence(17.0), 0.3)
+        view = self.at(17.0)["Drone2"]
+        self.assertEqual((view["source"], view["age_s"], view["received_age_s"]), ("relay", 7.0, 0.0))
+
+    def test_confidence_falls_to_zero_at_expiry_and_stays_there(self):
+        self.belief.receive(heard(at=0.0, confidence=0.8), now=0.0)
+        record = self.belief.teammate("Drone2")
+        self.assertEqual([round(record.confidence(t), 3) for t in (0.0, 5.0, 10.0, 25.0)], [0.8, 0.4, 0.0, 0.0])
+
+    def test_an_expired_record_is_kept_but_never_current(self):
+        self.belief.receive(heard(at=10.0, ttl_s=4.0, position=(1.0, 2.0, 3.0)), now=10.0)
+        self.belief.update(obs(13.9))
+        self.assertEqual(list(self.belief.current_teammates()), ["Drone2"])
+        self.belief.update(obs(14.0))                                              # at + ttl: no longer current
+        self.assertEqual(self.belief.current_teammates(), {})
+        self.assertIsNotNone(self.belief.teammate("Drone2"))                       # what it last heard, kept
+        view = self.belief.snapshot()["team"]["Drone2"]
+        self.assertEqual((view["current"], view["expires_in_s"], view["position"]), (False, 0.0, [1.0, 2.0, 3.0]))
+
+    def test_expiry_is_reported_once_and_again_after_fresh_news(self):
+        self.belief.receive(heard(at=0.0, ttl_s=2.0), now=0.0)
+        self.assertNotIn("team_expired", self.belief.update(obs(1.0)))
+        self.assertEqual(self.belief.update(obs(2.5))["team_expired"], ["Drone2"])
+        self.assertNotIn("team_expired", self.belief.update(obs(3.0)))             # once
+        self.belief.receive(heard(at=3.0, ttl_s=2.0), now=3.0)                    # fresh news
+        self.assertNotIn("team_expired", self.belief.update(obs(4.0)))
+        self.assertEqual(self.belief.update(obs(5.5))["team_expired"], ["Drone2"])
+
+    def test_news_arriving_out_of_order_is_not_newer(self):
+        self.belief.receive(heard(at=10.0, task="new"), now=11.0)
+        self.assertEqual(self.belief.receive(heard(at=8.0, task="old"), now=12.0),
+                         (False, "no newer than the report held (from 10.000)"))
+        self.assertFalse(self.belief.receive(heard(at=10.0, task="same instant"), now=12.0)[0])
+        self.assertEqual(self.belief.teammate("Drone2").report.task, "new")
+        self.assertTrue(self.belief.receive(heard(at=10.5, task="newer"), now=12.0)[0])
+
+    def test_reports_it_cannot_take(self):
+        self.assertEqual(self.belief.receive(heard("Drone1"), now=11.0), (False, "about itself"))
+        self.assertEqual(self.belief.receive(heard("Drone9"), now=11.0), (False, "Drone9 is not on the roster"))
+        self.assertEqual(self.belief.receive(heard(at=12.0), now=11.0), (False, "dated 1.000 s in the future"))
+        self.assertEqual(self.at(11.0)["Drone2"], "never heard")
+
+    def test_a_report_must_be_well_formed(self):
+        for bad in (dict(source="rumour"), dict(confidence=1.2), dict(confidence=-0.1), dict(ttl_s=0.0)):
+            with self.subTest(**bad), self.assertRaises(ValueError):
+                heard(**bad)
+        self.assertEqual((heard().ttl_s, heard().confidence), (DEFAULT_TTL_S, 1.0))
+
+    def test_core_team_needs_nothing_from_the_simulator(self):
+        from test_sensing import boundary_violations
+        path = os.path.join(ROOT, "agentic_uav", "core", "team.py")
+        self.assertEqual(boundary_violations(path, "agentic_uav.core"), [])
 
 
 class InFlightTests(unittest.TestCase):
