@@ -32,9 +32,12 @@ AND THREE CHECKS, each of which can fail:
   source. A field this logger does not know how to source fails it: the log
   must not silently drop anything the agent held.
 * CORRECT: what it claims to know is true. Its position, battery and base
-  link match the truth at that instant (within TOLERANCE: the snapshot is
-  rounded, and a live flight's readings lag by a poll); its sightings are
-  exactly the targets this drone had detected by then.
+  link match the truth at that instant -- within TOLERANCE on the mock,
+  where both sides come from one analytic trajectory, and within
+  `poll_tolerance` live, where the belief is the last poll before the
+  decision and the truth is interpolated between the polls around it, so the
+  two stand up to one poll of flight apart; its sightings are exactly the
+  targets this drone had detected by then.
 * NO LEAK: nothing in the truth gap appears in what it knew -- no unseen
   target's id or position, no teammate's true position. An agent that knew
   these would have crossed the boundary.
@@ -140,6 +143,59 @@ class Truth:
         return self._first_seen[drone].get(target)
 
 
+def poll_tolerance(scenario: Scenario, poll_hz: float, speed_mps: float) -> dict[str, Any]:
+    """What "correct" can mean when the belief and the truth come from one poller.
+
+    On the mock both sides come from the same analytic trajectory, so
+    TOLERANCE's 0.01 m holds: a disagreement is the logger's fault. Live it
+    cannot hold, and not because anything is wrong. `polled_sensors` builds
+    the belief from the samples taken BEFORE a decision -- the last poll --
+    while `Truth` interpolates between the polls that bracket it. The two are
+    therefore up to one poll of flight apart however right the logger is: at
+    5 m/s and 10 Hz, 0.5 m, some fifty times the mock's allowance.
+
+    So the live run is checked against one poll of motion, and the battery
+    that motion spends. The alternative -- comparing the belief against the
+    very sample it was built from -- would keep 0.01 m by making the check
+    nearly unable to fail.
+
+    This is the measurement's resolution, not a tuned constant: it is derived
+    from the poll rate and the speed, and both are recorded with the result.
+    """
+    if poll_hz <= 0 or speed_mps <= 0:
+        raise ValueError(f"poll_hz and speed_mps must both be positive: {poll_hz}, {speed_mps}")
+    period = 1.0 / poll_hz
+    reach = speed_mps * period
+    spent = reach * scenario.battery.move_drain_per_m + scenario.battery.hover_drain_per_s * period
+    return {"position_m": round(reach, 4), "battery": round(spent, 4),
+            "why": f"one poll of flight: {speed_mps:g} m/s across {period:.4g} s ({poll_hz:.4g} Hz)"}
+
+
+def observed_poll_hz(samples: dict[str, Any], nominal_hz: float) -> dict[str, Any]:
+    """The rate the poller actually kept, which is the one that bounds the lag.
+
+    `PollingObserver` sleeps its period and THEN queries, so it runs a little
+    slower than asked: a nominal 10 Hz measured 9.2 Hz over a 30 s flight,
+    median gap 0.109 s and worst 0.125 s. One INTENDED poll of flight is
+    therefore not a bound -- a decision was seen 0.550 m from the truth
+    against the 0.5 m that 10 Hz allows -- while one OBSERVED poll is: the
+    worst gap times the speed came to 0.625 m.
+
+    So the live allowance is taken from the samples the flight actually took.
+    The median goes in beside it, because a single stalled poll would widen
+    the worst gap and ought to be visible rather than silently generous.
+
+    A flight too short to have two samples falls back to the nominal rate.
+    """
+    gaps = sorted(b[0] - a[0] for rows in samples.values() for a, b in zip(rows, rows[1:]))
+    if not gaps:
+        return {"hz": nominal_hz, "asked_hz": nominal_hz, "worst_gap_s": None,
+                "median_gap_s": None, "samples": 0}
+    worst = gaps[-1]
+    return {"hz": 1.0 / worst, "asked_hz": nominal_hz, "worst_gap_s": round(worst, 4),
+            "median_gap_s": round(gaps[len(gaps) // 2], 4), "samples": len(gaps) + 1}
+
+
 @dataclass
 class KnowledgeEntry:
     drone: str
@@ -161,8 +217,13 @@ class KnowledgeEntry:
                 "checks": {"ok": self.ok, "problems": self.problems}}
 
 
-def knowledge_entry(entry: Any, drone: str, truth: Truth) -> KnowledgeEntry:
-    """What `drone` knew and did not know at one decision (a `TraceEntry`, or its JSON)."""
+def knowledge_entry(entry: Any, drone: str, truth: Truth,
+                    tolerance: dict[str, Any] | None = None) -> KnowledgeEntry:
+    """What `drone` knew and did not know at one decision (a `TraceEntry`, or its JSON).
+
+    `tolerance` defaults to TOLERANCE, which is the mock's; a live flight
+    passes `poll_tolerance(...)`.
+    """
     data = entry if isinstance(entry, dict) else entry_json(entry)
     t = data["at"]
     belief = data["belief"]
@@ -171,7 +232,7 @@ def knowledge_entry(entry: Any, drone: str, truth: Truth) -> KnowledgeEntry:
                          {"kind": d["kind"], "skill": d.get("skill"), "reason": d.get("reason", "")})
     _classify(belief, out)
     _gap(belief, drone, t, truth, out)
-    _check(belief, drone, t, truth, out)
+    _check(belief, drone, t, truth, out, tolerance)
     return out
 
 
@@ -258,17 +319,21 @@ def _gap(belief: dict[str, Any], drone: str, t: float, truth: Truth, out: Knowle
                         "truth": {"position": [round(x, 3), round(y, 3), round(alt, 3)]}})
 
 
-def _check(belief: dict[str, Any], drone: str, t: float, truth: Truth, out: KnowledgeEntry) -> None:
+def _check(belief: dict[str, Any], drone: str, t: float, truth: Truth, out: KnowledgeEntry,
+           tolerance: dict[str, Any] | None = None) -> None:
+    tol = TOLERANCE if tolerance is None else tolerance
     me = belief.get("self", {})
     if "position" in me:
         x, y, alt = truth.position(drone, t)
         off = math.dist(me["position"], (x, y, alt))
-        if off > TOLERANCE["position_m"]:
-            out.problems.append(f"incorrect: believed position {me['position']} is {off:.3f} m from the truth")
+        if off > tol["position_m"]:
+            out.problems.append(f"incorrect: believed position {me['position']} is {off:.3f} m from the truth, "
+                                f"past the {tol['position_m']:g} m allowed")
     if "battery" in me:
         real = truth.battery(drone, t)
-        if abs(me["battery"] - real) > TOLERANCE["battery"]:
-            out.problems.append(f"incorrect: believed battery {me['battery']} against {real:.3f}")
+        if abs(me["battery"] - real) > tol["battery"]:
+            out.problems.append(f"incorrect: believed battery {me['battery']} against {real:.3f}, "
+                                f"past the {tol['battery']:g} allowed")
     if "base_link" in me and me["base_link"] != truth.base_link(drone, t):
         out.problems.append(f"incorrect: believed base link {me['base_link']}, truth {not me['base_link']}")
     seen = set(belief.get("local_map", {}).get("observed_targets", {}))
@@ -294,9 +359,11 @@ def _mentions(text: str, xy: list[float]) -> bool:
 
 # --------------------------------------------------------------- a whole run
 
-def knowledge_log(traces: dict[str, Any], truth: Truth) -> list[KnowledgeEntry]:
+def knowledge_log(traces: dict[str, Any], truth: Truth,
+                 tolerance: dict[str, Any] | None = None) -> list[KnowledgeEntry]:
     """Every decision of every agent in a flight, in time order."""
-    entries = [knowledge_entry(e, drone, truth) for drone, trace in traces.items() for e in trace]
+    entries = [knowledge_entry(e, drone, truth, tolerance)
+               for drone, trace in traces.items() for e in trace]
     return sorted(entries, key=lambda k: (k.at_s, k.drone))
 
 

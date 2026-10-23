@@ -15,9 +15,9 @@
 
 Mirrored from `AUV-22 — Phase Objectives Checklist`.
 
-- [ ] **6.1** Define the belief-state schema — `self`, `mission`, `local_map`, `team`, `communication`, `assumptions`
-- [ ] **6.2** Distinguish truth from belief — ground truth to the simulator and evaluator **only**; agent belief from local sensing and received messages **only**
-- [ ] **6.3** Handle stale information — every teammate record carries timestamp, age, confidence, source, expiration
+- [x] **6.1** Define the belief-state schema — `self`, `mission`, `local_map`, `team`, `communication`, `assumptions`
+- [x] **6.2** Distinguish truth from belief — ground truth to the simulator and evaluator **only**; agent belief from local sensing and received messages **only**
+- [x] **6.3** Handle stale information — every teammate record carries timestamp, age, confidence, source, expiration
 
 ## Exit criterion
 
@@ -27,7 +27,8 @@ Mirrored from `AUV-22 — Phase Objectives Checklist`.
 **Met:** on the mock, 2026-10-23 — 1340 of 1340 decisions, in 40 flights,
 logged complete, correct and without a leak · **Evidence:**
 [`evidence/exit-criterion-2026-10-23.md`](evidence/exit-criterion-2026-10-23.md).
-The optional live flight (step 6) is not yet flown.
+Step 6's live path is built and tested, 2026-10-23; **the CarlaAir flight
+itself is not yet flown**, so nothing here is claimed of the simulator.
 
 Planned evidence: a knowledge log for every decision of the single agent's 20
 exit seeds, and of a two-drone run of two independent agents: what each knew
@@ -44,7 +45,7 @@ seen, and where teammates really were.
 | The boundary, hardened | `agentic_uav/control/action_executor.py` (`SkillHandle`), `agentic_uav/agents/drone_agent.py`, `tests/test_sensing.py` | **Done** 2026-10-22; goldens unedited; Phase 5's decisions unchanged |
 | Assumptions, recorded by the policy | `agentic_uav/agents/rule_policy.py` | **Done** 2026-10-23; goldens unedited; Phase 5's decisions unchanged |
 | The knowledge log and the exit | `agentic_uav/experiments/knowledge.py`, `agentic_uav/experiments/single_agent.py` (`fly_agents_on_mock`), `configs/scenarios/search_pair_001.toml`, `scripts/knowledge_exit.py`, `results/`, `evidence/` | **Done** 2026-10-23; exit met on the mock |
-| Optional live flight; close | `results/`, `evidence/` | step 6 |
+| Optional live flight; close | `scripts/knowledge_exit.py --sim airsim`, `agentic_uav/experiments/knowledge.py` (`poll_tolerance`, `observed_poll_hz`), `tests/test_knowledge_live.py` | **Path built** 2026-10-23, 19 tests; **the CarlaAir flight is not yet flown** |
 
 ## Plan
 
@@ -425,6 +426,77 @@ Every target was checked to occur exactly once before the run.
 **The goldens did not move.** `record_golden.py --check` matches all four.
 632 tests pass, 17 skipped; audit clean.
 
+### 2026-10-23 — step 6: the live path, and what "correct" can mean live
+
+The live knowledge log is **built and tested; the CarlaAir flight itself is
+not yet flown.** `scripts/knowledge_exit.py --sim airsim` flies the
+live-sized scenario (`search_single_live_small`, told only "search S1"),
+logs every decision the same way, and writes the mock's flight of the same
+scenario beside it. It needs no Vega and no tunnel: Phase 6 runs on
+`RulePolicy`, and the model does not enter until Phase 12.
+
+Most of it was already in place. `LiveAgentFlight.trajectories()` already
+turns the poller's samples into the same `Trajectory` objects the mock uses,
+and a live flight already keeps the agent's trace, so `Truth` and
+`knowledge_entry` needed no live variant at all. What was missing was the
+arguments, the report -- and an answer to one question.
+
+#### 0.01 m is a mock number
+
+`TOLERANCE["position_m"]` is 0.01 m, and on the mock that is right: the
+belief and the truth come from the same analytic trajectory, so any
+disagreement is the logger's fault. Live it cannot hold. `polled_sensors`
+builds the belief from the samples taken BEFORE a decision -- the last poll
+-- while `Truth` interpolates between the polls that bracket it. The two
+stand up to one poll of flight apart however right the logger is.
+
+Two readings of "correct" were on the table: widen the allowance to one poll
+of motion, or compare the belief against the very sample it was built from.
+The second keeps 0.01 m by making the check nearly unable to fail, so the
+first was taken, on the condition that it be derived and not tuned.
+
+#### Derived, then corrected by measurement
+
+One NOMINAL poll is 5 m/s over 0.1 s = 0.5 m. Flying the whole live path
+against a real 10 Hz poll, with the mock standing in for AirSim, said that is
+not a bound:
+
+```
+samples 288 over 30 s        asked 10 Hz
+gap     median 0.109 s   worst 0.125 s   ->  about 9.2 Hz kept
+worst believed position off the interpolated truth:  0.550 m
+one nominal poll of flight:                          0.500 m   <- exceeded
+one observed poll of flight (worst gap x 5 m/s):     0.625 m   <- bounds it
+```
+
+`PollingObserver` sleeps its period and THEN queries, so it always runs a
+little slower than asked. The lag is bounded by the gap it actually left, not
+the one it intended -- so the allowance is taken from the samples the flight
+took (`observed_poll_hz`), and the worst and median gaps are both recorded,
+because a single stalled poll would widen the worst and ought to be visible
+rather than silently generous.
+
+The tolerance can still fail: a belief 0.6 m out is refused and the message
+says what was allowed. The other two checks do not move with it.
+
+#### The poller's 3 m line, found by a failing test
+
+A stand-in flight built from a mock run came out 0.43 of battery adrift on
+every decision after take-off -- flat, not growing, so not a lag. The knots
+were identical; only the `airborne` flag differed. `trajectories_from_samples`
+calls a drone airborne above the poller's 3 m line, so a reconstructed truth
+charges nothing for the climb up to 3 m: 0.19 of hover and 0.24 of climb,
+0.43 for the rest of the flight.
+
+That is an artifact of standing in -- a belief sensed exactly, judged against
+a truth reconstructed through the poller -- and not of the logger: in a real
+flight both sides come from `polled_sensors` and draw the same line. But it
+does mean **the mock twin's battery column is not directly comparable to the
+live one**, and the live record says so rather than inviting the comparison.
+
+651 tests pass, 15 skipped (19 new, 4 of them only under `AUV_SLOW_TESTS`);
+audit clean; the four Phase 2 goldens unedited.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -438,9 +510,19 @@ Every target was checked to occur exactly once before the run.
 | 2026-10-23 | **The policy records its assumptions where it starts to rely on them; their confidences are fixed per kind of evidence, not calibrated** | 6.1's assumptions block exists so a reader can audit a decision. Fixed confidences say how much the policy leans on each without pretending to a calibration nothing here has done; an LLM policy (Phase 12) will have to state its own |
 | 2026-10-23 | **The knowledge log lives on the experiments side and never reaches an agent** | It reads ground truth to show the gap; if any of it flowed back, the boundary it is there to show would be the first thing it broke |
 | 2026-10-23 | **Every decision of every flight is kept in full** | The criterion is "for each decision"; a sample would show only that some were logged |
+| 2026-10-23 | **Live, "correct" means within one OBSERVED poll of flight, not one nominal poll** | The belief is the last poll before a decision and the truth is interpolated between the polls around it, so they stand a poll apart however right the logger is. The nominal 0.5 m was measured to be exceeded (0.550 m) because the poller keeps about 9.2 Hz of a nominal 10; the worst observed gap bounds it at 0.625 m. Derived from the flight's own samples, so it is the measurement's resolution rather than a tuned constant |
+| 2026-10-23 | **The mock twin is recorded beside the live flight but is not a pass condition** | It is there so the live log can be read against one whose truth is exact. Its battery is not comparable anyway: the poller's 3 m airborne line makes a reconstructed truth charge nothing for the climb to 3 m |
 | 2026-10-23 | **The pair flies independent agents at Phase 4's heights, hearing nothing** | Without messages (Phase 7) a teammate can only be "never heard"; the heights keep them apart while neither knows of the other, which the log now shows |
 
 ## Open questions
+
+- **The poller's 3 m airborne line costs the first 3 m of every climb**, in
+  the battery a reconstructed truth charges (0.43 here) and in what counts as
+  airborne. Phases 4 and 5 already live with it, and live-against-live it
+  cancels, because both sides draw the same line. It is recorded because it
+  silently makes a polled truth and an exactly-sensed belief incomparable,
+  which cost a test to find, and because the figure is a property of the
+  observer rather than of the aircraft.
 
 ---
 
