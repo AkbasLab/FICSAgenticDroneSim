@@ -10,8 +10,8 @@ Boundary Assurance* (EIGTrust track): **when the operational boundaries themselv
 how often must the guardian override the policy, and at what cost?** This repository holds the guardian, the
 agent architecture around it, and the experiments measuring it. It is the GMB (geographical and mechanical
 boundaries) line of work in the FICS Lab's
-[FICSAgenticDroneSim](https://github.com/AkbasLab/FICSAgenticDroneSim) project and was written independently
-of that repository's `main` branch. Licensing follows the lab repository (MIT, see `LICENSE` on its `GMB`
+[FICSAgenticDroneSim](https://github.com/AkbasLab/FICSAgenticDroneSim) project. It develops separately from that
+repository's `main` branch. Licensing follows the lab repository (MIT, see `LICENSE` on its `GMB`
 branch).
 
 ## Contribution so far
@@ -94,9 +94,9 @@ the model avoid zones, so the guardian and repair layer still do the work.
 ## Limitations
 
 - **Simulation only.** The live-flight evidence is for static scenarios (four drones flying a scored mission, a
-  solo persistent agent). Four drones flying concurrently live do not find targets on the development laptop,
+  solo persistent agent). Four drones flying concurrently live do not find targets on the test machine,
   concluded to be resource contention and not a logic fault; that conclusion is unverified.
-- **Small models, slow hardware.** Model runs used an 8B model on a laptop CPU, about 11 s per call. Four agents
+- **Small models, slow hardware.** Model runs used an 8B model on a CPU-only machine, about 11 s per call. Four agents
   sharing one model process exceed a 30 s decision budget, which is why a whole-mission LLM run against a dynamic
   zone was invalid (5 of 6 decisions timed out; the run is kept in the ledger and flagged). A larger model on
   GPU hardware will behave differently and numbers from one must not be quoted as the other.
@@ -118,11 +118,52 @@ the model avoid zones, so the guardian and repair layer still do the work.
 Most things run with no simulator and no GPU:
 
 ```bash
-python -m pytest -q                                   # ~12 min, 318+ tests; some use real timers
+python -m pytest -q                                   # ~12 min, 341 tests; some use real timers
 python scripts/run_dynamic_zone_study.py --repeats 3  # the dynamic-zone study above, mock
 python scripts/run_guardian_demo.py                   # unsafe commands caught by the guardian
 python scripts/run_canonical_mission.py               # the scored search-and-relay mission, mock
 ```
+
+### Running one experiment
+
+An experiment is one `ExperimentConfig`: zone profile, zone monitor, repeats,
+an optional drone kill, a network condition, and the decision policy.
+`run_experiment` flies it and writes a folder under
+`runs/experiments/<experiment_id>/` (git-ignored; an existing folder raises
+`FileExistsError`, so earlier results are never overwritten):
+
+```python
+from fics_drone.experiments.experiment_config import ExperimentConfig
+from fics_drone.experiments.experiment_runner import run_experiment
+
+cfg = ExperimentConfig(experiment_id="appear_demo", zone_profile="appear", repeats=3)
+print(run_experiment(cfg).summary())
+```
+
+| File | Contents |
+|---|---|
+| `config.json` | the exact configuration |
+| `manifest.json` | git commit and dirty flag, Python, platform, model card for model runs |
+| `events.jsonl` | guardian decisions, zone interrupts, zone entries, drone kills |
+| `results.json` | per-repeat metrics (guardian, mission, recovery, comms, model) and their means |
+| `telemetry_<i>.json` | sampled positions of every drone |
+
+Run it from the repository root. Zone profiles: `static`, `appear`,
+`appear_expire`, `drift`. Zone monitor: `cmd` (the guardian acts at command
+boundaries) or `tick` (per-tick monitor). Policy: `deterministic`, `scripted`
+(a plumbing check, no model) or `ollama`. Invalid combinations are rejected
+before anything flies.
+
+Scoring, exposure and events use the agents' mission clock, the one zone
+schedules run on. On the allocate-then-fly engine (kill and model runs) the
+telemetry recorder starts about 3 s before the agents; each drone's offset is
+saved as `clock_offset_s` in `results.json`, and `telemetry_<i>.json` stays on
+the recorder clock.
+
+The four study scripts (`run_dynamic_zone_study.py`, `run_failure_recovery.py`,
+`run_comms_study.py`, `run_dynamic_zone_llm.py`) are front ends over this
+runner, except the `--airsim` path of `run_failure_recovery.py`, which flies
+directly and is not recorded.
 
 Model runs need [Ollama](https://ollama.com) and a pinned tag (`llama3.1:8b` for the recorded runs; a floating
 tag is flagged as unpinned in the model card):
@@ -152,7 +193,7 @@ fics_drone/
   agents/        persistent agent, belief, rule and LLM policies, SafetyGuardian, reasoning tools
   coordination/  message bus, network model, bidding and allocation, task board, roles
   evaluation/    the scorer
-  experiments/   team runner, guardian and LLM logs, waypoint probe
+  experiments/   experiment config, runner and event log; team runner, guardian and LLM logs, waypoint probe
   telemetry/     position sampler used for scoring
 configs/missions/   static and dynamic-zone scenario files
 scripts/            one entry point per experiment
@@ -171,10 +212,14 @@ tests/
   told it, and each belief records where a fact came from.
 - **Failures are data.** Failed and invalid runs are kept and labelled, not discarded.
 
-## Status of the team plan
+## Scope and status
 
-Phases 1-12 of the team's phased plan are implemented here: natural-language planning, multi-drone control, the
-skill layer, the scored search-and-relay mission, persistent agents with belief states, messaging, decentralized
-allocation and role recovery, degraded communications, the runtime guardian, and the LLM policy. Phases 7-12
-are verified in mock only; Phases 1-4 and a solo Phase 5 agent have flown live. The comparison architectures and
-experiment runner (Phases 13-14) are in the lab repository's `main` branch and are not duplicated here.
+Phases 1-12 of the project's phased plan are implemented here: natural-language
+planning, multi-drone control, the skill layer, the scored search-and-relay
+mission, persistent agents with belief states, messaging, decentralized
+allocation and role recovery, degraded communications, the runtime guardian,
+and the LLM policy. Phases 7-12 are verified in mock only; Phases 1-4 and a
+solo Phase 5 agent have flown live. An experiment runner (the Phase 14
+equivalent, covering the dynamic-zone, failure-recovery, communications and
+LLM studies) is implemented here. The comparison architectures (Phase 13) are
+in the lab repository's `main` branch and are not duplicated here.
