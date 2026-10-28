@@ -9,16 +9,43 @@ the work without it.
 import argparse
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from fics_drone.core.scenario import load_scenario
 from fics_drone.coordination.message_bus import MessageBus
+from fics_drone.core.scenario import load_scenario
+from fics_drone.experiments.experiment_config import DEFAULT_SCENARIO, ExperimentConfig
+from fics_drone.experiments.experiment_runner import recovery_summary, run_experiment
 from fics_drone.experiments.team_runner import run_team_with_faults
-from fics_drone.simulator.kinematic_mock_adapter import KinematicMockVehicleAdapter
 
-DEFAULT_SCENARIO = os.path.join(os.path.dirname(__file__), "..", "configs", "missions",
-                                 "search_relay_001.json")
+
+def print_report(summary):
+    """The same console report this script has always printed."""
+    print("\n--- allocation result ---")
+    for name, sector_id in summary["assignment"].items():
+        print(f"{name}: {sector_id}")
+
+    print("\n--- results ---")
+    for name, d in summary["drones"].items():
+        killed = " (KILLED)" if d["killed"] else ""
+        print(f"{name}{killed}: target_found={d['target_found']} "
+              f"battery_frac={d['battery_frac_at_end']:.2f}")
+
+    print(f"\nsectors completed: {summary['sectors_completed']}/{summary['sectors_total']} "
+          f"{summary['completed_sector_ids']}")
+
+
+def run_on_airsim(args):
+    """Real AirSim: direct adapters, so the runner does not record this path
+    (it cannot be exercised off the sim machine)."""
+    from fics_drone.simulator.airsim_adapter import AirSimVehicleAdapter
+    scenario = load_scenario(args.scenario)
+    adapters = {d.name: AirSimVehicleAdapter(d.name) for d in scenario.drones}
+    kill = (args.kill, args.at)
+    reports, agents, _bus, assignment = run_team_with_faults(
+        scenario, adapters, bus=MessageBus(), kill_name=kill[0], kill_at_s=kill[1])
+    print_report(recovery_summary(scenario, agents, reports, assignment, kill))
 
 
 def main():
@@ -26,44 +53,28 @@ def main():
     parser.add_argument("--scenario", default=DEFAULT_SCENARIO)
     parser.add_argument("--airsim", action="store_true")
     parser.add_argument("--kill", default="Drone2")
-    parser.add_argument("--at", type=float, default=15.0, help="elapsed seconds into the mission to kill --kill")
+    parser.add_argument("--at", type=float, default=15.0,
+                        help="elapsed seconds into the mission to kill --kill")
+    parser.add_argument("--out-root", default=None,
+                        help="where the experiment folder goes (default runs/experiments)")
+    parser.add_argument("--tag", default=time.strftime("%Y%m%d_%H%M%S"),
+                        help="suffix that keeps experiment ids unique")
     args = parser.parse_args()
 
-    scenario = load_scenario(args.scenario)
-    if args.airsim:
-        from fics_drone.simulator.airsim_adapter import AirSimVehicleAdapter
-        adapters = {d.name: AirSimVehicleAdapter(d.name) for d in scenario.drones}
-    else:
-        adapters = {d.name: KinematicMockVehicleAdapter(d.name, speed_mps=15.0) for d in scenario.drones}
-
-    bus = MessageBus()
     print(f"!! {args.kill} will be switched off at t={args.at}s (teammates not informed)")
-    reports, agents, bus, assignment = run_team_with_faults(
-        scenario, adapters, bus=bus, kill_name=args.kill, kill_at_s=args.at)
+    if args.airsim:
+        run_on_airsim(args)
+        return
 
-    print("\n--- allocation result ---")
-    for name, sector_id in assignment.items():
-        print(f"{name}: {sector_id}")
-
-    print("\n--- results ---")
-    for name, report in reports.items():
-        killed = " (KILLED)" if name == args.kill and "killed" in (report.trace[-1] if report.trace else "") else ""
-        print(f"{name}{killed}: target_found={report.target_found} battery_frac={report.battery_frac_at_end:.2f}")
-
-    # Union of TaskStatus.COMPLETE across every survivor's own board, not any one
-    # survivor's board and not any agent's final sector_id - same lesson the Phase 9
-    # integration test needed 2 rounds of debugging to land on (final sector_id only
-    # shows the LAST sector an agent worked, and one agent's board is frozen at
-    # whatever it last observed before it stopped listening).
-    from fics_drone.coordination.tasks import TaskStatus
-    completed_sector_ids = set()
-    for n in agents:
-        if n == args.kill:
-            continue
-        for t in agents[n].task_board.tasks.values():
-            if t.status == TaskStatus.COMPLETE:
-                completed_sector_ids.add(t.sector_id)
-    print(f"\nsectors completed: {len(completed_sector_ids)}/{len(scenario.sectors)} {sorted(completed_sector_ids)}")
+    cfg = ExperimentConfig(f"recovery_{args.kill}_at{args.at:g}_{args.tag}",
+                           zone_profile="static", scenario=args.scenario, repeats=1,
+                           kill_vehicle=args.kill, kill_at_s=args.at)
+    kwargs = {"out_root": args.out_root} if args.out_root else {}
+    result = run_experiment(cfg, **kwargs)
+    if result.error:
+        sys.exit(f"experiment failed:\n{result.error}")
+    print_report(result.runs[0]["recovery"])
+    print(f"\nrecorded in {result.directory}")
 
 
 if __name__ == "__main__":

@@ -11,49 +11,15 @@ severe comms" means something checkable, not just claimed.
 import argparse
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from fics_drone.agents.comms_estimator import CommsEstimator
-from fics_drone.core.scenario import load_scenario
-from fics_drone.coordination.comms_conditions import BY_NAME, ORDER
-from fics_drone.coordination.message_bus import MessageBus
-from fics_drone.coordination.network_model import NetworkModel
-from fics_drone.experiments.team_runner import run_team_threaded
-from fics_drone.simulator.kinematic_mock_adapter import KinematicMockVehicleAdapter
+from fics_drone.coordination.comms_conditions import ORDER
+from fics_drone.experiments.experiment_config import DEFAULT_SCENARIO, ExperimentConfig
+from fics_drone.experiments.experiment_runner import run_experiment
 
-DEFAULT_SCENARIO = os.path.join(os.path.dirname(__file__), "..", "configs", "missions",
-                                 "search_relay_001.json")
-
-
-def run_condition(scenario, condition_name: str, seed: int, with_estimates: bool):
-    profile = BY_NAME[condition_name]
-    network_model = NetworkModel(profile, seed=seed)
-    bus = MessageBus(network_model=network_model)
-    adapters = {d.name: KinematicMockVehicleAdapter(d.name, speed_mps=25.0) for d in scenario.drones}
-    estimators = {d.name: CommsEstimator() for d in scenario.drones} if with_estimates else None
-    reports, agents, bus = run_team_threaded(scenario, adapters, bus=bus, comms_estimators=estimators)
-
-    sent = len(bus.log)
-    delivered_entries = [e for e in bus.log if e.delivered]
-    delivered = len(delivered_entries)
-    mean_delay_ms = (sum(e.delay_s for e in delivered_entries) / delivered * 1000.0) if delivered else 0.0
-    drops = {}
-    for e in bus.log:
-        if not e.delivered:
-            drops[e.reason] = drops.get(e.reason, 0) + 1
-    # Sector assignment is static here (Phase 7's run_team_threaded, on purpose -
-    # see team_runner.py), so "sectors" reports whether each drone's own mission
-    # actually ran to completion despite the degraded link, not whether it won a sector.
-    sectors_done = sum(1 for r in reports.values() if r.trace and r.trace[-1] == "skill_succeeded->done")
-
-    stats = {
-        "condition": condition_name, "sectors": f"{sectors_done}/{len(scenario.sectors)}",
-        "sent": sent, "delivered": delivered,
-        "rate": f"{(delivered / sent * 100.0) if sent else 0.0:.0f}%",
-        "delay": f"{mean_delay_ms / 1000.0:.2f}s", "drops": drops,
-    }
-    return stats, agents, estimators
+MOCK_SPEED_MPS = 25.0
 
 
 def main():
@@ -62,26 +28,34 @@ def main():
     parser.add_argument("--condition", choices=ORDER, default=None, help="default: run all")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--estimates", action="store_true")
+    parser.add_argument("--out-root", default=None,
+                        help="where experiment folders go (default runs/experiments)")
+    parser.add_argument("--tag", default=time.strftime("%Y%m%d_%H%M%S"),
+                        help="suffix that keeps experiment ids unique")
     args = parser.parse_args()
 
-    scenario = load_scenario(args.scenario)
     conditions = [args.condition] if args.condition else ORDER
+    kwargs = {"out_root": args.out_root} if args.out_root else {}
 
     print(f"{'condition':<12}{'sectors':<9}{'sent':<7}{'deliv':<7}{'rate':<7}{'delay':<9}drops")
     for name in conditions:
-        stats, agents, estimators = run_condition(scenario, name, args.seed, args.estimates)
-        drops_str = ", ".join(f"{k}={v}" for k, v in stats["drops"].items()) or "none"
-        print(f"{stats['condition']:<12}{stats['sectors']:<9}{stats['sent']:<7}{stats['delivered']:<7}"
-              f"{stats['rate']:<7}{stats['delay']:<9}{drops_str}")
-
-        if estimators:
-            for agent_name, est in estimators.items():
-                for peer in agents:
-                    if peer == agent_name:
-                        continue
-                    loss = est.estimated_loss_rate(peer)
-                    if loss is not None:
-                        print(f"    {agent_name} estimates {peer}: loss={loss:.2f}")
+        cfg = ExperimentConfig(f"comms_{name}_s{args.seed}_{args.tag}", zone_profile="static",
+                               scenario=args.scenario, repeats=1,
+                               mock_speed_mps=MOCK_SPEED_MPS, seed=args.seed,
+                               network_profile=name, comms_estimates=args.estimates)
+        result = run_experiment(cfg, **kwargs)
+        if result.error:
+            sys.exit(f"{name}: experiment failed:\n{result.error}")
+        c = result.runs[0]["comms"]
+        drops_str = ", ".join(f"{k}={v}" for k, v in c["drops"].items()) or "none"
+        sectors = f"{c['sectors_done']}/{c['sectors_total']}"
+        rate = f"{c['delivery_rate_pct']:.0f}%"
+        delay = f"{c['mean_delay_s']:.2f}s"
+        print(f"{name:<12}{sectors:<9}{c['sent']:<7}{c['delivered']:<7}"
+              f"{rate:<7}{delay:<9}{drops_str}")
+        for agent_name, peers in c.get("loss_estimates", {}).items():
+            for peer, loss in peers.items():
+                print(f"    {agent_name} estimates {peer}: loss={loss:.2f}")
 
 
 if __name__ == "__main__":
