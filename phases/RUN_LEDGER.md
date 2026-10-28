@@ -2,7 +2,7 @@
 
 Every recorded run in this repo, what it was worth, and why. Update this file in the same commit as the data it describes. A session that is not valid study data says why. Nothing is deleted; a superseded session keeps its verdict. When a count changes, change it here, not in prose elsewhere.
 
-Started 2026-10-08. Sessions before this date are listed from what is on disk under `runs/`; **verdicts marked (proposed) were written by Claude from the folder names, dates and summaries, and Arshad has not confirmed them.**
+Started 2026-10-08. Sessions before this date are listed from what is on disk under `runs/`; **verdicts marked (proposed) were written by Claude from the folder names, dates and summaries, and the operator has not confirmed them.**
 
 ## 1. What counts as a valid run
 
@@ -45,7 +45,7 @@ These are recorded in `CURRENT_CONTEXT.md` and `PHASE_1-10_BUILD_PLAN.md` but ha
 | Phase 5 solo agent, live | 2026-09/10 | works; unexplained position artifact noted | open, see section 5 |
 | 4-drone concurrent live run (Phase 8 era) | 2026-10-02 | hung over an hour; infinite loop in `search_policy.py` fixed; solo flight OK afterwards, 4-drone concurrent still does not find targets | diagnostic, cause of the remaining gap unresolved |
 
-Fill in exact dates and folders when Arshad confirms them.
+Fill in exact dates and folders when the operator confirms them.
 
 ### 2026-10-08 live checks (output pasted in chat, no `runs/` folder yet)
 
@@ -65,41 +65,49 @@ Fill in exact dates and folders when Arshad confirms them.
 
 | `runs/probe_llama31_8b_dynamic_zones`, 100 seeded situations (seed 17, same as `probe_llama31_8b_schema_v2`), llama3.1:8b digest 46e0c10c039e, temp 0, CPU, scenario `search_relay_dynamic_001` (zones DZ_A from 10 s, DZ_D from 60 s). Laptop slept during the run; 0 fallbacks/timeouts | none 16% legal (static 17%); context 92% (98%); repair 14% raw, 100% flown legal, 86% needed repair at mean 5.1 m (85%, 5.0); feedback retry legal 8% (8%), same point again 65% (61%). On the model's own first proposal: separation 83 (same as static) plus restricted_zones 17. Replay: 23 of 100 situations start inside an active zone, mean steer-out 6.3 m, max 9.5 m | diagnostic series under dynamic zones. Compared like-for-like with the static series (the `none` and `feedback`-first answers are identical inputs; `context`/`repair` prompts change with the zones). The 98%->92% drop in `context` is 5 zone cases (model chose a sector centre inside an active zone) + 3 separation cases; the prompt text was not inspected. Zone placement makes the 23% inside-zone share by construction. Not yet declared a frozen series |
 
-### Landing investigation, night of 2026-10-08 (Claude ran the simulator while Arshad slept)
+### Landing investigation, night of 2026-10-08 (run unattended overnight)
 
 | Check | Result | Verdict |
 |---|---|---|
-| Arshad's second full solo mission (`run_persistent_agent.py --airsim --sector A`) | landing step 64.0 s (154.2 to 218.2), final height -11.8 m again, same as the first | reproduced **by Arshad**, deterministic on his side |
-| Arshad's `trace_landing.py --out-and-back 40` and `--hover-s 150`, then `--hover-s 60` | both read -11 to -12 (only the summary was relayed; the trace rows were not pasted). He also reports the drone starts on beach sand and ends at the same spot, and that after a bad landing a manual take-off is very slow, "as if from underground" | reported, not independently verified. Consistent with the drone actually ending ~12 m below the surface |
+| The operator's second full solo mission (`run_persistent_agent.py --airsim --sector A`) | landing step 64.0 s (154.2 to 218.2), final height -11.8 m again, same as the first | reproduced **by the operator**, deterministic on that side |
+| The operator's `trace_landing.py --out-and-back 40` and `--hover-s 150`, then `--hover-s 60` | both read -11 to -12 (only the summary was relayed; the trace rows were not pasted). He also reports the drone starts on beach sand and ends at the same spot, and that after a bad landing a manual take-off is very slow, "as if from underground" | reported, not independently verified. Consistent with the drone actually ending ~12 m below the surface |
 | Claude, fresh sim, `trace_landing.py --stop-above 0.3` (no `landAsync`, no disarm) | settles at 0.01-0.07 m, no sinking | clean |
 | Claude, fresh sim, plain `trace_landing.py` | `land()` 7.0 s, ends 0.00 m, est_z = true_z throughout | clean |
 | Claude, `--hover-s 60` | 6.1 s, ends 0.00 m | clean |
 | Claude, 24 CPU cores saturated, `--hover-s 10`, fresh sim | 6.2 s, ends -0.01 m | clean: CPU load is not the trigger |
-| Claude, full solo mission, fresh sim, default cruise height | different failure: the first lane overshoots to (41.2, 20.0, 8.7) and the drone collides with `SM_Awning41`; return_home and the 30 s legs time out; landing on the awning took 64 s. Landing there also read high, not -11.8 | **separate finding**: obstacles at the east edge of Sector A in Town10HD. Reproduced twice here; Arshad's missions did not hit it (his lane ended at (40.0, 20.1)) |
+| Claude, full solo mission, fresh sim, default cruise height | different failure: the first lane overshoots to (41.2, 20.0, 8.7) and the drone collides with `SM_Awning41`; return_home and the 30 s legs time out; landing on the awning took 64 s. Landing there also read high, not -11.8 | **separate finding**: obstacles at the east edge of Sector A in Town10HD. Reproduced twice here; the operator's missions did not hit it (his lane ended at (40.0, 20.1)) |
 | Claude, same mission at `--cruise-height 12` | lane clears the awning, then another 30 s timeout near (39.8, 29.2); return_home timed out at (3.3, 2.2); landing was clean (8.8 s, final height -0.0) | more obstacles at x ~ 40; altitude alone does not fix the scenario geometry |
 
-**Correction to the earlier "not reproduced" note above:** the -11.8 m / 64 s landing *was* reproduced by Arshad (twice in missions, and in trace variants). What Claude could not do is reproduce it on this machine in six landings across four fresh-sim setups. Whatever triggers it is something about Arshad's own sessions that the fresh-sim runs did not recreate. Ruled out: CPU load, hovering time, the `landAsync`/disarm stage in isolation (clean here), horizontal drift.
+**Correction to the earlier "not reproduced" note above:** the -11.8 m / 64 s landing *was* reproduced by the operator (twice in missions, and in trace variants). What Claude could not do is reproduce it on this machine in six landings across four fresh-sim setups. Whatever triggers it is something about the operator's own sessions that the fresh-sim runs did not recreate. Ruled out: CPU load, hovering time, the `landAsync`/disarm stage in isolation (clean here), horizontal drift.
 
 **What was done about it:** `AirSimVehicleAdapter.land()` now checks its own final height and raises if the drone ends more than 1.5 m from the ground reference (`LAND_END_TOLERANCE_M`), so the skill returns FAILED with the height in the error instead of reporting a quiet success. This makes the anomaly impossible to miss; it does not explain it. Landing-based safety numbers still must not be cited.
 
 | `runs/probe_llama31_8b_dynamic_zones_shown`, same 100 situations/seed/model/scenario as `probe_llama31_8b_dynamic_zones`, but `--show-zones` (prompt lists the zones active at decision time, current position). 0 fallbacks | none 19% legal (blind-dynamic 16%, static 17%); context 93% (92%, 98%); repair 100% flown legal at mean 4.8 m (5.1, 5.0); feedback retry legal 11% (8%), same point again 54% (65%). First-proposal failures: separation 73 (83), restricted_zones **25 (17)** | diagnostic. Telling the model about zones did not reduce zone violations (rose 17 to 25); separation violations fell 83 to 73. Single seed and one 8B model, so the changes are within what noise could plausibly produce; no mechanism tested. Not a frozen series |
 
-### Root cause of the -11.8 m landing, 2026-10-09 (found live with Arshad watching)
+### Root cause of the -11.8 m landing, 2026-10-09 (found live with the operator watching)
 
-**Noclip.** Pressing P in the CarlaAir window toggles noclip: nothing collides, including the ground. Evidence: (1) a hover-60 trace on a fresh sim sank at a constant **0.20 m/s with `hit=False` throughout, from 5.6 s to -11.79 m at 64 s** (that is `landAsync`'s descent rate times its 60 s timeout, 0.2 x 60 = 12 m); (2) Arshad had pressed P in that session, and said so ("i think it happens when i press P ... i'm not sure u did that when u ran tests"); (3) Claude never pressed P, and all of Claude's earlier landings were clean; (4) with noclip on, a *disarmed* drone free-falls (-1 m at 4.6 s to -47 m at 10 s, speed 8.6 m/s); (5) Arshad's missions skip the `SM_Awning41` collision that stopped Claude's, because noclip lets him fly through it. This corrects the earlier "cause unknown" entries above: the anomaly was caused by the noclip toggle, not by flight time, CPU load or horizontal drift.
+**Noclip.** Pressing P in the CarlaAir window toggles noclip: nothing collides, including the ground. Evidence: (1) a hover-60 trace on a fresh sim sank at a constant **0.20 m/s with `hit=False` throughout, from 5.6 s to -11.79 m at 64 s** (that is `landAsync`'s descent rate times its 60 s timeout, 0.2 x 60 = 12 m); (2) the operator had pressed P in that session, and said so ("i think it happens when i press P ... i'm not sure u did that when u ran tests"); (3) Claude never pressed P, and all of Claude's earlier landings were clean; (4) with noclip on, a *disarmed* drone free-falls (-1 m at 4.6 s to -47 m at 10 s, speed 8.6 m/s); (5) the operator's missions skip the `SM_Awning41` collision that stopped Claude's, because noclip lets him fly through it. This corrects the earlier "cause unknown" entries above: the anomaly was caused by the noclip toggle, not by flight time, CPU load or horizontal drift.
 
-**Fix:** `AirSimVehicleAdapter.land()` no longer relies on contact to stop it. After the slow approach, if the drone is within 1.0 m of the ground reference it probes at most 0.5 m below it at 0.5 m/s looking for a new collision timestamp; contact means disarm, no contact means noclip, so it returns to the reference, holds and stays armed (`adapter.landing_note` says so). If the drone is clearly above the reference (holding on an awning) it still uses `landAsync`. Verified live in both modes: **normal** 4.9 s, contact with `SM_seaM`, rests at -0.01 m; **noclip** (Arshad pressed P) trace 12.1 s, ends -0.03 m and holds armed with the landing note; **full solo mission under noclip**: T1 found, home at (-0.2, 0.1), landing 12.0 s (153.2 to 165.2 s), final height -0.0 m, versus 64 s and -11.8 m before the fix. Known limit: under noclip the armed hold lasts only while a script keeps commanding the drone; after the script exits the sim lets it fall out of the world (measured 194 m below the map at 8 m/s). It does not change a run's result. **Record the noclip state of every live run**: a run with P on and a run with P off are different experimental conditions (collisions on versus off). 330 tests pass.
+**Fix:** `AirSimVehicleAdapter.land()` no longer relies on contact to stop it. After the slow approach, if the drone is within 1.0 m of the ground reference it probes at most 0.5 m below it at 0.5 m/s looking for a new collision timestamp; contact means disarm, no contact means noclip, so it returns to the reference, holds and stays armed (`adapter.landing_note` says so). If the drone is clearly above the reference (holding on an awning) it still uses `landAsync`. Verified live in both modes: **normal** 4.9 s, contact with `SM_seaM`, rests at -0.01 m; **noclip** (P pressed) trace 12.1 s, ends -0.03 m and holds armed with the landing note; **full solo mission under noclip**: T1 found, home at (-0.2, 0.1), landing 12.0 s (153.2 to 165.2 s), final height -0.0 m, versus 64 s and -11.8 m before the fix. Known limit: under noclip the armed hold lasts only while a script keeps commanding the drone; after the script exits the sim lets it fall out of the world (measured 194 m below the map at 8 m/s). It does not change a run's result. **Record the noclip state of every live run**: a run with P on and a run with P off are different experimental conditions (collisions on versus off). 330 tests pass.
 
 **Do we still need noclip? (2026-10-09, tested)** Fresh sim, noclip OFF, full solo mission on a temporary scenario with Sector A pulled in to x 20..36, y 20..36 (file not kept). The awning at x ~ 41 is out of the route and the first two lanes completed, but the drone then stopped at (35.8, 29.1) for a 30 s timeout (solid object near x 36-40, y 29-30), returned home, never found T1 (`target_found: None`); the first search leg also hit a 30 s timeout at step 3, as in noclip runs. The new landing worked with noclip off (4.7 s, final height -0.0 m). Verdict: noclip is no longer needed for the landing, but Sector A as laid out cannot be completed with collisions on; fixing that needs either a clear area of the map (a survey of obstacles, a team decision) or a statement in the paper that collisions were not modelled. Open question for Taner/Akbas.
 
 Open: the -11.8 m / 64 s landing from the full mission. Next step is to repeat the full mission a few times and log `land()` duration and the post-landing position each time, to see whether it recurs.
+
+### 2026-10-28 live check of the migrated failure-recovery script (no runs/ folder)
+
+- Ran `scripts/run_failure_recovery.py --airsim` against CarlaAir v0.1.7 (four drones, one slot, per-user ports). The `--airsim` path is not routed through the experiment runner, so it wrote no run folder.
+- Result class matched the pre-migration script: 2 of 4 sectors searched in both. The mock run of the same scenario covers 4 of 4, so the live sim is slower and drains batteries faster.
+- Noclip state for this run was not recorded, so it cannot be compared with the noclip runs above.
+- Runs made before the clock fix (the 5 s and 8 s Ollama runs) were scored on the telemetry clock, which starts about 3 s before the agents mission clock, and keep their old numbers.
+- The Ollama tag llama3.1:latest floats; the model used had digest 46e0c10c039e. Report the digest, not the tag.
 
 ## 4. Conditions of the data
 
 Recorded because a run's conditions are part of the result.
 
 - Model: `llama3.1:8b`, pinned, temperature 0, seed 17
-- Host: Arshad's laptop, one local Ollama process serving all four agents
+- Host: a laptop, one local Ollama process serving all four agents
 - Latency: about 11 s per model call; queueing on one process can exceed a 30 s budget
 - Simulator: CarlaAir (confirm version and map before the first study run)
 - For comparison: the SC branch runs `llama3.3:70b` on an H100 (ERAU Vega) at about 0.7-1.8 s per plan. Results from the 8B here should say so.
