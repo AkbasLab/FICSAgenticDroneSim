@@ -58,6 +58,11 @@ WALL_CLOCK_ALLOWED = {"airsim_adapter.py", "fake_airsim.py", "clock.py",
 #: The one module allowed to hold a random number generator.
 RNG_ALLOWED = {"network_model.py"}
 
+#: Offline tools that use a generator *outside* any run: Phase 17.4 draws the
+#: held-out seeds from random.Random(<fixed tag>), so anyone can regenerate
+#: and verify the list. Nothing in a mission ever calls it.
+OFFLINE_RNG_ALLOWED = {"freeze.py"}
+
 PASS, FAIL = [], []
 
 
@@ -103,6 +108,8 @@ def test_only_one_module_holds_a_random_number_generator():
             elif isinstance(node, ast.ImportFrom):
                 uses_random |= (node.module or "").split(".")[0] in (
                     "random", "secrets")
+        if uses_random and name in OFFLINE_RNG_ALLOWED:
+            continue
         if uses_random and name not in RNG_ALLOWED:
             offenders.append(name)
         elif uses_random:
@@ -112,6 +119,10 @@ def test_only_one_module_holds_a_random_number_generator():
           not offenders, f"also: {offenders}")
     check("the network model does import one (the test can still see it)",
           seeded == sorted(RNG_ALLOWED), f"found {seeded}")
+
+    fsrc = open(os.path.join(PKG, "experiments", "freeze.py"), encoding="utf-8").read()
+    check("the held-out seed generator is seeded with a fixed tag",
+          "random.Random(HELDOUT_TAG)" in fsrc and "random.random(" not in fsrc)
 
     # And the one that exists must be explicitly seeded, never the module-level
     # global generator, which is shared process-wide and unrepeatable.

@@ -393,7 +393,7 @@ to a real invariant, applied to a throwaway copy of the repository; the
 simulator-free suites run against the damaged copy, and the defect counts as
 caught only if a suite fails.
 
-**16 of 16 caught**: eleven written up front, across allocation, communication, roles, belief and safety, plus five first found by flying in CARLA-Air:
+**20 of 20 caught**: eleven written up front, across allocation, communication, roles, belief and safety; five first found by flying in CARLA-Air; and four found by the Phase 17 pilot timelines (see `docs/PILOT.md`):
 
 | Defect | Breaks |
 |---|---|
@@ -413,6 +413,10 @@ caught only if a suite fails.
 | `sweep_timeout_per_leg` | each sweep leg gets the whole timeout; a pinned drone waits 10 min per leg |
 | `no_stand_by_for_teammates` | survivors land before a lost teammate is noticed; its sector is never searched |
 | `completion_gossip_ignored` | a lost "task complete" is never repaired; drones wait on finished work |
+| `dead_drones_bid_still_counts` | a failed drone's stale bid out-bids the survivor; its sector is never flown |
+| `fault_on_belief_clock` | a fault lands one skill late; a "dead" LLM drone flies a whole sweep |
+| `grounded_drone_quits_while_bidding` | a drone on its pad whose rivals' bids were lost sits out the mission |
+| `idle_rounds_take_no_time` | idle waiting is instantaneous on a simulated clock; a drone lands before a failure can be noticed |
 
 The last five were each invisible to the suite when they were found - they
 appeared only in real simulator runs - and each is now caught by the fake

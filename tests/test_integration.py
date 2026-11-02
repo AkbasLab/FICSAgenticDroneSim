@@ -224,9 +224,22 @@ def test_a_partition_divides_the_team():
           not nominal_dup, f"{nominal_dup}")
     check("the partition is what causes the duplication", bool(dup),
           "no duplication under a partition - check the partition is active")
-    check("the halves do not each re-fly the whole mission",
-          len(dup) < len(flown_by(agents)),
-          f"{len(dup)} of {len(flown_by(agents))} sectors duplicated")
+    # Within a half the drones can still hear each other, so a sector must
+    # never be flown twice by the same half. Across halves it may be: the
+    # partition (115 s) outlasts the presumed-lost threshold (4 heartbeats), so
+    # each half concludes - by design, silence is failure - that the other half
+    # is gone and reclaims its work.
+    #
+    # This used to assert that fewer than all sectors were duplicated. That
+    # held only because an idle drone's waiting rounds took no simulated time,
+    # so it gave up and landed before the presumed-lost threshold could pass;
+    # the Phase 17 pilot found the same artefact losing sectors outright under
+    # packet loss, and fixing it let the designed reclaim actually happen here.
+    halves = ({"Drone1", "Drone2"}, {"Drone3", "Drone4"})
+    within = {k: v for k, v in flown_by(agents).items()
+              if any(len(v & h) > 1 for h in halves)}
+    check("no sector is flown twice by drones that can hear each other",
+          not within, f"{within}")
 
     # What actually happened is sound: every sector was flown by somebody.
     check("every sector was flown by someone despite the partition",

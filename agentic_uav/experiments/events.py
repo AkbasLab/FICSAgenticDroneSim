@@ -218,24 +218,50 @@ def _from_decisions(log, built):
     for agent in built.agents:
         dlog = getattr(agent, "log", None)
         for r in getattr(dlog, "records", []):
+            # What the agent believed about itself when it decided: the task it
+            # held, its role and where it was. Carried on the step's events so
+            # a timeline of task and role by drone (Phase 17.2) can be drawn
+            # from the event stream alone.
+            me = (r.known or {}).get("self", {}) if isinstance(r.known, dict) else {}
+            state = {"task": me.get("current_task"), "role": me.get("role"),
+                     "position": me.get("position")}
             # every step begins by observing position, battery and sensor input
             log.emit(EventType.OBSERVATION_RECEIVED, t=r.time_s,
                      vehicle=r.vehicle_id, source="derived:decision_log",
-                     step=r.step)
+                     step=r.step, position=state["position"],
+                     battery=me.get("battery_frac"))
             log.emit(EventType.BELIEF_UPDATED, t=r.time_s, vehicle=r.vehicle_id,
                      source="derived:decision_log", step=r.step,
-                     triggers=list(r.triggers), unknown=len(r.unknown or []))
+                     triggers=list(r.triggers), unknown=len(r.unknown or []),
+                     **state)
             if r.objective:
                 log.emit(EventType.DECISION_PROPOSED, t=r.time_s,
                          vehicle=r.vehicle_id, source="derived:decision_log",
-                         step=r.step, objective=r.objective, skill=r.skill or None)
+                         step=r.step, objective=r.objective, skill=r.skill or None,
+                         guardian_override=r.guardian_override, **state)
             if r.skill:
                 log.emit(EventType.SKILL_STARTED, t=r.time_s,
                          vehicle=r.vehicle_id, source="derived:decision_log",
-                         step=r.step, skill=r.skill)
+                         step=r.step, skill=r.skill, task=state["task"])
                 log.emit(EventType.SKILL_COMPLETED, t=r.time_s,
                          vehicle=r.vehicle_id, source="derived:decision_log",
-                         step=r.step, skill=r.skill, outcome=r.outcome)
+                         step=r.step, skill=r.skill, outcome=r.outcome,
+                         task=state["task"])
+
+        # Mission progress: a sector this drone itself finished sweeping, at the
+        # time it finished. Sectors learned from a teammate are not progress by
+        # this drone and are left out, exactly as coverage counts them.
+        # `searched_at` is stamped when the sweep begins; the sweep is finished
+        # at the drone's next decision step, which is the time used here.
+        step_times = sorted(r.time_s for r in getattr(dlog, "records", []))
+        for reg in getattr(agent.belief.local_map, "searched_regions", []):
+            if reg.by_vehicle == agent.vehicle_id:
+                done_at = next((t for t in step_times if t > reg.searched_at + 1e-6),
+                               agent.belief.now)
+                log.emit(EventType.SKILL_COMPLETED, t=done_at,
+                         vehicle=agent.vehicle_id, source="derived:belief",
+                         skill="sector_sweep", sector=reg.region_id,
+                         outcome="sector_searched", started_at=reg.searched_at)
 
         # detections, with the time the agent recorded them
         for target in getattr(agent.belief.local_map, "observed_targets", []):

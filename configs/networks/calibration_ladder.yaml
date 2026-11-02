@@ -1,0 +1,42 @@
+# Phase 17.3 - communication calibration ladder.
+#
+#   python scripts/calibrate_comms.py configs/networks/calibration_ladder.yaml
+#
+# Each level is a NetworkProfile. The sweep runs every level with the
+# architectures below and classifies it with the rules at the bottom; the
+# final levels are chosen from the levels that pass.
+#
+# Everything here is an experimental parameter, not a claim about a real radio.
+
+architectures: [B, C, D]        # B = no coordination: the "comms cannot help" reference
+team_size: 4
+failure_profile: drone_failure_early
+seeds: [201, 202, 203, 204, 205, 206, 207, 208, 209, 210]   # calibration seeds
+heartbeat_s: 8.0
+
+# Axis 1: packet loss at a fixed, ordinary latency. The final profiles come
+# from this axis, so moderate and severe differ in one parameter only.
+loss_axis:
+  latency_ms_mean: 150
+  latency_ms_jitter: 50
+  loss: [0.0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90]
+
+# Axis 2: latency at a fixed, light loss - to find where latency alone makes
+# communication useless.
+latency_axis:
+  packet_loss_probability: 0.05
+  latency_ms_mean: [20, 500, 2000, 5000, 10000, 20000, 40000, 60000, 120000]
+  jitter_fraction: 0.2
+
+# Reference levels: the Phase 10 profiles as currently defined.
+reference: [nominal, moderate, severe]
+
+rules:
+  useless_delivery_below: 0.25        # under a quarter of messages arrive
+  useless_dup_fraction: 0.90          # every coordinating arch duplicates >= 90% of sectors
+  weak_dup_below: 0.5                 # duplicated sectors per run, mean
+  weak_time_within: 0.15              # mission time within 15% of the loss-free level
+  trivial_success_rate: 0.95          # clean-success rate at or above this for all = trivial
+  trivial_failure_rate: 0.05          # at or below this for all = trivial
+  saturated_dup_fraction: 0.75        # ...or no clean success and >= 75% of sectors duplicated
+  min_seed_variance: true             # a level whose seeds all give the same outcome is flagged

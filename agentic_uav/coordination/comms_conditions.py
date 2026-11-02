@@ -71,6 +71,45 @@ _register(partitioned())
 ORDER = ["nominal", "moderate", "severe", "partitioned"]
 
 
+# --- Phase 17.3: the calibrated final profiles ---
+#
+# Chosen by scripts/calibrate_comms.py and written to
+# configs/networks/final_profiles.yaml; frozen by Phase 17.4. Loaded here so a
+# config can name `final_nominal`, `final_moderate` or `final_severe` exactly as
+# it names the Phase 10 conditions. The Phase 10 conditions are kept unchanged
+# so earlier results stay reproducible - but the calibration found the old
+# `severe` unusable (its rate limit drops ~85% of messages in the stepped
+# simulator, the same way every seed), so final experiments use these.
+
+FINAL = []
+
+
+def _load_final():
+    import os
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__)))), "configs", "networks", "final_profiles.yaml")
+    if not os.path.exists(path):
+        return
+    try:
+        import yaml
+        with open(path, encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except Exception:                                           # noqa: BLE001
+        return
+    for name, d in data.items():
+        if not name.startswith("final_") or not isinstance(d, dict):
+            continue
+        _register(NetworkProfile(
+            name=name,
+            latency_ms_mean=float(d["latency_ms_mean"]),
+            latency_ms_jitter=float(d["latency_ms_jitter"]),
+            packet_loss_probability=float(d["packet_loss_probability"])))
+        FINAL.append(name)
+
+
+_load_final()
+
+
 def condition(name):
     """Look up a condition by name. Raises with the valid options if unknown."""
     if name not in CONDITIONS:

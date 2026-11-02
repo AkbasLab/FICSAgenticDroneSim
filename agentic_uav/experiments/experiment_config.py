@@ -203,6 +203,7 @@ class Manifest:
     traceback: Optional[str] = None
 
     event_counts: Dict[str, int] = field(default_factory=dict)
+    team: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
 
     @staticmethod

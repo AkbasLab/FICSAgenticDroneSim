@@ -1,0 +1,18 @@
+# Phase 17 pilot, second pass: the same matrix on the calibrated profiles.
+#
+#   python scripts/run_pilot.py configs/experiments/pilot_matrix_v2.yaml
+#
+# The first pass (pilot_matrix.yaml) used the Phase 10 `severe` profile, which
+# the calibration rejected: its rate limiter drops ~85% of messages and every
+# seed gives the same result. This pass checks the calibrated levels behave as
+# the calibration says, before anything is frozen.
+pilot_id: pilot_v2
+architectures: [deterministic_decentralized, agentic_decentralized]   # C, D
+team_sizes: [2, 4]
+network_profiles: [final_nominal, final_moderate, final_severe]
+failure_profile: drone_failure_early
+seeds: [111, 112, 113, 114, 115]
+scenario: search_relay_001
+planner: scripted
+heartbeat_s: 8.0
+max_steps: 600

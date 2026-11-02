@@ -1,0 +1,187 @@
+{
+ "fingerprint": {
+  "metrics": "460d71eeb86f37b2",
+  "networks": "d0f24b6194b1ea39",
+  "prompts": "0ba38a9582581cbe",
+  "scenarios": "a1ae5548f2b0271f",
+  "seeds": "444ffdaa7ff0dd49",
+  "task_rules": "b2746690fd7414c8"
+ },
+ "frozen_at": "2026-10-21T10:09:53",
+ "groups": {
+  "metrics": {
+   "collision_radius_m": 1.0,
+   "derived_definitions": "5c81d740b5dd8e3b",
+   "primary_definitions": "2efc251477e26af9",
+   "score_weights": "63cd72582790121e",
+   "separation_sample_dt_s": 1.0,
+   "sources": {
+    "agentic_uav/experiments/evaluation.py": "b4f9103824e0dea9",
+    "agentic_uav/experiments/metrics.py": "1663787cf755b652"
+   }
+  },
+  "networks": {
+   "default_ttl_s": 90.0,
+   "final_profiles": {
+    "final_moderate": "final_moderate: latency 150\u00b150ms, loss 10%",
+    "final_nominal": "final_nominal: latency 150\u00b150ms, loss 0%",
+    "final_severe": "final_severe: latency 150\u00b150ms, loss 60%"
+   },
+   "message_ttls": {
+    "heartbeat": 90.0,
+    "help_request": 120.0,
+    "intent_update": 90.0,
+    "mission_update": Infinity,
+    "role_change": 180.0,
+    "status_update": 180.0,
+    "target_found": 600.0,
+    "task_accept": 180.0,
+    "task_announcement": 180.0,
+    "task_award": 180.0,
+    "task_bid": 180.0,
+    "task_complete": 300.0,
+    "task_release": 180.0
+   },
+   "sources": {
+    "agentic_uav/coordination/comms_conditions.py": "be775e3a9af4f52a",
+    "agentic_uav/coordination/network_model.py": "7a7c2788f56a91f7",
+    "configs/networks/final_profiles.yaml": "38c7290069deaf45"
+   }
+  },
+  "prompts": {
+   "benchmark_system_prompt": "11ae3df6012e7b47",
+   "decision_limits": {
+    "MAX_OUTGOING_MESSAGES": 4,
+    "MAX_PAYLOAD_KEYS": 8,
+    "MAX_RECIPIENTS": 8
+   },
+   "llm_system_prompt": "e61ac691d976679a",
+   "llm_tools": {
+    "accept_task": "coordination:99bbf0b19ffac296",
+    "act_as_relay": "flight:9b1fc0f6c0144a3d",
+    "announce_task": "coordination:01667d5bcfa031c8",
+    "change_role": "coordination:fb93a49b6a5fb68b",
+    "claim_task": "coordination:145ad1e305cf0150",
+    "compute_task_cost": "coordination:145ad1e305cf0150",
+    "decline_task": "coordination:ea69bd9b0cd30bae",
+    "go_to_waypoint": "flight:7e3bba179d0f5d6b",
+    "hold": "flight:46f6838744fbb88e",
+    "release_task": "coordination:ea69bd9b0cd30bae",
+    "report_target": "coordination:35c1eade9bf712b4",
+    "request_help": "coordination:3e851208b6b86c1b",
+    "return_home": "flight:ed2d55db58ccfecf",
+    "send_bid": "coordination:145ad1e305cf0150",
+    "start_search": "flight:ed2d55db58ccfecf"
+   },
+   "reason_codes": [
+    "BASE_LINK_LOST",
+    "PEER_UNREACHABLE",
+    "TASK_COMPLETE",
+    "TASK_INFEASIBLE",
+    "LOW_BATTERY",
+    "BETTER_BID_EXISTS",
+    "NO_WORK_REMAINING",
+    "TARGET_FOUND",
+    "COVERAGE_GAP",
+    "SAFETY_CONCERN",
+    "TEAM_REQUEST",
+    "OTHER"
+   ],
+   "sources": {
+    "agentic_uav/agents/context_builder.py": "444e6bbb628b001e",
+    "agentic_uav/agents/decision_schema.py": "84a7874531e6351e",
+    "agentic_uav/agents/llm_tools.py": "861c30efd3ca5ca0",
+    "configs/benchmark/guardrail_prompts.yaml": "ccdc760cc09dab41"
+   }
+  },
+  "scenarios": {
+   "failure_profiles": {
+    "drone_failure_early": {
+     "Drone2": 1.0
+    },
+    "drone_failure_midmission": {
+     "Drone2": 30.0
+    },
+    "none": {},
+    "relay_failure": {
+     "Drone4": 20.0
+    },
+    "two_drone_failure": {
+     "Drone2": 1.0,
+     "Drone3": 45.0
+    }
+   },
+   "missions": {
+    "example_mission.json": "8dab38dfd056c737",
+    "example_two_drone.json": "7a4184032609d4ab",
+    "search_relay_001.yaml": "d36caf25f5a2e5ac",
+    "search_relay_001_sim.yaml": "ac3c889b23f0c58d"
+   }
+  },
+  "seeds": {
+   "heldout": "b01a30c05c9ed49c",
+   "heldout_count": 100,
+   "heldout_tag": "FICSAgenticDroneSim/heldout/v1"
+  },
+  "task_rules": {
+   "agent_waiting": {
+    "GOSSIP_COMPLETIONS": false,
+    "GROUND_WAIT_S": 1.0,
+    "IDLE_WAIT_S": 2.0,
+    "MAX_GROUND_WAITS": 60,
+    "MAX_IDLE_ROUNDS": 3,
+    "MAX_IDLE_WAITS": 30,
+    "STAND_BY_FOR_TEAMMATES": false,
+    "STAND_BY_LEASES": 2.0
+   },
+   "bid_limits": {
+    "MAX_RANGE_M": 150.0,
+    "MAX_WORKLOAD": 3.0
+   },
+   "bid_weights": {
+    "w_b": 1.5,
+    "w_c": 0.5,
+    "w_d": 1.0,
+    "w_l": 2.0,
+    "w_r": 5.0
+   },
+   "bid_window_s": 5.0,
+   "health_thresholds": {
+    "failed": 8.0,
+    "suspect": 2.0,
+    "unreachable": 4.0
+   },
+   "lease_s": 120.0,
+   "search": {
+    "DEFAULT_SPEED": 4.0,
+    "DEFAULT_TOLERANCE": 1.5,
+    "LANE_SPACING": 8.0,
+    "LEG_TIMEOUT": 600.0
+   },
+   "sources": {
+    "agentic_uav/agents/persistent_agent.py": "4427ca332155b47e",
+    "agentic_uav/agents/safety_guardian.py": "ab4187f6f9188cd4",
+    "agentic_uav/agents/search_policy.py": "804f4de67be8d7dd",
+    "agentic_uav/coordination/bidding.py": "78c6de5dd1fa421e",
+    "agentic_uav/coordination/role_manager.py": "010973714f2fb782",
+    "agentic_uav/coordination/roles.py": "d4379ef51838a476",
+    "agentic_uav/coordination/task_allocator.py": "8c2711917c528e3e",
+    "agentic_uav/coordination/tasks.py": "39449c2441f0305e"
+   }
+  }
+ },
+ "history": [
+  {
+   "at": "2026-10-21T10:09:53",
+   "fingerprint": {
+    "metrics": "460d71eeb86f37b2",
+    "networks": "d0f24b6194b1ea39",
+    "prompts": "0ba38a9582581cbe",
+    "scenarios": "a1ae5548f2b0271f",
+    "seeds": "444ffdaa7ff0dd49",
+    "task_rules": "b2746690fd7414c8"
+   },
+   "reason": "initial freeze after the Phase 17 pilots"
+  }
+ ]
+}

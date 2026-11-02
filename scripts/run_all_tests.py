@@ -33,10 +33,11 @@ SUITES = [
     ("14",  "Experiment runner + logs",  "tests/test_experiment_runner.py", 25),
     ("15",  "Metric definitions",        "tests/test_evaluation.py", 90),
     ("16",  "Integration (mock adapter)", "tests/test_integration.py", 48),
-    ("16",  "Determinism",               "tests/test_determinism.py", 28),
+    ("16",  "Determinism",               "tests/test_determinism.py", 29),
     ("B",   "Guardrail benchmark",       "tests/test_guardrail_benchmark.py", 100),
     ("3-12", "AirSim code path (fake sim)", "tests/test_airsim_path.py", 20),
     ("16",  "AirSim regression missions", "tests/test_airsim_regression.py", 5),
+    ("17",  "Pilots, calibration, freeze", "tests/test_pilot.py", 57),
 ]
 
 DEMOS = [
@@ -55,6 +56,9 @@ DEMOS = [
     ("12", "LLM failure modes",       "scripts/run_llm_agents.py --failures --unsafe"),
     ("13", "Architecture comparison",  "scripts/run_experiment.py --condition nominal --kill Drone2@1"),
     ("14", "Batch experiment run",     "scripts/run_batch.py configs/experiments/exp_0042.yaml --out /tmp/p14_demo"),
+    ("17", "Pilot matrix + log audit", "scripts/run_pilot.py configs/experiments/pilot_matrix_v2.yaml --no-plots --out /tmp/p17_pilot"),
+    ("17", "Comms calibration",        "scripts/calibrate_comms.py configs/networks/calibration_ladder.yaml --no-plot --out /tmp/p17_cal"),
+    ("17", "Freeze unchanged",         "scripts/freeze.py"),
 ]
 
 

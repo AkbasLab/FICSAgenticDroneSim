@@ -1,0 +1,17 @@
+# Phase 17.1 pilot matrix. Pilots debug the methodology; they are not results.
+#
+#   python scripts/run_pilot.py configs/experiments/pilot_matrix.yaml
+#
+# 2 architectures x 2 team sizes x 2 network conditions x 1 failure x 5 seeds
+# = 40 runs. Each gets a complete result directory and a timeline.png.
+pilot_id: pilot_v1
+architectures: [deterministic_decentralized, agentic_decentralized]   # C, D
+team_sizes: [2, 4]
+network_profiles: [nominal, severe]
+failure_profile: drone_failure_early      # Drone2 stops at t = 1 s
+seeds: [101, 102, 103, 104, 105]          # pilot seeds - never reused for final runs
+scenario: search_relay_001
+planner: scripted                         # deterministic stand-in for the LLM;
+                                          # use llama3.1:8b for a real-model pilot
+heartbeat_s: 8.0
+max_steps: 600

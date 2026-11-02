@@ -380,9 +380,16 @@ class TaskAllocator:
             # cannot claim either, and the task sits open until it happens to
             # free up. Invisible while every drone bid an identical value; fatal
             # the moment they did not.
+            #
+            # Likewise a bid from a drone we presume lost. Found by the Phase 17
+            # pilot: a drone killed one second in had bid on a sector a hair
+            # better than the survivor, was never "busy" again, and so out-bid
+            # it for the rest of the mission - the sector was never flown.
+            lost = set(self.health.failed_peers()) if self.health else set()
             live = [b for b in heard.values()
                     if b.vehicle_id == self.vehicle_id
-                    or not self._believed_busy(b.vehicle_id, now)]
+                    or (b.vehicle_id not in lost
+                        and not self._believed_busy(b.vehicle_id, now))]
             winner = best_bid(live)
             if winner is None or winner.vehicle_id != self.vehicle_id:
                 continue

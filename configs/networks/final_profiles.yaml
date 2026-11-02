@@ -1,0 +1,17 @@
+_comment: Final network profiles chosen by scripts/calibrate_comms.py from configs/networks/calibration_ladder.yaml.
+  Frozen by Phase 17.4 - do not edit by hand; re-run the calibration.
+final_nominal:
+  calibrated_from: loss00
+  latency_ms_mean: 150.0
+  latency_ms_jitter: 50.0
+  packet_loss_probability: 0.0
+final_moderate:
+  calibrated_from: loss10
+  latency_ms_mean: 150.0
+  latency_ms_jitter: 50.0
+  packet_loss_probability: 0.1
+final_severe:
+  calibrated_from: loss60
+  latency_ms_mean: 150.0
+  latency_ms_jitter: 50.0
+  packet_loss_probability: 0.6

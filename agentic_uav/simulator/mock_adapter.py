@@ -16,6 +16,10 @@ from ..core.models import NavOutcome, Position3D, VehicleState
 
 
 class MockVehicleAdapter:
+    #: Time here advances only when a vehicle does something; an agent that
+    #: wants to wait must ask (see PersistentAgent._wait_on_pad).
+    simulated_clock = True
+
     def __init__(self, ground_z: float = 0.0):
         self._ground = ground_z
         self._pos = {}        # vehicle_id -> Position3D (starts on the ground)

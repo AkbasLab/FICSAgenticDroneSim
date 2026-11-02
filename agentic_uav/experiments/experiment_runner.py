@@ -109,8 +109,8 @@ def run_experiment(cfg: ExperimentConfig, out_root="results", root=ROOT,
         from ..simulator.mock_adapter import MockVehicleAdapter
         from ..simulator.scenario_manager import load_scenario
 
-        scenario = load_scenario(cfg.scenario_path(root))
-        _check_team_size(cfg, scenario, manifest)
+        scenario = _apply_team_size(cfg, load_scenario(cfg.scenario_path(root)),
+                                    manifest)
         backend, model_card = _backend_for(cfg, root)
         manifest.model = model_card
 
@@ -127,13 +127,15 @@ def run_experiment(cfg: ExperimentConfig, out_root="results", root=ROOT,
                  network_profile=built.condition,
                  team_size=len(built.agents),
                  planner=cfg.planner)
-        for vid, when in sorted(cfg.faults.items()):
+        team = {a.vehicle_id for a in built.agents}
+        faults = {v: t for v, t in cfg.faults.items() if v in team}
+        for vid, when in sorted(faults.items()):
             log.emit(EventType.FAULT_INJECTED, t=when, vehicle=vid,
                      fault="vehicle_stopped", scheduled_at=when,
                      profile=cfg.failure_profile)
 
         result = arch.run(built, max_total_steps=cfg.max_steps,
-                          stop_at=cfg.faults)
+                          stop_at=faults)
 
         log.emit(EventType.MISSION_COMPLETED, t=result.mission_time_s,
                  coverage=result.coverage,
@@ -172,6 +174,7 @@ def run_experiment(cfg: ExperimentConfig, out_root="results", root=ROOT,
             with open(os.path.join(directory, "result.json"), "w",
                       encoding="utf-8") as f:
                 json.dump(result.as_row(), f, indent=1, default=str)
+            _save_tracks(result, built, directory)
 
         if built is not None and built.policies:
             _save_llm_transcripts(built, directory)
@@ -208,18 +211,63 @@ def _copy_config(cfg, directory):
             json.dump(cfg.as_dict(), f, indent=1)
 
 
-def _check_team_size(cfg, scenario, manifest):
-    """`team_size` is in the config, but the scenario file decides the fleet.
+def _apply_team_size(cfg, scenario, manifest):
+    """Fly the first `team_size` vehicles the scenario defines.
 
-    Rather than silently running four drones for a config that asked for six,
-    this records a warning in the manifest. The scenario wins because vehicles
-    need start pads, batteries and sectors that only it defines.
+    A smaller team keeps every sector and every target: the mission is the
+    same, there are fewer drones to do it (Phase 17.1 compares two and four
+    drones on one mission). A larger team than the scenario defines cannot be
+    invented - vehicles need start pads and batteries only the scenario has -
+    so that is recorded as a warning and the scenario's fleet is flown.
     """
+    import dataclasses
     actual = len(scenario.vehicles)
-    if cfg.team_size and cfg.team_size != actual:
+    if not cfg.team_size or cfg.team_size == actual:
+        return scenario
+    if cfg.team_size > actual:
         manifest.warnings.append(
             f"config requested team_size={cfg.team_size} but scenario "
             f"'{cfg.scenario}' defines {actual} vehicles; the scenario wins")
+        return scenario
+    flown = scenario.vehicles[:cfg.team_size]
+    missing = [v for v in cfg.faults if v not in {x.vehicle_id for x in flown}]
+    if missing:
+        manifest.warnings.append(
+            f"failure profile targets {', '.join(missing)}, not in a "
+            f"{cfg.team_size}-drone team; that fault is not injected")
+    manifest.team = [v.vehicle_id for v in flown]
+    return dataclasses.replace(scenario, vehicles=list(flown))
+
+
+def _save_tracks(result, built, directory):
+    """Flown tracks and the static map, so trajectories can be drawn from the
+    result directory alone (Phase 17.2): {vehicle: [[x, y, z, t], ...]}."""
+    def pt(p):
+        return [round(p.x, 3), round(p.y, 3), round(p.z, 3)]
+    sc = built.scenario
+    out = {"tracks": {v: [pt(p) + [round(t, 3)] for p, t in samples]
+                      for v, samples in (result.tracks or {}).items()},
+           "sectors": {s.sector_id: [[round(x, 2), round(y, 2)] for x, y in
+                                     _corners(s)] for s in sc.sectors},
+           "restricted_zones": {getattr(z, "zone_id", f"Z{i}"):
+                                [[round(x, 2), round(y, 2)] for x, y in z.polygon]
+                                for i, z in enumerate(getattr(sc, "restricted_zones", []))},
+           "base": pt(sc.base.position),
+           "targets": {t.target_id: pt(t.position) for t in sc.targets}}
+    try:
+        with open(os.path.join(directory, "tracks.json"), "w", encoding="utf-8") as f:
+            json.dump(out, f)
+    except Exception:                                           # noqa: BLE001
+        pass
+
+
+def _corners(sector):
+    b = sector.footprint
+    for names in (("min_x", "min_y", "max_x", "max_y"), ("x_min", "y_min", "x_max", "y_max")):
+        if all(hasattr(b, n) for n in names):
+            x0, y0, x1, y1 = (getattr(b, n) for n in names)
+            return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+    return []
 
 
 def _last_clock(built):

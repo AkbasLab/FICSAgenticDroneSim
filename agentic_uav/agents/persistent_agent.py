@@ -39,6 +39,24 @@ from .search_policy import SearchAgentPolicy
 # before giving up and returning home
 MAX_IDLE_ROUNDS = 3
 
+# A drone still on its pad that is bidding for work, with nothing new to react
+# to, waits this long and looks again - at most MAX_GROUND_WAITS times. Found by
+# the Phase 17 pilot: under 10% packet loss a grounded drone whose rivals' bids
+# were lost had "nothing to replan on", was treated as finished, and sat out the
+# whole mission - so the failed teammate's sector was never flown.
+GROUND_WAIT_S = 1.0
+MAX_GROUND_WAITS = 60
+
+# The same problem in the air. On a simulated clock an idle round takes no time
+# at all, so "wait MAX_IDLE_ROUNDS rounds for work" was instantaneous: a drone
+# that lost its sector in a claim conflict just after take-off - to a teammate
+# that had already failed - landed at t = 3 s, before anyone could notice the
+# failure and free the sector (Phase 17 pilot, 30% loss). While work is still
+# open to it, an idle drone on a simulated clock now hovers IDLE_WAIT_S per
+# round, for at most MAX_IDLE_WAITS rounds.
+IDLE_WAIT_S = 2.0
+MAX_IDLE_WAITS = 30
+
 
 def _to_list(p):
     return None if p is None else [round(p.x, 2), round(p.y, 2), round(p.z, 2)]
@@ -240,6 +258,9 @@ class PersistentAgent:
 
         # event-driven: only re-decide when something happened
         if not self._should_replan(b):
+            if self._waiting_on_pad(b):
+                self._wait_on_pad()
+                return True
             if not self._idle_airborne(b):
                 self.finished = True
                 return False
@@ -254,6 +275,10 @@ class PersistentAgent:
             # just won the lost teammate's sector it was waiting for.
             still_wanted = STAND_BY_FOR_TEAMMATES and (
                 self._waiting_for_work(b) or getattr(b, "standing_by", False))
+            if self._simulated_clock() and self._waiting_for_work(b) \
+                    and self._idle_rounds <= MAX_IDLE_WAITS:
+                still_wanted = True
+                self.adapter.hold(self.vehicle_id, IDLE_WAIT_S)
             if self._idle_rounds > MAX_IDLE_ROUNDS and not still_wanted:
                 b.no_work_remaining = True
             b.push(AgentEvent.COMMS_CHANGED,
@@ -633,6 +658,30 @@ class PersistentAgent:
         b.at_sector = False
         b.sector_searched = False
         b.reported = False
+
+    def _waiting_on_pad(self, b):
+        """Never flown, still bidding for work that is open to us."""
+        if b.airborne:
+            self._has_flown = True
+        if getattr(self, "_has_flown", False) or b.airborne:
+            return False
+        if getattr(self, "_ground_waits", 0) >= MAX_GROUND_WAITS:
+            return False
+        return self._waiting_for_work(b)
+
+    def _wait_on_pad(self):
+        """Let time pass on the pad so the bid window can close. On a simulated
+        clock that means advancing it; in real time it just means a short pause."""
+        self._ground_waits = getattr(self, "_ground_waits", 0) + 1
+        if self._simulated_clock():
+            self.adapter.hold(self.vehicle_id, GROUND_WAIT_S)
+        else:
+            import time as _time
+            _time.sleep(min(GROUND_WAIT_S, 0.2))
+
+    def _simulated_clock(self):
+        return bool(getattr(self.adapter, "simulated_clock", False)) \
+            and hasattr(self.adapter, "hold")
 
     def _idle_airborne(self, b):
         """Flying, holding nothing, with no events - waiting on the team."""

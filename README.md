@@ -769,11 +769,51 @@ reported metric is affected, since coverage counts only sectors actually flown.
 Pinned by a test rather than patched, because eventual consistency after a
 partition is a design decision, not a bug to fix quietly.
 
+## Phase 17 — Pilot experiments, calibration, and the freeze
+
+Pilots debug the methodology, not the architectures. Details and every number
+are in **[`docs/PILOT.md`](docs/PILOT.md)**.
+
+```bash
+python scripts/run_pilot.py configs/experiments/pilot_matrix.yaml        # C/D x 2/4 drones x 2 networks x 5 seeds
+python scripts/calibrate_comms.py configs/networks/calibration_ladder.yaml --write-final
+python scripts/run_pilot.py configs/experiments/pilot_matrix_v2.yaml     # same matrix, calibrated levels
+python scripts/freeze.py                                                 # has anything frozen changed?
+```
+
+**Every run gets a timeline drawn from its logs alone.** Each one shows
+trajectories, task and role by drone, messages, comms quality per drone,
+reallocations, LLM decisions, guardian interventions and mission progress. The
+timelines found four coordination defects the aggregate numbers hid. Each is
+now fixed, tested and in the defect catalogue (20/20 caught):
+
+- a dead drone's stale bid out-bid the survivor forever
+- faults landed one skill late
+- a grounded drone quit while its bids were in flight
+- idle waiting took no simulated time
+
+**The communication levels are calibrated against written rules**:
+
+- **Useless:** fewer than a quarter of messages arrive, or latency exceeds the presumed-lost threshold.
+- **Too weak:** coordination is not affected.
+- **Trivial:** every run succeeds, or every run fails.
+- **Flat:** every seed gives the same result.
+
+The final levels are 0%, 10% and 60% loss at 150 ms. The old Phase 10 `severe`
+was *flat and useless*: its rate limiter, not the packet loss, decided what got
+through, and it decided the same way for every seed.
+
+**Frozen:** prompts, task rules, metrics, the calibrated network profiles, the
+scenario families, and 100 held-out seeds kept apart from every pilot seed.
+`scripts/freeze.py` names any change, and a deliberate one needs
+`--refreeze --reason`.
+
 ---
 
 ## Testing
 
-461 tests, none of which need a simulator, GPU or API key.
+634 tests and 18 demos (`python scripts/run_all_tests.py`), none of which need a
+simulator, GPU or API key.
 
 | Suite | Tests | Covers |
 |---|---|---|
@@ -793,7 +833,10 @@ partition is a design decision, not a bug to fix quietly.
 | `test_evaluation.py` | 90 | every metric has a written definition, and the conventions that keep it honest |
 | `test_integration.py` | 48 | the seven assembled-system scenarios: 2 and 4 agent allocation, loss, partition, conflict, relay, LLM fallback |
 | `test_determinism.py` | 28 | same seed, same run - and only one seeded RNG exists in the package |
-| `test_airsim_path.py` | 17 | the AirSim code path, against a fake simulator |
+| `test_airsim_path.py` | 20 | the AirSim code path, against a fake simulator |
+| `test_airsim_regression.py` | 5 | the five 16.3 regression missions (fake simulator, or `--real`) |
+| `test_guardrail_benchmark.py` | 100 | TRA / GBR / MVL harness across models |
+| `test_pilot.py` | 57 | pilot matrix, timelines, log audit, calibration rules, freeze, the four pilot defects |
 
 ---
 
@@ -807,6 +850,8 @@ partition is a design decision, not a bug to fix quietly.
 - **[`docs/SIM_TESTING.md`](docs/SIM_TESTING.md)** — flying Phases 3–7 in
   CARLA-Air for real: environment setup, pinned versions, the port layout, and
   the known failure modes when the simulator is involved.
+- **[`docs/PILOT.md`](docs/PILOT.md)** — Phase 17: what the pilots found, the
+  calibrated communication levels and why each is meaningful, and what is frozen.
 - **[`docs/METRICS.md`](docs/METRICS.md)** — every reported metric, its written
   definition, and the conventions that stop a metric from flattering the result.
 - **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)** — module-by-module design,

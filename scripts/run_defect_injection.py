@@ -189,6 +189,39 @@ DEFECTS = [
      "a lost TASK_COMPLETE is never repaired, so standing-by drones wait on "
      "finished work and a lapsed lease sends a drone to re-fly it",
      ["tests/test_allocation.py"]),
+
+    # --- found by the Phase 17 pilot timelines --------------------------------
+    ("dead_drones_bid_still_counts", "coordination",
+     "agentic_uav/coordination/task_allocator.py",
+     "                    or (b.vehicle_id not in lost\n",
+     "                    or (True\n",
+     "a failed drone's stale bid keeps out-bidding the survivor, so that sector "
+     "is never flown",
+     ["tests/test_pilot.py"]),
+
+    ("fault_on_belief_clock", "fault injection",
+     "agentic_uav/experiments/architectures.py",
+     "                    and _clock(a) >= when:",
+     "                    and a.belief.now >= when:",
+     "a fault lands one skill late, so a 'dead' drone flies one more skill - "
+     "a whole sweep, for the LLM policy",
+     ["tests/test_pilot.py"]),
+
+    ("grounded_drone_quits_while_bidding", "coordination",
+     "agentic_uav/agents/persistent_agent.py",
+     "            if self._waiting_on_pad(b):",
+     "            if False:",
+     "a drone still on its pad whose rivals' bids were lost has nothing to "
+     "react to, is treated as finished, and sits out the mission",
+     ["tests/test_pilot.py"]),
+
+    ("idle_rounds_take_no_time", "coordination",
+     "agentic_uav/agents/persistent_agent.py",
+     "                    and self._idle_rounds <= MAX_IDLE_WAITS:",
+     "                    and False:",
+     "an idle drone's waiting rounds take no simulated time, so it lands "
+     "before a failed teammate can be noticed and its sector freed",
+     ["tests/test_pilot.py", "tests/test_integration.py"]),
 ]
 
 
@@ -216,7 +249,12 @@ def _suite_fails(workdir, suite, timeout_s=300):
     try:
         p = subprocess.run(cmd, cwd=workdir,
                            capture_output=True, text=True, timeout=timeout_s,
-                           env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                           # The freeze check would flag every injected
+                           # defect as "a frozen file changed" - true, and
+                           # useless: the point is whether a *behavioural*
+                           # test notices. So it is switched off here.
+                           env={**os.environ, "PYTHONIOENCODING": "utf-8",
+                                "AGENTIC_UAV_SKIP_FREEZE_CHECK": "1"},
                            encoding="utf-8", errors="replace")
     except subprocess.TimeoutExpired:
         # A hang is a detection too: the suite noticed, by not finishing.

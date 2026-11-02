@@ -423,8 +423,13 @@ def run(built: BuiltRun, max_total_steps=600, stop_at=None) -> RunResult:
         # before the sweep starts if the intent is to prevent the work.
         for a in agents:
             when = stop_at.get(a.vehicle_id)
+            # The adapter clock, not the belief clock: the belief clock is the
+            # time the drone last *observed*, so it lags a whole skill behind.
+            # Found by the Phase 17 pilot - a drone killed at t=1 s was still
+            # reading t=0 after take-off, got one more turn, and an LLM policy
+            # used it to fly a complete 70 s sweep after it was "dead".
             if when is not None and a.vehicle_id not in stopped \
-                    and a.belief.now >= when:
+                    and _clock(a) >= when:
                 a.stopped = True
                 stopped.add(a.vehicle_id)
         if built.controller is not None:
@@ -442,6 +447,17 @@ def run(built: BuiltRun, max_total_steps=600, stop_at=None) -> RunResult:
     return _measure(built, total, stopped=stopped, tracks=_tracks(agents),
                     hit_step_cap=bool(active) and total >= max_total_steps,
                     step_cap=max_total_steps)
+
+
+def _clock(agent):
+    """The drone's current simulated time: its adapter clock when it has one."""
+    adapter = getattr(agent, "adapter", None)
+    if adapter is not None and hasattr(adapter, "now"):
+        try:
+            return max(agent.belief.now, adapter.now(agent.vehicle_id))
+        except Exception:                                   # noqa: BLE001
+            pass
+    return agent.belief.now
 
 
 def _tracks(agents) -> Dict[str, List[Any]]:
