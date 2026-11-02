@@ -102,6 +102,38 @@ Open: the -11.8 m / 64 s landing from the full mission. Next step is to repeat t
 - Runs made before the clock fix (the 5 s and 8 s Ollama runs) were scored on the telemetry clock, which starts about 3 s before the agents mission clock, and keep their old numbers.
 - The Ollama tag llama3.1:latest floats; the model used had digest 46e0c10c039e. Report the digest, not the tag.
 
+### 2026-11-02 live runs of the zone monitor and sighting confirmation (no runs/ folder)
+
+Not study data: single runs, a moved target and a zone that appears when the drone nears it. They show whether the pieces work under real physics, nothing more.
+
+- **Set-up.** CarlaAir v0.1.7, Town10HD, one slot. A solo Drone1 agent with the deterministic policy (no model), flown by `~/live_zone_smoke.py` through `AirSimVehicleAdapter` pointed at the sim's only vehicle, `SimpleFlight`. The script and the results (`~/live_smoke_cal.json`, `_z2.json`, `_z3.json`) sit on the Heidi machine, outside git; the Heidi proof-of-concept expires 2026-11-30.
+- **cal: no dynamic zone, T1 at (30, 30).** Found T1 in 166 s with 55% battery used. First slow near T1 at about 121 s (the mock gets there in about 5 s). The hover jitters 1-2 m and the speed never settles below about 0.5 m/s. Noclip state was not recorded; the drone flew through x 36-40, y 29-30, which the 2026-10-09 test found solid, so noclip was probably on.
+- **Noclip on, after cal.** The drone fell through the ground once it had landed and was disarmed. The next takeoff failed at the ground-settle check, and a sim reset put it straight back into the fall. After noclip was turned off (P) the drone rests at ground level (z about 29.24 in the sim's frame) and takeoff works. This matches the 2026-10-09 root cause.
+- **z1: noclip off, T1 at (30, 30).** Pinned at (41.4, 20.0) from about 54 s to the end (203 s), against the awning near x 41 on Sector A's first lane. Never got near T1; every later skill failed. Same blocker as 2026-10-09: Sector A cannot be completed with collisions on.
+- **z2: noclip off, target moved to (28, 20).** That spot is on a lane the drone had just flown freely. A 16 m zone box around it switched on when the drone first came within 4.5 m, for 12 s. It arrived mid-leg, before the target was sensed (an agent only senses after a leg ends). Trace: `zone_interrupt`, `exit_zone` steer-out to (17.0, 20.3), waited, resumed after the zone expired at 52 s, found T1 (closest 0.17 m). About 2.0 s inside the zone. The confirm flow did not run.
+- **z3: as z2, but the zone switched on 0.15 s after detection, so it lands inside the 2 s report hold.** Trace: `target_detected`, `sighting_blocked(T1, clears=46.8s)`, `confirm_target`, `exit_zone` steer-out, `sighting_confirmed(T1)`, `return_home`, `land`. About 2.5 s inside the zone, 80 s run, 74% battery left, closest 0.1 m, then 7 s within 3.1 m of the target. The zone was triggered by the drone's own detection, so say so wherever this is cited.
+- **Still untested live:** a drifting zone, a zone that never expires, two or more drones (the confirmer choice), and a model in the policy slot.
+
+### 2026-11-02 model probe of confirm_target (prompt level, no sim, no `runs/` folder)
+
+Not a mission run: the real prompt, menu and parser were fed to the real model for a drone that has finished its own sector while a blocked sighting waits, and the answer was parsed. Scripts `~/model_confirm_probe.py`, `~/model_confirm_probe2.py`, `~/model_probe_where.py` and results `~/model_confirm_probe*.json` sit on the Heidi machine, outside git.
+
+- **Model.** `llama3.1:latest` through Ollama on the Heidi machine (8B, digest 46e0c10c039e), temperature 0.5, seeds 1-8. Prompt as built by `context_builder.py`.
+- **Scenarios.** A: the code would send this drone, zone clears in 4 s. B: the code would send Drone1 (next to the target), 4 s. C: Drone1, 40 s. D: nothing waiting, so `confirm_target` is not on the menu.
+- **As built (probe 1, 25 answers).** `confirm_target` was never chosen. `go_to_waypoint` every time, including D. Every answer parsed. In A, 2 of 3 re-sampled answers flew to the sighting's coordinates (28, 20); in B 1 of 3; the rest copied Drone1's position (30, 25), as did all of D.
+- **Clearer wording (probe 2, 48 answers, wording tuned after probe 1).** V1 put `confirm_target` first in the options and added "to confirm one of these, choose confirm_target; flying there with go_to_waypoint does not confirm it". V2 added a hint on when to take it. `confirm_target` was still never chosen. `go_to_waypoint` to the sighting's coordinates rose to 5-6 of 8 (V1) and 7-8 of 8 (V2).
+- **Reading.** The model understands there is something to go and do at the sighting, and keeps using `go_to_waypoint` for it. That flight has no wait for the zone, no dwell and no TARGET_FOUND, so the sighting would stay unconfirmed. This is one 8B model; the 70B has not been tried. Nothing in the repo was changed for the wording.
+
+### 2026-11-02 model probe of confirm_target with Mistral Small 24B (prompt level, sim running, no `runs/` folder)
+
+Same probe as the Llama 8B one above, same prompts and scenarios A-C, run with `mistral-small:24b` through Ollama on the Heidi machine (ID 8039dd90c113), temperature 0.5, seeds 1-8, while CarlaAir was running. Script `~/model_confirm_probe3.py`, results `~/model_confirm_probe_mistral-small_24b.json`, outside git. Chosen over larger or other models because it is not a Chinese-developed model (a project preference) and fits next to the sim.
+
+- **Chose `confirm_target`:** as built (V0) 23 of 24 (A 8, B 7, C 8); with the clearer wording V1 19 of 24 (A 7, B 6, C 6); with V1 plus the hint V2 22 of 24 (A 8, B 7, C 7). 64 of 72 overall. Every other answer was `go_to_waypoint`, and none of those flew to the sighting. All 72 answers parsed.
+- **It does not weigh who should go.** B (a teammate is right next to the target) and C (the zone takes 40 s to clear) got `confirm_target` almost as often as A (the code would send this drone): 20 of 24 and 21 of 24 against 23 of 24. Whether taking it every time is good is not measured here; a second drone going there is blocked by the guardian's separation rule, and a 40 s wait is allowed up to 45 s.
+- **Wording.** The as-built wording worked, so nothing in the repo was changed for it. V1, the one I tuned after the Llama result, was slightly worse than the original.
+- **GPU.** Peak 20650 MiB of 23034 MiB with the sim (about 3.5 GB) and Mistral loaded together, so they fit with about 2.4 GB spare.
+- **Limits.** One model, one temperature, 8 seeds a scenario, a single hand-built situation. It says a 24B model uses the tool where an 8B one never did; it does not say the model decides well. Not comparable with the SC branch's 70B. Vega's 70B is still untried.
+
 ## 4. Conditions of the data
 
 Recorded because a run's conditions are part of the result.
