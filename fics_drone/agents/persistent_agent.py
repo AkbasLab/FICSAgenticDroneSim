@@ -249,20 +249,20 @@ class PersistentAgent:
             # reporting -> returning, never touching "listening"), so it needs its
             # own copy of the same completion signal, not just LISTEN's.
             self._mark_own_task_complete()
-            result = hold_position(self.adapter, AGENT_REPORT_HOLD_S)
+            result = hold_position(self.adapter, AGENT_REPORT_HOLD_S, interrupt=self._zone_interrupt())
             self.belief.position = result.final_position or self.belief.position
             unconfirmed = [s for s in self.belief.mission.targets_known.values()
                            if not s.confirmed and s.source == "sensor"]
             wanted = (self._pending_action[1].get("target_id") if self._pending_action else None)
             unconfirmed = [t for t in unconfirmed if t.target_id == wanted] or unconfirmed
-            if unconfirmed:
+            if unconfirmed and result.status == SkillStatus.SUCCESS:
                 sighting = unconfirmed[0]
                 sighting.confirmed = True
                 if self.link:
                     self.link.send(MessageType.TARGET_FOUND,
                                     {"target_id": sighting.target_id,
                                      "world_position": _to_world(sighting.local_position, self.spawn_offset)})
-            self.belief.communication.last_report_sent = unconfirmed[0].target_id if unconfirmed else None
+            self.belief.communication.last_report_sent = unconfirmed[0].target_id if unconfirmed and result.status == SkillStatus.SUCCESS else None
             return ReplanEvent.REPORT_SENT
 
         if objective == Objective.LISTEN:
@@ -271,7 +271,7 @@ class PersistentAgent:
                 # just ended with nothing found - mark completion here too (REPORT's
                 # branch covers the "found a target" path, which never touches LISTEN).
                 self._mark_own_task_complete()
-            result = hold_position(self.adapter, LISTEN_HOLD_S)
+            result = hold_position(self.adapter, LISTEN_HOLD_S, interrupt=self._zone_interrupt())
             self.belief.position = result.final_position or self.belief.position
             self.belief.listen_rounds += 1
             self._send_heartbeat()
@@ -504,7 +504,7 @@ class PersistentAgent:
 
         if tool == "act_as_relay":
             s.role = "relay"
-            result = hold_position(self.adapter, LISTEN_HOLD_S)
+            result = hold_position(self.adapter, LISTEN_HOLD_S, interrupt=self._zone_interrupt())
             self.belief.position = result.final_position or self.belief.position
             self.belief.listen_rounds += 1
             self._send_heartbeat()

@@ -63,7 +63,7 @@ def go_to_waypoint(adapter: VehicleAdapter, x: float, y: float, z: float,
 
 
 def hold_position(adapter: VehicleAdapter, duration_s: float,
-                   drift_tolerance: float = SKILL_TOLERANCE_M) -> SkillResult:
+                   drift_tolerance: float = SKILL_TOLERANCE_M, interrupt=None) -> SkillResult:
     start = time.monotonic()
     try:
         adapter.start_hover()
@@ -73,6 +73,8 @@ def hold_position(adapter: VehicleAdapter, duration_s: float,
         while True:
             pos = adapter.get_position()
             elapsed = time.monotonic() - start
+            if interrupt is not None and interrupt(pos):
+                return SkillResult(SkillStatus.INTERRUPTED, pos, elapsed, error="interrupted by monitor")
             if math.dist(pos, anchor) > drift_tolerance:
                 return SkillResult(SkillStatus.FAILED, pos, elapsed,
                                     error=f"drifted more than {drift_tolerance}m while holding")
