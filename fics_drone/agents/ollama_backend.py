@@ -37,7 +37,7 @@ def _enum(values):
     return {"type": "string", "enum": list(values)}
 
 
-# Every one of the fifteen tools the contract can ever carry; which are LEGAL right now is the validator's call (and the
+# Every tool the contract can ever carry; which are LEGAL right now is the validator's call (and the
 # prompt's menu), not the decoder's. Constraining the decoder is a convenience - the strict validator in
 # decision_schema.py still runs on every output.
 DECISION_SCHEMA = {

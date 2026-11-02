@@ -91,9 +91,20 @@ class SearchAgentPolicy:
         if belief.phase == "checking_for_orphans":
             if event == ReplanEvent.NEW_TASK_ASSIGNED:
                 return Objective.SEARCH_SECTOR, "searching"
+            if belief.mission.confirm_target_id:  # GMB: nothing of mine left, but a blocked sighting is
+                return Objective.CONFIRM_TARGET, "confirming"
             return Objective.RETURN_HOME, "returning"
 
         if belief.phase == "reporting":
+            if belief.mission.confirm_target_id:  # GMB: the dwell was cut short by a zone; come back to it
+                return Objective.CONFIRM_TARGET, "confirming"
+            return Objective.RETURN_HOME, "returning"
+
+        if belief.phase == "confirming":
+            # Stay here until the agent says there is nothing left for me to confirm (done, handed to
+            # a teammate, out of attempts, or out of battery); the agent bounds every wait.
+            if belief.mission.confirm_target_id:
+                return Objective.CONFIRM_TARGET, "confirming"
             return Objective.RETURN_HOME, "returning"
 
         if belief.phase == "returning":

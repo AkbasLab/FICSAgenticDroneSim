@@ -7,6 +7,7 @@ policy returns DONE. Every objective is a response to a named event, never a
 bare timer tick.
 """
 
+import math
 import time
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
@@ -25,7 +26,8 @@ from ..core.skill_result import SkillStatus
 from ..experiments.guardian_log import GuardianLog
 from ..experiments.mission_runner import lawnmower_waypoints
 from .belief import Belief, SearchLeg
-from .belief_schema import MissionBelief, Provenance, SelfState, TargetSighting, TeammateRecord
+from .belief_schema import (MissionBelief, PendingConfirmation, Provenance, SelfState, TargetSighting,
+                            TeammateRecord)
 from .comms_estimator import CommsEstimator
 from .llm_tools import BY_NAME
 from .decision_log import DecisionLogger
@@ -45,6 +47,18 @@ LISTEN_HOLD_S = 5.0  # Phase 7: how long each individual listen-in-place round l
 SEARCH_WAYPOINT_SPACING_M = 3.0  # sub-waypoints along each sweep leg, close enough together that a
 # target sitting mid-lane (not at a sector corner, where the raw lawnmower waypoints all are) still
 # gets a sensor check near its closest approach - same lesson as Phase 4's coverage sampling gap
+
+
+CONFIRM_HORIZON_S = 120.0  # how far ahead a blocked sighting looks for the moment its zone clears
+CONFIRM_CLEAR_MARGIN_S = 1.0  # wait this long past the last zone-covered instant before going in
+CONFIRM_WAIT_STEP_S = 2.0  # one wait-in-place step while a zone is still over the sighting
+MAX_CONFIRM_WAIT_S = 45.0  # do not wait longer than this for a zone to clear; hand it to nobody
+MAX_CONFIRM_ATTEMPTS = 3  # failed confirmation tries per sighting before giving up on it
+CONFIRM_TEAMMATE_FRESH_S = 8.0  # a teammate counts as a candidate only if heard from this recently
+CONFIRM_STANDOFF_MARGIN_M = 8.0  # a waiting spot must stay this far outside every zone for the whole wait
+CONFIRM_STANDOFF_ARRIVE_M = 2.0  # closer than this to the chosen waiting spot counts as already there
+CONFIRM_STANDOFF_RADII_M = (10.0, 15.0, 20.0, 30.0, 40.0)  # rings searched around the sighting
+CONFIRM_STANDOFF_BEARINGS = 16  # candidate points per ring
 
 
 def _to_local(point: Tuple[float, float, float], spawn_offset: Tuple[float, float, float]):
@@ -162,6 +176,7 @@ class PersistentAgent:
             self._observe_messages()  # "observe" now includes anything teammates delivered
 
             self._refresh_task_view()  # a bounded snapshot of THIS agent's own board, for the model's prompt
+            self._refresh_confirmation()  # GMB: which blocked sighting (if any) is mine to confirm now
             objective, next_phase = self.policy.decide(self.belief, event)
             # Phase 12: only an LLM policy ever has coordinates to hand over, and only for
             # GO_TO_WAYPOINT; the deterministic policy has no such method.
@@ -176,6 +191,7 @@ class PersistentAgent:
                 self.belief.self_state.model_actions += 1
             # Phase 12.3: messages the model authored, already validated (closed type, known
             # recipients, closed payload). Sent before acting, like any other agent message.
+            self._apply_model_confirm_choice(trace)
             take_messages = getattr(self.policy, "take_messages", None)
             for m in (take_messages() if take_messages else ()):
                 if self.link:
@@ -262,6 +278,8 @@ class PersistentAgent:
                     self.link.send(MessageType.TARGET_FOUND,
                                     {"target_id": sighting.target_id,
                                      "world_position": _to_world(sighting.local_position, self.spawn_offset)})
+            if unconfirmed and result.status == SkillStatus.INTERRUPTED:
+                self._register_blocked_sighting(unconfirmed[0], trace)
             self.belief.communication.last_report_sent = unconfirmed[0].target_id if unconfirmed and result.status == SkillStatus.SUCCESS else None
             return ReplanEvent.REPORT_SENT
 
@@ -276,6 +294,9 @@ class PersistentAgent:
             self.belief.listen_rounds += 1
             self._send_heartbeat()
             return ReplanEvent.SKILL_SUCCEEDED if result.status == SkillStatus.SUCCESS else ReplanEvent.SKILL_FAILED
+
+        if objective == Objective.CONFIRM_TARGET:
+            return self._confirm_target(trace)
 
         if objective == Objective.CHECK_FOR_ORPHANS:
             return self._check_for_orphans()
@@ -322,11 +343,21 @@ class PersistentAgent:
                 self.comms_estimator.observe(msg, self.belief.elapsed_s)
             if msg.type == MessageType.TARGET_FOUND:
                 target_id = msg.payload["target_id"]
+                self.belief.mission.pending_confirmations.pop(target_id, None)  # someone confirmed it
                 if target_id not in self.belief.mission.targets_known:
                     local = _to_local(msg.payload["world_position"], self.spawn_offset)
                     self.belief.mission.targets_known[target_id] = TargetSighting(
                         target_id=target_id, local_position=local, first_seen_t=self.belief.elapsed_s,
                         confirmed=True, source="message")
+            elif msg.type == MessageType.TARGET_SIGHTED:
+                # A teammate saw a target but a zone stopped it confirming. Recorded as pending, never as a
+                # find: it only becomes one when somebody actually completes the dwell.
+                tid = msg.payload["target_id"]
+                known = self.belief.mission.targets_known.get(tid)
+                if (known is None or not known.confirmed) and tid not in self.belief.mission.pending_confirmations:
+                    self.belief.mission.pending_confirmations[tid] = PendingConfirmation(
+                        target_id=tid, world_position=tuple(msg.payload["world_position"]),
+                        first_seen_t=self.belief.elapsed_s, reporter=msg.sender)
             elif msg.type == MessageType.HELP_REQUEST:
                 # Informational only: record it (capped), change nothing else. A request for help
                 # is never an order, and receiving one never alters this agent's task or tasks.
@@ -575,6 +606,190 @@ class PersistentAgent:
             return done(f"declined {task_id}; it stays open and you will not auto-claim it")
 
         return fail("unknown tool")
+
+    # ---- GMB: confirming a sighting a no-fly zone interrupted ----
+    def _zone_clear_time(self, world_position, now: Optional[float] = None) -> Optional[float]:
+        """Mission second at which no zone covers this point any more, looking CONFIRM_HORIZON_S ahead.
+        Returns now if nothing covers it, and None if a zone still covers it at the horizon (a static
+        zone, or one that never expires): then no confirmation is ever legal. Reads the same zone
+        schedule the guardian does, so the two cannot disagree."""
+        if now is None:
+            now = self._live_elapsed()
+        x, y = world_position[0], world_position[1]
+        zones = self.guardian.limits.restricted_zones
+        last, t = None, now
+        while t <= now + CONFIRM_HORIZON_S:
+            if any(z.contains(x, y, t) for z in zones):
+                last = t
+            t += 0.5
+        if last is None:
+            return now
+        if last >= now + CONFIRM_HORIZON_S - 0.5:
+            return None
+        return last + CONFIRM_CLEAR_MARGIN_S
+
+    def _standoff_point(self, pending, now: float, clear_at: float):
+        """Where to wait for the zone to clear: my current spot if no zone (grown by a margin) comes near it
+        before clear_at, otherwise the candidate point on rings around the sighting that does stay clear and
+        costs least to use (travel to it + travel from it to the sighting). None if nothing qualifies, and the
+        caller then just holds. A drifting zone sweeps across space, so 'clear right now' is not enough:
+        every zone position from now until the wait ends is checked, at the same 0.5 s step as _zone_clear_time."""
+        zones = self.guardian.limits.restricted_zones
+        margin = CONFIRM_STANDOFF_MARGIN_M
+
+        def free(x, y):
+            t = now
+            while t <= clear_at:
+                for zone in zones:
+                    if zone.active_at(t):
+                        x0, x1, y0, y1 = zone.bounds_at(t)
+                        if x0 - margin <= x <= x1 + margin and y0 - margin <= y <= y1 + margin:
+                            return False
+                t += 0.5
+            return True
+
+        here = _to_world(self.belief.position, self.spawn_offset)
+        if free(here[0], here[1]):
+            return here
+        tx, ty = pending.world_position[0], pending.world_position[1]
+        best, best_cost = None, None
+        for radius in CONFIRM_STANDOFF_RADII_M:
+            for k in range(CONFIRM_STANDOFF_BEARINGS):
+                angle = 2.0 * math.pi * k / CONFIRM_STANDOFF_BEARINGS
+                cx, cy = tx + radius * math.cos(angle), ty + radius * math.sin(angle)
+                if not free(cx, cy):
+                    continue
+                cost = math.dist((here[0], here[1]), (cx, cy)) + radius
+                if best_cost is None or cost < best_cost:
+                    best, best_cost = (cx, cy, here[2]), cost
+        return best
+
+    def _register_blocked_sighting(self, sighting, trace: List[str]):
+        """The dwell was cut short by a zone. Keep the sighting unconfirmed, remember it as pending, and tell the
+        team it exists - as a sighting, not a find."""
+        world = _to_world(sighting.local_position, self.spawn_offset)
+        self.belief.mission.pending_confirmations.setdefault(
+            sighting.target_id, PendingConfirmation(target_id=sighting.target_id, world_position=world,
+                                                     first_seen_t=self.belief.elapsed_s, reporter=self.drone_name))
+        clear_at = self._zone_clear_time(world)
+        clear_text = "never" if clear_at is None else f"{clear_at:.1f}s"
+        trace.append(f"sighting_blocked({sighting.target_id}, clears={clear_text})")
+        if self.link:
+            self.link.send(MessageType.TARGET_SIGHTED, {"target_id": sighting.target_id, "world_position": world})
+
+    def _best_confirmer(self, pending: PendingConfirmation) -> str:
+        """Who should go: the nearest drone this agent has recently heard from (itself included), ties to
+        the lower name. Every agent runs the same rule on what it knows, with no extra round of messages."""
+        tx, ty = pending.world_position[0], pending.world_position[1]
+        own = _to_world(self.belief.position, self.spawn_offset)
+        candidates = {self.drone_name: math.dist((own[0], own[1]), (tx, ty))}
+        now = self.belief.elapsed_s
+        for name, record in self.belief.team.teammates.items():
+            if record.last_known_position is None or now - record.provenance.timestamp > CONFIRM_TEAMMATE_FRESH_S:
+                continue
+            candidates[name] = math.dist(tuple(record.last_known_position[:2]), (tx, ty))
+        return min(candidates, key=lambda n: (candidates[n], n))
+
+    def _refresh_confirmation(self):
+        """Decide, before each policy step, which pending sightings this agent could legally go confirm
+        (belief.mission.confirm_view, which the model's menu reads) and which one, if any, it should go to now
+        (confirm_target_id, which the policy reads). Nothing is legal when I am low on battery, am not a scout,
+        the zone never clears, the wait is too long, or I have run out of attempts. Of the legal ones, the code
+        picks the sighting whose best-placed confirmer is me; a sighting the model chose (confirm_override_id)
+        outranks that until it is done or stops being legal."""
+        mission = self.belief.mission
+        mission.confirm_target_id = None
+        mission.confirm_view = []
+        if (not mission.pending_confirmations or self.belief.self_state.role != "scout"
+                or self.belief.battery_frac_remaining <= self.policy.low_battery_frac):
+            mission.confirm_override_id = None
+            return
+        now = self._live_elapsed()
+        mine = []
+        for tid, pending in mission.pending_confirmations.items():
+            if pending.attempts >= MAX_CONFIRM_ATTEMPTS:
+                continue
+            clear_at = self._zone_clear_time(pending.world_position, now)
+            if clear_at is None or clear_at - now > MAX_CONFIRM_WAIT_S:
+                continue
+            pick = self._best_confirmer(pending)
+            mission.confirm_view.append((tid, (pending.world_position[0], pending.world_position[1]),
+                                         max(0.0, clear_at - now), pending.reporter,
+                                         "you" if pick == self.drone_name else pick))
+            if pick == self.drone_name:
+                mine.append((pending.first_seen_t, tid))
+        if mission.confirm_override_id in [row[0] for row in mission.confirm_view]:
+            mission.confirm_target_id = mission.confirm_override_id
+        else:
+            mission.confirm_override_id = None
+            if mine:
+                mission.confirm_target_id = min(mine)[1]
+
+    def _apply_model_confirm_choice(self, trace: List[str]):
+        """The model chose confirm_target: that sighting is now this agent's to confirm, whatever the code's pick
+        was. It was on the menu only because it is legal for this agent, and every flight still goes through the
+        guardian; the choice lasts until the sighting is confirmed or stops being legal (_refresh_confirmation)."""
+        if self._pending_action is None or self._pending_action[0] != "confirm_target":
+            return
+        target_id = self._pending_action[1]["target_id"]
+        self.belief.mission.confirm_override_id = target_id
+        self.belief.mission.confirm_target_id = target_id
+        trace.append(f"model_confirms({target_id})")
+
+    def _confirm_target(self, trace: List[str]) -> ReplanEvent:
+        """One step toward confirming the chosen sighting: get out of any zone I am in, wait (heartbeating, so
+        the team still sees me) until the zone is clear, fly to the sighting through the guardian like any
+        other leg, then dwell. A completed dwell confirms it and broadcasts TARGET_FOUND; a cut-short one costs
+        an attempt."""
+        mission = self.belief.mission
+        pending = mission.pending_confirmations.get(mission.confirm_target_id)
+        if pending is None:
+            return ReplanEvent.SKILL_SUCCEEDED
+        now = self._live_elapsed()
+        here = _to_world(self.belief.position, self.spawn_offset)
+        if self.guardian.in_active_dynamic_zone(here, now):
+            return self._guarded_fly(self.belief.position, trace)  # the guardian's own steer-out fires first
+        clear_at = self._zone_clear_time(pending.world_position, now)  # same clock reading as `now` above
+        if clear_at is None:
+            pending.attempts = MAX_CONFIRM_ATTEMPTS
+            return ReplanEvent.SKILL_SUCCEEDED
+        if now < clear_at:
+            standoff = self._standoff_point(pending, now, clear_at)
+            if standoff is not None and math.dist(standoff[:2], here[:2]) > CONFIRM_STANDOFF_ARRIVE_M:
+                event = self._guarded_fly(_to_local(standoff, self.spawn_offset), trace)  # a zone may be coming my way
+                if event != ReplanEvent.SKILL_SUCCEEDED:
+                    pending.attempts += 1
+                    return event
+                self._send_heartbeat()
+                return ReplanEvent.SKILL_SUCCEEDED
+            result = hold_position(self.adapter, min(CONFIRM_WAIT_STEP_S, clear_at - now),
+                                   interrupt=self._zone_interrupt())
+            self.belief.position = result.final_position or self.belief.position
+            self._send_heartbeat()
+            return ReplanEvent.SKILL_SUCCEEDED
+        event = self._guarded_fly(_to_local(pending.world_position, self.spawn_offset), trace)
+        if event != ReplanEvent.SKILL_SUCCEEDED:
+            pending.attempts += 1
+            return event
+        result = hold_position(self.adapter, AGENT_REPORT_HOLD_S, interrupt=self._zone_interrupt())
+        self.belief.position = result.final_position or self.belief.position
+        if result.status != SkillStatus.SUCCESS:
+            pending.attempts += 1
+            trace.append(f"confirm_interrupted({pending.target_id})")
+            return ReplanEvent.SKILL_FAILED
+        sighting = mission.targets_known.get(pending.target_id)
+        if sighting is None:
+            sighting = TargetSighting(target_id=pending.target_id, local_position=self.belief.position,
+                                      first_seen_t=self.belief.elapsed_s)
+            mission.targets_known[pending.target_id] = sighting
+        sighting.confirmed = True
+        if self.link:
+            self.link.send(MessageType.TARGET_FOUND,
+                           {"target_id": pending.target_id, "world_position": pending.world_position})
+        self.belief.communication.last_report_sent = pending.target_id
+        mission.pending_confirmations.pop(pending.target_id, None)
+        trace.append(f"sighting_confirmed({pending.target_id})")
+        return ReplanEvent.REPORT_SENT
 
     def _sense_after_arrival(self) -> ReplanEvent:
         """The only place a target can enter belief: a real sensor reading at

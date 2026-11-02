@@ -2,7 +2,7 @@
 returns one structured JSON object:
 
     {"situation_assessment": {"mission_progress": ..., "communication_status": ..., "current_risk": ...},
-     "selected_tool": "<one of the 15 tools, and only if the code offered it right now>",
+     "selected_tool": "<one of the tools, and only if the code offered it right now>",
      "parameters": {"reason_code": "<closed list>", <the tool's own parameters, if any>},
      "outgoing_messages": [{"message_type": "help_request", "recipients": [...], "payload": {...}}],
      "confidence": 0.0 - 1.0}

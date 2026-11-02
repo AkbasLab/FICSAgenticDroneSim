@@ -1,9 +1,9 @@
-"""The model's closed tool set: the fifteen tools Plan.docx 12.2 names, no more.
+"""The model's closed tool set: the fifteen tools Plan.docx 12.2 names, plus GMB's confirm_target, no more.
 The model selects one by name; it never writes Python, never emits an AirSim
 call, and never authors a protocol message - every message a tool sends is
 built by CODE from the agent's own board and belief.
 
-Two properties make fifteen tools safe rather than a larger attack surface:
+Two properties make a closed tool set safe rather than a larger attack surface:
 
 * CODE OFFERS THE MENU. `offered_tools()` decides, from belief alone, which tools
   are legal RIGHT NOW and which values each parameter may take (a task_id must be
@@ -12,8 +12,9 @@ Two properties make fifteen tools safe rather than a larger attack surface:
   most tools are unavailable most of the time - by design.
 * A HARD CAP ENDS ANY LOOP. Every non-terminal tool costs one of MAX_MODEL_ACTIONS,
   and once they are spent only the terminal tools remain, so a model cannot
-  claim/release/announce its way into an infinite loop. (return_home, start_search
-  and report_target never cost an action: they make progress or end the mission.)
+  claim/release/announce its way into an infinite loop. (return_home, start_search,
+  report_target and confirm_target never cost an action: they make progress or end the
+  mission; confirm_target is bounded instead by MAX_CONFIRM_ATTEMPTS per sighting.)
 
 Dormant tools are real, not decorative: report_target is only offered while a
 sensed target is still unreported, which the deterministic loop normally prevents
@@ -67,6 +68,10 @@ TOOLS: Tuple[Tool, ...] = (
          "ask teammates for help (informational; never an order). Name the teammates in this tool's own \"recipients\" parameter and leave outgoing_messages empty - the tool itself sends the request"),
     Tool("report_target", FLIGHT, Objective.REPORT, ("target_id",),
          "report a target you sensed to the team", free=True),
+    Tool("confirm_target", FLIGHT, Objective.CONFIRM_TARGET, ("target_id",),
+         "go to a target a no-fly zone stopped someone confirming, wait for the zone to clear if it has to, and "
+         "confirm it (you may take one even if the code's pick is a teammate; the safety layer still checks every flight)",
+         free=True),
     Tool("start_search", FLIGHT, Objective.SEARCH_SECTOR, (),
          "begin sweeping the sector you hold", free=True),
     Tool("go_to_waypoint", FLIGHT, Objective.GO_TO_WAYPOINT, (PARAM_X, PARAM_Y),
@@ -80,7 +85,7 @@ TOOLS: Tuple[Tool, ...] = (
 )
 
 BY_NAME: Dict[str, Tool] = {t.name: t for t in TOOLS}
-assert len(TOOLS) == 15 and len(BY_NAME) == 15
+assert len(TOOLS) == 16 and len(BY_NAME) == 16
 
 # parameter name -> allowed values (a tuple), or None for a free number
 Choices = Mapping[str, Optional[Tuple]]
@@ -115,6 +120,9 @@ def offered_tools(belief, *, listen_cap: int, max_actions: int = MAX_MODEL_ACTIO
                    if sg.source == "sensor" and not sg.confirmed)
     if sensed:
         offered["report_target"] = {"target_id": sensed}
+    confirmable = _uniq(row[0] for row in belief.mission.confirm_view)   # code already checked: scout, battery, attempts, zone
+    if confirmable:
+        offered["confirm_target"] = {"target_id": confirmable}
 
     if actions_left:
         if rounds_left:

@@ -8,7 +8,7 @@ sits downstream of the model.
 The model owns ONE decision point, chosen by a rule: it decides only when
 both answers are safe and the choice cannot loop forever or strand a drone.
 After an agent has finished its own sector and lingered at least one round, it
-picks from a menu of the fifteen tools in llm_tools.py - but only the ones the
+picks from a menu of the tools in llm_tools.py - but only the ones the
 CODE offers right now (offered_tools(): preconditions, valid task ids, known
 recipients, a hard cap on model actions). Everything else - take-off, climbing,
 search legs, retries, low battery, landing, "mission over" - is a FACT, decided
@@ -48,6 +48,7 @@ OBJECTIVE_PHASE = {
     Objective.GO_TO_WAYPOINT: "repositioning",
     Objective.SEARCH_SECTOR: "searching",
     Objective.REPORT: "reporting",
+    Objective.CONFIRM_TARGET: "confirming",
     Objective.TOOL_ACTION: "coordinating",
 }
 
@@ -58,7 +59,7 @@ class LLMDecisionRecord:
     source: str                      # "model" | "fallback"
     objective: Objective
     reason_code: Optional[str] = None
-    tool: Optional[str] = None                       # which of the 15 tools the model selected
+    tool: Optional[str] = None                       # which tool the model selected
     args: Dict[str, object] = field(default_factory=dict)   # its validated tool parameters
     waypoint: Optional[Tuple[float, float]] = None   # world (x, y) actually FLOWN, only for go_to_waypoint
     raw_waypoint: Optional[Tuple[float, float]] = None   # what the model asked for (differs only if repaired)
@@ -101,6 +102,11 @@ class LLMAgentPolicy:
         self._pending_messages: Tuple = ()
         self.records: List[LLMDecisionRecord] = []   # THIS agent's own history only
         self._step = 0
+
+    @property
+    def low_battery_frac(self) -> float:
+        """The agent reads this from whatever policy it holds; here it is the fallback's, so the same rule applies."""
+        return self.fallback.low_battery_frac
 
     # --- the one method PersistentAgent calls ---
     def _zone_lines(self, belief):
@@ -187,7 +193,7 @@ class LLMAgentPolicy:
         return True
 
     def _offered(self, belief: Belief):
-        """The menu, owned by code: which of the fifteen tools are legal right now, and the values each
+        """The menu, owned by code: which of the tools are legal right now, and the values each
         parameter may take. A hard cap on model actions guarantees the model cannot loop."""
         return offered_tools(belief, listen_cap=self.fallback.listen_rounds,
                              max_actions=self.max_model_actions, waypoints_enabled=self.waypoints_enabled)

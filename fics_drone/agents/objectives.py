@@ -13,6 +13,8 @@ class Objective(str, Enum):
     LISTEN = "listen"  # Phase 7: sector fully swept, nothing of its own left to do - lingers
     # briefly to catch a late-arriving TARGET_FOUND from a teammate before heading home, instead
     # of heading home the instant its own work ends and missing a report that was en route
+    CONFIRM_TARGET = "confirm_target"  # GMB: go (wait, if a zone is still in the way) and confirm a
+    # sighting that was blocked by a no-fly zone
     CHECK_FOR_ORPHANS = "check_for_orphans"  # Phase 9: after listening, before heading home -
     # is there a teammate's task that's unheld (lease lapsed, or its holder is believed failed)?
     # Picking this up instead of going home is the actual "team changes shape" behavior.

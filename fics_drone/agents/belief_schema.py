@@ -57,10 +57,30 @@ class TargetSighting:
 
 
 @dataclass
+class PendingConfirmation:
+    """GMB: a target somebody saw but could not confirm because a no-fly zone made the dwell illegal.
+    world_position is where to go to confirm it. attempts counts failed tries, so a confirmation
+    cannot be retried forever."""
+    target_id: str
+    world_position: Tuple[float, float, float]
+    first_seen_t: float
+    reporter: str
+    attempts: int = 0
+
+
+@dataclass
 class MissionBelief:
     sector_id: str
     search_queue: List = field(default_factory=list)  # List[SearchLeg], forward ref to avoid a cycle
     targets_known: Dict[str, TargetSighting] = field(default_factory=dict)
+    pending_confirmations: Dict[str, PendingConfirmation] = field(default_factory=dict)
+    confirm_target_id: Optional[str] = None  # set by the agent each step: the pending target THIS agent
+    # should go confirm now (None = none, or a teammate is the better choice). The policy only reads it.
+    confirm_view: List = field(default_factory=list)  # rows (target_id, (x, y), seconds_until_the_zone_clears,
+    # reporter, code_pick) for every pending sighting this agent could legally go confirm; code_pick is 'you' or a
+    # drone name. The model's menu and prompt read it.
+    confirm_override_id: Optional[str] = None  # the sighting the MODEL chose (confirm_target); it outranks the
+    # code's pick until that sighting is confirmed or stops being legal for this agent
 
 
 @dataclass

@@ -35,6 +35,7 @@ SCENARIO_PATH = os.path.join(os.path.dirname(__file__), "..", "configs", "missio
 PLAN_TOOLS = {"accept_task", "decline_task", "compute_task_cost", "announce_task", "send_bid", "claim_task",
               "release_task", "change_role", "request_help", "report_target", "start_search",
               "go_to_waypoint", "act_as_relay", "return_home", "hold"}
+GMB_TOOLS = {"confirm_target"}   # GMB adds one tool to the plan's fifteen
 LISTEN_CAP = 3
 
 
@@ -58,13 +59,13 @@ VIEW = [("search_A", "A", "complete", "Drone1"), ("search_B", "B", "unheld", Non
 
 
 class TestRegistry(unittest.TestCase):
-    def test_it_is_exactly_the_plans_fifteen_tools(self):
-        self.assertEqual(len(TOOLS), 15)
-        self.assertEqual({t.name for t in TOOLS}, PLAN_TOOLS)
-        self.assertEqual(set(BY_NAME), PLAN_TOOLS)
+    def test_it_is_the_plans_fifteen_tools_plus_gmbs_confirm_target(self):
+        self.assertEqual(len(TOOLS), 16)
+        self.assertEqual({t.name for t in TOOLS}, PLAN_TOOLS | GMB_TOOLS)
+        self.assertEqual(set(BY_NAME), PLAN_TOOLS | GMB_TOOLS)
 
     def test_progress_tools_are_free_and_everything_else_costs_an_action(self):
-        self.assertEqual({t.name for t in TOOLS if t.free}, {"report_target", "start_search", "return_home"})
+        self.assertEqual({t.name for t in TOOLS if t.free}, {"report_target", "confirm_target", "start_search", "return_home"})
 
     def test_every_coordination_tool_maps_to_the_single_tool_action_objective(self):
         for name in ("accept_task", "decline_task", "compute_task_cost", "announce_task", "send_bid", "claim_task",
@@ -75,7 +76,7 @@ class TestRegistry(unittest.TestCase):
         self.assertEqual(BY_NAME["report_target"].objective, Objective.REPORT)
 
     def test_the_decoder_schema_names_exactly_these_tools(self):
-        self.assertEqual(set(DECISION_SCHEMA["properties"]["selected_tool"]["enum"]), PLAN_TOOLS)
+        self.assertEqual(set(DECISION_SCHEMA["properties"]["selected_tool"]["enum"]), PLAN_TOOLS | GMB_TOOLS)
         params = DECISION_SCHEMA["properties"]["parameters"]["properties"]
         self.assertEqual(set(params), {"reason_code", "x", "y", "task_id", "target_id", "new_role", "recipients"})
         self.assertEqual(set(params["new_role"]["enum"]), set(ROLES))

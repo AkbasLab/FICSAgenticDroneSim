@@ -26,6 +26,8 @@ class MessageType(str, Enum):
     TASK_ANNOUNCE = "task_announce"  # Phase 12 (15-tool set): "a task I hold is up for bids" - built by
     # code from the sender's own board, never authored by a model
     TASK_RELEASE = "task_release"  # Phase 12: a holder gives a task up (awarded_to = the lowest bidder, if any)
+    TARGET_SIGHTED = "target_sighted"  # GMB: a target was SEEN but could not be confirmed (a no-fly zone
+    # switched on over it mid-dwell). Not a find: receivers record a pending confirmation, nothing more.
     TASK_COMPLETE = "task_complete"  # Phase 9: this agent finished its own task - explicit,
     # because silence alone can't distinguish "finished and landed" from "died": both look
     # identical to a teammate as "stopped sending heartbeats"
@@ -39,6 +41,7 @@ class MessageType(str, Enum):
 TTL_BY_TYPE = {
     MessageType.HEARTBEAT: 60.0,
     MessageType.TARGET_FOUND: 300.0,
+    MessageType.TARGET_SIGHTED: 300.0,
     MessageType.TASK_BID: 30.0,
     MessageType.TASK_CLAIM: 300.0,
     MessageType.TASK_COMPLETE: 300.0,

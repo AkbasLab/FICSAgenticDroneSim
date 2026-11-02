@@ -58,6 +58,10 @@ def build_prompt(belief: Belief, event: ReplanEvent, offered: Offered,
     for tid, who, t in comm.offers_to_me[-MAX_MARKET_LINES:]:
         market.append(f"- {who} released {tid} to you (accept or decline it)")
 
+    confirm_lines = [f"- {tid} at world ({xy[0]:.0f}, {xy[1]:.0f}), seen by {reporter}; its no-fly zone clears in about "
+                     f"{wait:.0f}s; the code would send: {pick}"
+                     for tid, xy, wait, reporter, pick in belief.mission.confirm_view[:MAX_TASKS_SHOWN]]
+
     map_lines = []
     if "go_to_waypoint" in offered:
         # Mission geometry the team is already given (sector boxes) - no target locations,
@@ -102,6 +106,8 @@ def build_prompt(belief: Belief, event: ReplanEvent, offered: Offered,
              for sender, code, t in comm.help_requests[-3:]]]
           if comm.help_requests else []),
         *map_lines,
+        *(["SIGHTINGS WAITING FOR CONFIRMATION (a no-fly zone cut the first look short; nobody has confirmed them)",
+           *confirm_lines] if confirm_lines else []),
         "OPTIONS",
         *[_option_line(name, choices) for name, choices in offered.items()],
         "",
