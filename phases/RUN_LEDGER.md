@@ -134,6 +134,15 @@ Same probe as the Llama 8B one above, same prompts and scenarios A-C, run with `
 - **GPU.** Peak 20650 MiB of 23034 MiB with the sim (about 3.5 GB) and Mistral loaded together, so they fit with about 2.4 GB spare.
 - **Limits.** One model, one temperature, 8 seeds a scenario, a single hand-built situation. It says a 24B model uses the tool where an 8B one never did; it does not say the model decides well. Not comparable with the SC branch's 70B. Vega's 70B is still untried.
 
+### 2026-11-02 live run of the real scenario at a cruise height chosen from the map (no `runs/` folder)
+
+Not study data: one run, a zone set off by the drone's own detection, no model. It shows the real scenario can now be flown with collisions on, and that the confirm flow works there.
+
+- **Route check before flying.** CARLA ray casts (exact geometry) along Sector A's diagonal transit, its four lanes (each extended 2 m, because the real drone overshoots a waypoint) and the way home, at cruise heights from 6 to 16 m. Frame, measured by placing the drone at five known points: CARLA x, y = drone-local x, y + (-172.2, 183.86), no rotation; CARLA z = 27.45 minus the sim's z; ground at CARLA z -1.8. Results: at 7 to 9 m a row of awnings at x 41.4 to 42 blocks the east end of every lane, and the first hit on lane y=20 is at (41.5, 20.0), where the pinned run above stopped. A lamp pole at (29.6, 30.4), 0.4 m from T1, blocks the way home from 8.5 to 10 m. 11 m and above is clear. 6 m is clear on paper only: the awnings start 7.0 m above ground and the drone floats 0.5 to 1.9 m above its command (it reached 13.9 m at a command of 12). An earlier check against object bounding boxes was useless (aggregate foliage actors flagged every height) and was replaced by the ray casts.
+- **Set-up.** Fresh sim, collisions on (noclip off, inferred from the drone resting on the ground before and after; the sim cannot report it). Solo Drone1, deterministic policy, vehicle `SimpleFlight`, cruise height 12 m, T1 at its real position (30, 30). The lab's appear box (24-40 by 24-40) switched on 0.15 s after the agent sensed the target, for 12 s, so it lands inside the report hold.
+- **Result (z4).** `target_detected`, `sighting_blocked(T1, clears=148.6s)`, `confirm_target`, `exit_zone` steer-out south to (33.4, 21.0), `sighting_confirmed(T1)`, `return_home`, `land`. About 2.25 s inside the zone (9 samples), 187 s in all with 38% battery left, closest approach 1.4 m, then about 10 s within 2.5 to 3.9 m of T1 for the confirming dwell. The drone passed the awning row without touching it.
+- **Limits.** One run. The zone was triggered by the drone's detection, not scheduled. Only the appear shape was flown; a drifting zone, a zone that never leaves, two or more drones and a model in the policy slot are still untested live.
+
 ## 4. Conditions of the data
 
 Recorded because a run's conditions are part of the result.
