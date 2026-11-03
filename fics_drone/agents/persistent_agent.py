@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 from ..control.navigation import DEFAULT_HEIGHT, SKILL_TIMEOUT_S
+from ..control.leg_planner_skill import fly_leg_with_planner
 from ..control.skills import go_to_waypoint, hold_position, land, take_off
 from ..coordination.bidding import DEFAULT_WEIGHTS, compute_bid
 from ..coordination.message_bus import AgentLink
@@ -105,8 +106,14 @@ class PersistentAgent:
                  drone_name: str = "drone", link: AgentLink = None,
                  task_board: TaskBoard = None, health_monitor: HealthMonitor = None,
                  kill_at_s: Optional[float] = None, comms_estimator: CommsEstimator = None,
-                 zone_monitor: bool = True):
+                 zone_monitor: bool = True, leg_planner=None, leg_timeout_s: float = SKILL_TIMEOUT_S):
         self.adapter = adapter
+        # With a leg planner (NavRL), every approved leg is flown by it, one velocity per control tick, instead of
+        # one straight move command. The guardian still approves each leg first and the zone monitor still stops
+        # it; the guardian's own steer-out and every other fallback keep flying straight. leg_timeout_s stretches
+        # the per-leg give-up time for slow movers.
+        self.leg_planner = leg_planner
+        self.leg_timeout_s = leg_timeout_s
         # GMB: with zone_monitor on, every flight leg polls the guardian each control tick and stops
         # the moment the aircraft is inside a zone that has just become active. Off = the guardian
         # only notices at the next command boundary (the pre-monitor behaviour, kept for comparison).
@@ -813,6 +820,19 @@ class PersistentAgent:
             return self.belief.elapsed_s
         return time.monotonic() - self._run_start
 
+    def _active_zone_rects(self):
+        """The zones that are on right now as (x_min, x_max, y_min, y_max), world coordinates: what a leg
+        planner is shown instead of a lidar."""
+        t = self._live_elapsed()
+        return [zone.bounds_at(t) for zone in self.guardian.limits.restricted_zones if zone.active_at(t)]
+
+    def _fly_approved_leg(self, local_target, interrupt):
+        if self.leg_planner is None:
+            return go_to_waypoint(self.adapter, *local_target, timeout_s=self.leg_timeout_s, interrupt=interrupt)
+        return fly_leg_with_planner(self.adapter, *local_target, self.leg_planner, self._active_zone_rects,
+                                    offset_xy=self.spawn_offset[:2], timeout_s=self.leg_timeout_s,
+                                    interrupt=interrupt)
+
     def _zone_interrupt(self):
         """Per-tick check handed to the flight skill, or None when the monitor is off or no zone
         in this scenario can change (so static missions behave exactly as before)."""
@@ -877,8 +897,7 @@ class PersistentAgent:
         self.belief.self_state.last_block_reason = None
         final_local = _to_local(evaluation.command.target, self.spawn_offset)
         self._send_heartbeat(heading_to=evaluation.command.target)
-        result = go_to_waypoint(self.adapter, *final_local,
-                                 interrupt=None if _after_interrupt else self._zone_interrupt())
+        result = self._fly_approved_leg(final_local, None if _after_interrupt else self._zone_interrupt())
         self.belief.position = result.final_position or self.belief.position
         self.guardian.command_completed()
         if result.status == SkillStatus.INTERRUPTED:

@@ -26,6 +26,9 @@ class KinematicMockVehicleAdapter(VehicleAdapter):
         self._target = None  # None while hovering/idle
         self._move_start_time = None
         self._move_start_pos = start_position
+        self._velocity = None   # (vx, vy, vz) while flying on a velocity command, else None
+        self._vel_start_time = None
+        self._vel_start_pos = start_position
 
     def connect_and_takeoff(self):
         pass  # ground_z bookkeeping isn't relevant to a mock
@@ -42,6 +45,10 @@ class KinematicMockVehicleAdapter(VehicleAdapter):
     def _advance(self):
         """Recompute self._pos from real elapsed time, called before every
         position/speed read so a poll mid-flight sees genuine progress."""
+        if self._velocity is not None:
+            elapsed = time.monotonic() - self._vel_start_time
+            self._pos = tuple(p + v * elapsed for p, v in zip(self._vel_start_pos, self._velocity))
+            return
         if self._target is None or self._move_start_time is None:
             return
         elapsed = time.monotonic() - self._move_start_time
@@ -67,14 +74,25 @@ class KinematicMockVehicleAdapter(VehicleAdapter):
 
     def get_speed(self):
         self._advance()
+        if self._velocity is not None:
+            return math.sqrt(sum(v * v for v in self._velocity))
         return self.speed_mps if self._target is not None else 0.0
 
     def start_move_to(self, x, y, z):
         self._advance()  # settle wherever we actually are before retargeting
+        self._velocity = None
         self._move_start_pos = self._pos
         self._move_start_time = time.monotonic()
         self._target = (x, y, z)
 
+    def start_velocity(self, vx, vy, vz=0.0):
+        self._advance()
+        self._target = None
+        self._velocity = (vx, vy, vz)
+        self._vel_start_pos = self._pos
+        self._vel_start_time = time.monotonic()
+
     def start_hover(self):
         self._advance()
+        self._velocity = None
         self._target = None

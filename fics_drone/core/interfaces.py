@@ -40,6 +40,11 @@ class VehicleAdapter(ABC):
         """Current speed (m/s), magnitude of linear velocity. Lets a skill tell
         'passed through the target while still moving fast' apart from 'arrived'."""
 
+    def start_velocity(self, vx: float, vy: float, vz: float = 0.0) -> None:
+        """Fly at this velocity (m/s, same frame as get_position) until the next command. Optional: only
+        adapters used with a leg planner (fly_leg_with_planner) need it."""
+        raise NotImplementedError(f"{type(self).__name__} has no velocity command")
+
     @abstractmethod
     def start_move_to(self, x: float, y: float, z: float) -> None:
         """Begin moving toward (x, y, z). Returns immediately."""

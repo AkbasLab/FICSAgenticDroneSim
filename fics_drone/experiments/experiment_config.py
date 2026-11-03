@@ -70,6 +70,13 @@ class ExperimentConfig:
     appear_s: float = 5.0
     expire_s: float = 12.0
     drift_s: float = 3.0
+    #: multiplies a drifting zone's speed (see apply_zones)
+    zone_speed_scale: float = 1.0
+    #: how an approved leg is flown: "straight" (one move command) or "navrl" (NavRL's policy, one velocity per
+    #: tick; needs torch and a NavRL checkout, see planners/navrl_planner.py). Threaded engine, deterministic policy.
+    leg_planner: str = "straight"
+    #: per-leg give-up time in seconds (the skill default of 30 s is too short for a slow flier)
+    leg_timeout_s: float = 30.0
     #: LLM arm: which backend decides, and (ollama only) which model. The model card,
     #: which pins the exact weights, is recorded in manifest.json.
     policy: str = "deterministic"
@@ -88,6 +95,10 @@ class ExperimentConfig:
                              f"choose from {ZONE_MONITORS}")
         if self.repeats < 1:
             raise ValueError("repeats must be >= 1")
+        if self.leg_planner not in ("straight", "navrl"):
+            raise ValueError(f"unknown leg_planner {self.leg_planner!r}; choose straight or navrl")
+        if self.leg_planner != "straight" and (self.kill_vehicle or self.policy != "deterministic"):
+            raise ValueError("leg_planner other than straight needs the deterministic policy and no kill_vehicle")
         if self.kill_at_s < 0:
             raise ValueError("kill_at_s must be >= 0")
         if self.network_profile is not None and self.network_profile not in BY_NAME:
@@ -129,12 +140,16 @@ def load_config(path: str) -> ExperimentConfig:
 
 
 def apply_zones(base: Scenario, profile: str, appear_s: float = 5.0,
-                expire_s: float = 12.0, drift_s: float = 3.0) -> Scenario:
-    """A copy of `base` with the profile's zones added."""
+                expire_s: float = 12.0, drift_s: float = 3.0, zone_speed_scale: float = 1.0) -> Scenario:
+    """A copy of `base` with the profile's zones added. `zone_speed_scale` multiplies a drifting zone's speed (a
+    slow flier's run is stretched in time, so its zones drift slower by the same factor)."""
     scenario = copy.deepcopy(base)
     zones = []
     for z in zone_specs(profile, appear_s, expire_s, drift_s):
         extra = {k: v for k, v in z.items() if k not in ("name", "bounds")}
+        for key in ("vx", "vy"):
+            if key in extra:
+                extra[key] = extra[key] * zone_speed_scale
         zones.append(NoFlyZone(z["name"], *z["bounds"], **extra))
     scenario.no_fly_zones = list(scenario.no_fly_zones) + zones
     return scenario
@@ -143,7 +158,7 @@ def apply_zones(base: Scenario, profile: str, appear_s: float = 5.0,
 def build_scenario(cfg: ExperimentConfig) -> Scenario:
     """The base scenario with this config's zone profile added."""
     return apply_zones(load_scenario(cfg.scenario), cfg.zone_profile,
-                       cfg.appear_s, cfg.expire_s, cfg.drift_s)
+                       cfg.appear_s, cfg.expire_s, cfg.drift_s, cfg.zone_speed_scale)
 
 
 def sweep(base: ExperimentConfig, **axes: List[Any]) -> List[ExperimentConfig]:

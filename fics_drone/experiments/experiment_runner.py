@@ -52,7 +52,8 @@ class ExperimentResult:
 
 
 def _run_once(scenario, monitor: bool, mock_speed_mps: float, repeat: int, kill=None,
-              network=None, estimates: bool = False, policy=None, save_dir=None):
+              network=None, estimates: bool = False, policy=None, save_dir=None,
+              leg_planner=None, leg_timeout_s: float = 30.0):
     """One fleet run. Returns (metrics, events); metrics has the shape the
     dynamic-zone study has always saved."""
     adapters = {d.name: KinematicMockVehicleAdapter(d.name, speed_mps=mock_speed_mps)
@@ -78,7 +79,8 @@ def _run_once(scenario, monitor: bool, mock_speed_mps: float, repeat: int, kill=
             scenario, adapters, bus=bus, kill_name=kill[0], kill_at_s=kill[1])
     else:
         reports, agents, _bus = run_team_threaded(
-            scenario, adapters, bus=bus, agent_kwargs={"zone_monitor": monitor},
+            scenario, adapters, bus=bus,
+            agent_kwargs={"zone_monitor": monitor, "leg_planner": leg_planner, "leg_timeout_s": leg_timeout_s},
             comms_estimators=estimators)
     elapsed = time.monotonic() - start
     # one more sample before stopping: at 5 Hz the last sample can be 0.2 s stale, which
@@ -286,11 +288,16 @@ def run_experiment(cfg: ExperimentConfig, out_root: str = DEFAULT_OUT_ROOT, back
     network = (cfg.network_profile, cfg.seed) if cfg.network_profile else None
     runs: List[dict] = []
     error: Optional[str] = None
+    leg_planner = None
+    if cfg.leg_planner == "navrl":
+        from ..planners.navrl_planner import NavRLPlanner
+        leg_planner = NavRLPlanner()
     try:
         for i in range(cfg.repeats):
             metrics, events, telemetry = _run_once(build_scenario(cfg), monitor,
                                         cfg.mock_speed_mps, i, kill, network, cfg.comms_estimates,
-                                        policy, _save_dir(llm_save_dir, i, cfg.repeats))
+                                        policy, _save_dir(llm_save_dir, i, cfg.repeats),
+                                        leg_planner, cfg.leg_timeout_s)
             runs.append(metrics)
             _write_json(os.path.join(directory, f"telemetry_{i}.json"), telemetry)
             log.extend(events)
