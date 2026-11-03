@@ -36,6 +36,20 @@ from typing import List, Optional, Tuple
 from ..core.scenario import NoFlyZone, Scenario
 
 
+INTENT_FRESH_S = 30.0  # a teammate's announced destination counts for this long after its heartbeat
+
+
+def _distance_to_segment(point, a, b) -> float:
+    """Straight-line distance from `point` to the segment a-b (all three are x, y, z)."""
+    ab = [b[i] - a[i] for i in range(3)]
+    length_sq = sum(v * v for v in ab)
+    if length_sq == 0.0:
+        return math.dist(point, a)
+    t = sum((point[i] - a[i]) * ab[i] for i in range(3)) / length_sq
+    t = max(0.0, min(1.0, t))
+    return math.dist(point, [a[i] + t * ab[i] for i in range(3)])
+
+
 class Severity(str, Enum):
     HARD = "hard"  # cannot be narrowed - refuse outright
     SOFT = "soft"  # can be narrowed into the envelope instead of refused
@@ -162,7 +176,7 @@ class SafetyGuardian:
         exit_evaluation = self._exit_active_zone(belief, position_world)
         if exit_evaluation is not None:
             return exit_evaluation
-        checks = self._run_checks(command, belief)
+        checks = self._run_checks(command, belief, position_world)
         failed = [c for c in checks if not c.passed]
 
         if not failed:
@@ -197,13 +211,13 @@ class SafetyGuardian:
         return GuardianEvaluation(GuardianOutcome.APPROVE_WITH_MODIFICATION, narrowed, reason, None,
                                    [c.name for c in failed])
 
-    def preview(self, command: Command, belief) -> List[SafetyCheck]:
+    def preview(self, command: Command, belief, position_world=None) -> List[SafetyCheck]:
         """Dry run: which checks would this command fail? Touches NO guardian state - no
         counters, no in-flight flag, no escalation - so a caller (the Phase 12.5 reasoning
         tools) can ask "is this point legal?" any number of times without ever affecting a
         real evaluate(). Skips conflicting_commands, which is about the vehicle's current
         activity, not about whether the destination itself is acceptable."""
-        return [c for c in self._run_checks(command, belief)
+        return [c for c in self._run_checks(command, belief, position_world)
                 if not c.passed and c.name != "conflicting_commands"]
 
     def _should_escalate(self) -> bool:
@@ -325,7 +339,7 @@ class SafetyGuardian:
                 updated = replace(updated, timeout_s=timeout)
         return updated
 
-    def _run_checks(self, command: Command, belief) -> List[SafetyCheck]:
+    def _run_checks(self, command: Command, belief, position_world=None) -> List[SafetyCheck]:
         checks = [
             self._check_altitude_bounds(command),
             self._check_geofence(command),
@@ -334,7 +348,7 @@ class SafetyGuardian:
             self._check_max_speed(command),
             self._check_command_timeout(command),
             self._check_battery_reserve(command, belief),
-            self._check_separation(command, belief),
+            self._check_separation(command, belief, position_world),
             self._check_landing_site(command, belief),
             self._check_conflicting_commands(command),
         ]
@@ -406,16 +420,33 @@ class SafetyGuardian:
                                 f"{self.limits.battery_reserve_frac}", Severity.HARD)
         return SafetyCheck("battery_reserve", True)
 
-    def _check_separation(self, command: Command, belief) -> SafetyCheck:
+    def _claimed_points(self, record, belief) -> List[Tuple[float, float, float]]:
+        """Where a teammate is, or has said it is going: its last reported position, and (while its heartbeat is
+        recent) the destination it announced when it set off."""
+        points = []
+        if record.last_known_position is not None:
+            points.append(tuple(record.last_known_position))
+        if record.heading_to is not None:
+            now = self._now(belief)
+            if now is None or now - record.provenance.timestamp <= INTENT_FRESH_S:
+                points.append(tuple(record.heading_to))
+        return points
+
+    def _check_separation(self, command: Command, belief, position_world=None) -> SafetyCheck:
+        """The target must stay clear of every point a teammate holds or is heading for. When the aircraft's own
+        position is known, the straight path to the target must stay clear too: two drones sent to the same
+        corner from different sides each looked fine on their own target, and met there 0.1 m apart."""
         if command.kind != "fly" or command.target is None or command.purpose != "mission":
             return SafetyCheck("separation", True)
+        sep = self.limits.min_separation_m
         for name, record in belief.team.teammates.items():
-            if record.last_known_position is None:
-                continue
-            if math.dist(command.target, record.last_known_position) < self.limits.min_separation_m:
-                return SafetyCheck("separation", False,
-                                    f"{command.target} within {self.limits.min_separation_m}m of {name}",
-                                    Severity.HARD)
+            for point in self._claimed_points(record, belief):
+                if math.dist(command.target, point) < sep:
+                    return SafetyCheck("separation", False,
+                                        f"{command.target} within {sep}m of {name}", Severity.HARD)
+                if position_world is not None and _distance_to_segment(point, position_world, command.target) < sep:
+                    return SafetyCheck("separation", False,
+                                        f"path to {command.target} passes within {sep}m of {name}", Severity.HARD)
         return SafetyCheck("separation", True)
 
     def _check_landing_site(self, command: Command, belief=None) -> SafetyCheck:

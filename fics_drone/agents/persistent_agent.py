@@ -54,6 +54,8 @@ CONFIRM_CLEAR_MARGIN_S = 1.0  # wait this long past the last zone-covered instan
 CONFIRM_WAIT_STEP_S = 2.0  # one wait-in-place step while a zone is still over the sighting
 MAX_CONFIRM_WAIT_S = 45.0  # do not wait longer than this for a zone to clear; hand it to nobody
 MAX_CONFIRM_ATTEMPTS = 3  # failed confirmation tries per sighting before giving up on it
+SEPARATION_WAIT_S = 25.0  # how long a drone holds still when only a teammate's position or route blocks its leg
+SEPARATION_WAIT_STEP_S = 2.0  # one hold, then ask the guardian again
 CONFIRM_TEAMMATE_FRESH_S = 8.0  # a teammate counts as a candidate only if heard from this recently
 CONFIRM_STANDOFF_MARGIN_M = 8.0  # a waiting spot must stay this far outside every zone for the whole wait
 CONFIRM_STANDOFF_ARRIVE_M = 2.0  # closer than this to the chosen waiting spot counts as already there
@@ -394,7 +396,8 @@ class PersistentAgent:
                 self.belief.team.teammates[msg.sender] = TeammateRecord(
                     name=msg.sender, last_known_position=msg.payload["position"],
                     provenance=Provenance(timestamp=self.belief.elapsed_s, source="heartbeat",
-                                           base_confidence=msg.confidence))
+                                           base_confidence=msg.confidence),
+                    heading_to=tuple(msg.payload["heading_to"]) if msg.payload.get("heading_to") else None)
             elif msg.type == MessageType.TASK_COMPLETE and self.task_board:
                 self.task_board.mark_complete(msg.payload["task_id"], msg.sender)
                 # A message of any kind is proof of life too, not just a HEARTBEAT -
@@ -841,6 +844,9 @@ class PersistentAgent:
         evaluation = self.guardian.evaluate(command, self.belief,
                                            position_world=_to_world(self.belief.position, self.spawn_offset))
         self.guardian_log.record(len(self.guardian_log.entries), command, evaluation)
+        if (self.link and purpose == "mission" and evaluation.outcome == GuardianOutcome.REJECT_AND_REPLAN
+                and evaluation.failed_checks == ["separation"]):
+            evaluation = self._wait_out_separation(command, trace, evaluation)
 
         if evaluation.outcome == GuardianOutcome.REJECT_AND_REPLAN:
             self.belief.self_state.last_block_reason = evaluation.reason
@@ -870,6 +876,7 @@ class PersistentAgent:
         # which may differ from what was proposed (e.g. altitude clamped into the envelope).
         self.belief.self_state.last_block_reason = None
         final_local = _to_local(evaluation.command.target, self.spawn_offset)
+        self._send_heartbeat(heading_to=evaluation.command.target)
         result = go_to_waypoint(self.adapter, *final_local,
                                  interrupt=None if _after_interrupt else self._zone_interrupt())
         self.belief.position = result.final_position or self.belief.position
@@ -892,6 +899,31 @@ class PersistentAgent:
         self.belief.nav_retries += 1
         return ReplanEvent.SKILL_FAILED
 
+    def _wait_out_separation(self, command: Command, trace: List[str], evaluation):
+        """Only a teammate's position or route blocks this leg, and that clears by itself as the teammate moves
+        on. Hold still, take in what the team has said, and ask again, for up to SEPARATION_WAIT_S. The
+        rejection counters are reset each time: waiting is not a policy repeatedly proposing something unsafe,
+        and left to count it would end the mission through the guardian's repeated-rejection escalation."""
+        waited = 0.0
+        while (evaluation.outcome == GuardianOutcome.REJECT_AND_REPLAN and evaluation.failed_checks == ["separation"]
+               and waited < SEPARATION_WAIT_S):
+            self.guardian.consecutive_rejections = 0
+            self.guardian.consecutive_interventions = 0
+            result = hold_position(self.adapter, SEPARATION_WAIT_STEP_S, interrupt=self._zone_interrupt())
+            self.belief.position = result.final_position or self.belief.position
+            if result.status != SkillStatus.SUCCESS:
+                break
+            waited += SEPARATION_WAIT_STEP_S
+            self._send_heartbeat()
+            self._observe_messages()
+            self.belief.elapsed_s = self._live_elapsed()
+            evaluation = self.guardian.evaluate(
+                command, self.belief, position_world=_to_world(self.belief.position, self.spawn_offset))
+            self.guardian_log.record(len(self.guardian_log.entries), command, evaluation)
+        if waited:
+            trace.append(f"waited_for_separation({waited:.0f}s)")
+        return evaluation
+
     def _mark_own_task_complete(self):
         """Explicit completion signal, not just going quiet - silence alone
         can't distinguish 'finished normally' from 'died', since both look
@@ -906,9 +938,13 @@ class PersistentAgent:
         if self.link:
             self.link.send(MessageType.TASK_COMPLETE, {"task_id": own_task_id})
 
-    def _send_heartbeat(self):
+    def _send_heartbeat(self, heading_to=None):
+        """`heading_to` (world coordinates) is sent as a drone sets off on a leg, so teammates can keep clear of
+        where it is going and not only of where it last was; the heartbeat sent on arrival carries none."""
         if self.link:
-            self.link.send(MessageType.HEARTBEAT,
-                            {"position": _to_world(self.belief.position, self.spawn_offset),
-                             "battery_frac": self.belief.battery_frac_remaining,
-                             "role": self.belief.self_state.role})
+            payload = {"position": _to_world(self.belief.position, self.spawn_offset),
+                       "battery_frac": self.belief.battery_frac_remaining,
+                       "role": self.belief.self_state.role}
+            if heading_to is not None:
+                payload["heading_to"] = list(heading_to)
+            self.link.send(MessageType.HEARTBEAT, payload)

@@ -115,6 +115,7 @@ class TeammateRecord:
     name: str
     last_known_position: Optional[Tuple[float, float, float]]
     provenance: Provenance
+    heading_to: Optional[Tuple[float, float, float]] = None  # where its latest heartbeat said it was flying to
 
 
 @dataclass
