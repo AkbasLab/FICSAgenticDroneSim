@@ -177,6 +177,22 @@ Not study data, and **mixed fidelity**: Drone1 is the live CarlaAir vehicle, Dro
 - **t2 is the one that shows the team doing something.** The simulated teammate reached T1 about 7 s in, long before the live drone, and confirmed it; Drone1 got the `target_found` message but kept searching its whole sector, so a teammate's confirmation did not stop its search (the code was not read for why). This was seen once at 8 m cruise height, so repeat it at 12 m before citing it.
 - **Limits.** One live drone beside a mock: the mock has no physics, the two drones were never closer than 13.9 m, and the live-to-mock separation check was therefore never tested. Two live vehicles, a teammate near the target, and a teammate that is the better-placed confirmer are untested live. The zone is still set off by the drone's own detection.
 
+### 2026-11-02 first fully live two-drone flights, and a near collision (no `runs/` folder)
+
+Not study data: both drones are real sim vehicles (Drone1 = `SimpleFlight`, Drone2 = `Drone2`, placed 20 m east by `~/Documents/AirSim/settings.json`; the launcher rebuilds `~/.carlaair/airsim-settings.json` from that file on every start, so edit the source file, backup `settings.json.bak-2026-11-02`). Same code, 12 m cruise height, drifting zone switched on by Drone1's own detection (12 s window), deterministic policy, no model, one shared message bus. Script `live_two_smoke.py` (outside the repo, backed up with the results as `live_two_<tag>.json`).
+
+| Runs | Drone2's sector | Target confirmed | Drone1 time in zone | Closest the drones got | Both landed near home |
+|---|---|---|---|---|---|
+| l1a, l1b, l1c | B | 3 of 3 (Drone2 got the `target_found` message each time) | 2.25 / 2.5 / 1.0 s | 17.1-18.5 m | yes, within 0.5 m |
+| l2a | A (same as Drone1) | yes, but by **Drone2**; Drone1 never met the zone (0 s) and swept its whole sector (39% battery left) | 0.0 s | **0.52 m** | yes |
+| l2b | A | yes, by Drone1 (1.0 s in the zone) | 1.0 s | **0.09 m** | **no: Drone2 stuck in the air near (30, 21.6)** |
+
+- **Route check for Sector B** (CARLA ray casts, lighter than the Sector A check: one lateral line and two heights per segment) found 10, 12 and 14 m clear for both possible ground levels. The Sector A check at Drone1's ground level does not cover Drone2's lane height, which sits about 1.4 m lower on this map; that was not rechecked.
+- **Near collision in both L2 flights.** Both drones fly the diagonal to the Sector A entrance (20, 20) at the same time and met there about 16 to 21 s in, 0.5 m apart (l2a) and 0.09 m apart (l2b). The guardian's separation rule did fire, but only on a later waypoint (23.3, 20.0) within 5 m of the teammate's last reported position; it does not look at the path between waypoints, so the crossing was not stopped. Whether the two bodies touched was not read (collision flags were not logged during the flights). Two drones headed for the same entrance is a real hazard, not a rounding error.
+- **l1a: both drones had one failed search leg** (`skill_failed->search_sector`) a little after takeoff, and the zone switched on 15 to 19 s later in l1a than in l1b and l1c. The cause was not logged (no event log in this script).
+- **l2b ending.** Drone2 was blocked twice by separation near the target, the guardian ended its mission (`escalated after repeated unsafe proposals (separation)`), and the fallback return flew it to about 21 m and left it hovering at (30.2, 21.6). Commands to fly home then barely moved it and its reported position jumped around; the collision record named `InstancedFoliageActor` (a tree) at about (30.0, 22.1, height 21 m). The sim has to be restarted to clear it; flying it home by hand did not work (it climbed but would not move sideways).
+- **Limits.** Five flights, one drone pair, deterministic policy; the zone is triggered by the drone's own detection; wall times are not comparable with the solo runs (Drone2's long search sets the run length, and some legs failed). The rule that stops a drone whose teammate already confirmed the target was not studied.
+
 ## 4. Conditions of the data
 
 Recorded because a run's conditions are part of the result.
