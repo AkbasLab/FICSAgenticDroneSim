@@ -234,4 +234,4 @@ Each one blocks a claim until resolved. Taken from reading the SC run ledger on 
 - Do not change a verdict in place; add a dated line under "Corrections".
 
 ### Corrections
-(none yet)
+- 2026-11-03, on the 2026-11-02 mixed-fidelity entry (t2): the place where Drone1 crawled to a stop on its way home at 8 m, about (30, 31), matches the lamp pole at (29.6, 30.4) that the Sector A route check already found blocks the way home at 8.5 to 10 m. The pole, not an unknown obstacle, is the likely cause; the entry's "guess, not checked" stands as written.
