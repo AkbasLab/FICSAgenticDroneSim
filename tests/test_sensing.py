@@ -328,7 +328,8 @@ class BoundaryTests(unittest.TestCase):
                            "def f():\n    return globals()\n",
                            "def f(x):\n    return vars(x)\n",
                            "def f(code):\n    return eval(code)\n",
-                           "def f():\n    return __import__('agentic_uav.simulator')\n"):
+                           "def f():\n    return __import__('agentic_uav.simulator')\n",
+                           "from ..simulator.message_bus import MessageBus\n"):          # Phase 7: no bus
                 path = os.path.join(folder, "breach.py")
                 with open(path, "w", encoding="utf-8") as h:
                     h.write(source)
@@ -351,7 +352,7 @@ def is_dunder(name):
 
 
 GROUND_TRUTH_TYPES = ("MockWorld", "Scenario", "MockVehicleAdapter", "AirSimAdapter", "Target",
-                      "PollingObserver", "SeparationMonitor", "SkillRunner")
+                      "PollingObserver", "SeparationMonitor", "SkillRunner", "MessageBus", "Delivery")
 
 
 def ground_truth_reached(root):

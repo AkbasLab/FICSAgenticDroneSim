@@ -40,7 +40,7 @@ beliefs do not move. Optionally, two drones talking in CarlaAir.
 | Artifact | Location | State |
 |---|---|---|
 | Message types and the envelope | `agentic_uav/core/messages.py` | **Done** 2026-11-02; goldens unedited |
-| The bus, and the two-function handle | `agentic_uav/simulator/message_bus.py` | step 2 |
+| The bus, and the two-function handle | `agentic_uav/simulator/message_bus.py`, `agentic_uav/core/messages.py` (`Comms`) | **Done** 2026-11-02; goldens unedited |
 | The message log | `agentic_uav/simulator/message_bus.py`, `agentic_uav/agents/` | step 3 |
 | Agents that talk | `agentic_uav/agents/drone_agent.py`, `agentic_uav/agents/belief_state.py` | step 4 |
 | The exit | `agentic_uav/experiments/`, `scripts/`, `results/`, `evidence/` | step 5 |
@@ -172,6 +172,69 @@ anything was mutated, as the exactly-once check is there to do.
 **The goldens did not move.** `record_golden.py --check` matches all four.
 664 tests pass, 22 skipped; audit clean.
 
+### 2026-11-02 — step 2: the bus, and nothing else to talk through (7.3)
+
+**`agentic_uav/simulator/message_bus.py`** is simulation infrastructure. It
+is central and can see everything -- where every drone is, every queue --
+because deciding delivery needs it. What it hands an agent is
+**`core.messages.Comms`**: the drone's id and two plain functions, `send` and
+`receive_available`, built like `Sensors` and `SkillHandle`. No attribute
+leads back to the bus, and there is no `peek`.
+
+**Phase 7's perfect communication** (recommendation 3): no loss, no delay,
+over a direct link no longer than 100 m in 3D -- Phase 4's hard edge --
+judged when the message is sent. A message sent in range is waiting at once,
+so its recipient reads it at its next tick; one sent out of range is never
+delivered, and the record says so. `range_m=None` is unlimited, for protocol
+tests. A message is never delivered after it expires; one still waiting when
+its lifetime ends is dropped as expired.
+
+* **Each recipient its own copy,** rebuilt from the message's JSON: no two
+  agents ever hold the same mutable payload, which would be a channel no
+  message went through. A broadcast is one delivery per drone but the sender.
+* **Refused:** a message not from the handle's drone (no spoofing), one to a
+  drone off the roster, one for another mission, anything not an
+  `AgentMessage`; and a roster naming a drone twice, a range that is not
+  positive and finite, a handle for a drone not on the roster.
+* **The record:** every delivery -- one message to one recipient -- with when
+  it was sent, scheduled and delivered, the distance at sending, and its
+  status: delivered, pending, out of range, expired. It is the experiment's,
+  for the message log of step 3; nothing an agent holds reaches it.
+
+**The boundary grows.** `MessageBus` and its `Delivery` records join the
+objects the walk of agent code must never reach, and importing the bus is a
+fourteenth breach the source check is shown to catch.
+
+**A race, found by a surviving mutation.** With the lock around sending
+removed, the tests still passed: they had senders racing senders, whose list
+appends Python's GIL keeps whole. The real race is a send landing between
+`receive_available`'s two steps -- taking what is ready, keeping the rest --
+and it loses the message from the inbox while the record still says pending.
+Probed with a sender and a reader at once: 2,248 of 200,000 messages lost
+without the lock, none with it. At a test's size the window is rarely hit,
+because Python switches threads only every 5 ms: 20,000 messages caught it
+once in three. Switching every microsecond for the test's duration
+(`sys.setswitchinterval`) makes it certain: 5,000 messages, 1.4 s, the race
+caught 8 times in 8, and with the lock the test passes 5 times in 5.
+
+**Tests: 14, in `tests/test_message_bus.py`:** in range it is waiting at
+once, read once, only by its recipient; a broadcast reaches all but the
+sender; out of range never arrives and the record says so (exactly 100 m is
+in, 100 m and a millimetre up is out); unlimited range; range judged at
+sending; nothing after expiry; oldest first and pending until read; each
+recipient its own copy; what the bus will not carry; the bus itself; many
+senders at once; a message sent while its recipient reads is not lost; the
+handle is two plain functions and a name; a holder of the handle reaches no
+bus. Plus the bus-import breach in `tests/test_sensing.py`.
+
+**Mutations: 20, all caught.** The first pass caught 19; the survivor was the
+lock, above. A first test of mine also put a drone "a hair" beyond the range
+with a 1e-6 m rise, which floating point rounds away at 100 m; it is a
+millimetre now.
+
+**The goldens did not move.** `record_golden.py --check` matches all four.
+678 tests pass, 22 skipped; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -179,6 +242,8 @@ anything was mutated, as the exactly-once check is there to do.
 | 2026-11-02 | **The thirteen named types, not fourteen** | The source plan's count and its list disagree; filling the gap would put words in the plan's mouth |
 | 2026-11-02 | **A payload schema only for a type in use; any other type is refused** | A type's payload is decided when a phase needs it, and not before; an unschema'd message cannot slip through |
 | 2026-11-02 | **The envelope validates; the copies are the bus's** | No two agents may share a mutable payload; that is a property of delivery, and keeping the module free of dunders keeps it inside the boundary |
+| 2026-11-02 | **Delivery is judged when a message is sent, over a direct link within 100 m** | Phase 4's hard edge, the evaluator's own rule; judging at sending keeps "was it delivered" a fact of one instant. Relays, latency and loss are Phase 10's |
+| 2026-11-02 | **A concurrency test may set Python's switch interval** | A race the GIL hides at the default 5 ms is real all the same; forcing frequent switches makes the test certain rather than lucky, and the interval is restored after |
 
 ## Open questions
 

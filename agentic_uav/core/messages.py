@@ -207,3 +207,20 @@ def new_message(message_type: MessageType, sender_id: str, recipient_ids: tuple[
     plain = json.loads(json.dumps(payload))                 # the sender keeps its dict; the message its own
     return AgentMessage(f"{sender_id}#{sequence_number}", message_type, sender_id, tuple(recipient_ids),
                         mission_id, at, sequence_number, ttl_s, plain, confidence)
+
+
+@dataclass(frozen=True)
+class Comms:
+    """All a drone can do with the network (AUV-07, 7.3): send, and take what has arrived.
+
+    Built like `core.sensing.Sensors`: a drone id and two plain functions,
+    closing over the bus that the simulation runs. No attribute leads to the
+    bus, its queues, the other drones' mail or what was never delivered, and
+    there is no `peek` -- not even for debugging (AUV-07: "resist adding a
+    `peek()`"). `send` refuses a message not from this drone; `receive_available`
+    returns what has arrived for it, each message its own copy, oldest first.
+    """
+
+    drone: str
+    send: Callable[[AgentMessage], None]
+    receive_available: Callable[[], tuple[AgentMessage, ...]]
