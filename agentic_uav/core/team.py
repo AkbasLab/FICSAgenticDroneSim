@@ -23,6 +23,8 @@ WHAT A REPORT SAYS, and why each field matters for staleness (6.3):
 * `ttl_s`: how long after `at` the news may be treated as current; after
   that the record is kept, marked expired, and never used as current.
 * `position`, `role`, `task`, `status`: the content. Any may be absent.
+* `message_id`: the message it came from, when it came in one (Phase 7), so
+  the message log can tell which messages a decision rested on.
 """
 
 from __future__ import annotations
@@ -44,6 +46,7 @@ class TeamReport:
     status: str | None = None
     confidence: float = 1.0
     ttl_s: float = DEFAULT_TTL_S
+    message_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.source not in SOURCES:

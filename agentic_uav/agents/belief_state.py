@@ -33,6 +33,15 @@ already held never replaces it: news arriving out of order is not newer.
 A report about itself, about a drone not on the roster, or dated in the
 future is refused, and the reason is returned.
 
+WHAT THE POLICY READ (Phase 7, 7.4). A record keeps the message it came from,
+and while a decision is being made the belief notes which teammate records
+the policy looked at through `teammate()` and `current_teammates()`
+(`start_reading`, `read`). The agent keeps those message ids with the
+decision, so the message log can say not only that a message was in the
+belief when a decision was made, but that the policy read it. A policy that
+reached past these two accessors would not be counted; the rule policy reads
+the team through them only.
+
 EVERY FIELD COMES FROM A READING, A RECEIVED REPORT OR THE AGENT ITSELF. Position,
 airborne, battery, sightings and the base link from `core.sensing`; the
 current skill and health from the agent's own executor; the task, progress
@@ -185,6 +194,7 @@ class BeliefState:
     communication: CommunicationBelief | None = None
     assumptions: dict[str, Assumption] = field(default_factory=dict)
     skill_serial_seen: int = field(default=0, repr=False)      # the last ended skill counted in health
+    read_ids: set[str] = field(default_factory=set, repr=False)    # message ids read during this decision
 
     @classmethod
     def start(cls, brief: MissionBrief, vehicle_id: str, first: Observation) -> "BeliefState":
@@ -255,12 +265,29 @@ class BeliefState:
 
     def teammate(self, drone: str) -> TeamRecord | None:
         """The latest record held about `drone`, current or not; None if never heard."""
-        return self.team.members[drone]
+        record = self.team.members[drone]
+        self._noted(record)
+        return record
 
     def current_teammates(self) -> dict[str, TeamRecord]:
         """Only the records still current now: what may be acted on as fact."""
         now = self.self_.updated_at
-        return {d: r for d, r in self.team.members.items() if r is not None and r.current(now)}
+        current = {d: r for d, r in self.team.members.items() if r is not None and r.current(now)}
+        for r in current.values():
+            self._noted(r)
+        return current
+
+    def start_reading(self) -> None:
+        """A decision begins: forget what the last one read."""
+        self.read_ids.clear()
+
+    def read(self) -> tuple[str, ...]:
+        """The message ids of the teammate records read since `start_reading`, sorted."""
+        return tuple(sorted(self.read_ids))
+
+    def _noted(self, record: TeamRecord | None) -> None:
+        if record is not None and record.report.message_id is not None:
+            self.read_ids.add(record.report.message_id)
 
     def assume(self, key: str, statement: str, evidence: str, at: float, confidence: float) -> Assumption:
         """Record what the agent is taking to be true; a newer assumption under `key` replaces the older."""
@@ -348,7 +375,7 @@ def _team_view(record: TeamRecord | None, now: float) -> Any:
             "source": r.source, "age_s": round(record.age(now), 3),
             "received_age_s": round(now - record.received_at, 3),
             "confidence": round(record.confidence(now), 3), "expires_in_s": round(record.expires_at - now, 3),
-            "current": record.current(now)}
+            "current": record.current(now), "message_id": r.message_id}
 
 
 def _known(value: Any) -> Any:

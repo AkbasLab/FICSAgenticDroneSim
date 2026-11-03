@@ -206,7 +206,8 @@ class StaleInformationTests(unittest.TestCase):
         view = self.at(14.0)["Drone2"]
         self.assertEqual(view, {"position": [5.0, -3.0, 12.0], "role": "unknown", "task": "search S2",
                                 "status": "unknown", "source": "message", "age_s": 4.0, "received_age_s": 2.0,
-                                "confidence": 0.48, "expires_in_s": 6.0, "current": True})
+                                "confidence": 0.48, "expires_in_s": 6.0, "current": True,
+                                "message_id": None})
         self.assertEqual(self.at(14.0)["Drone3"], "never heard")
 
     def test_age_counts_from_when_it_was_true_not_when_it_arrived(self):

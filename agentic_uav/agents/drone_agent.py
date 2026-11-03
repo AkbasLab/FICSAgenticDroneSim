@@ -72,12 +72,13 @@ class TraceEntry:
     decision: Decision
     verdict: Verdict
     action: str
+    read: tuple[str, ...] = ()            # message ids of the teammate records the policy read (Phase 7)
 
     def as_json(self) -> dict[str, Any]:
         return {"at": round(self.at, 3), "events": [e.as_json() for e in self.events], "belief": self.belief,
                 "decision": self.decision.as_json(),
                 "verdict": {"ok": self.verdict.ok, "reasons": list(self.verdict.reasons)},
-                "action": self.action}
+                "action": self.action, "read": list(self.read)}
 
 
 class DroneAgent:
@@ -185,13 +186,15 @@ class DroneAgent:
         asked = events
         for _ in range(MAX_REJECTIONS + 1):
             snapshot = self.belief.snapshot()            # what it knew BEFORE deciding
+            self.belief.start_reading()
             decision = self.policy.decide(self.belief, asked)
+            read = self.belief.read()                    # what the policy looked at, not the validator
             verdict = self.validator(decision, self.belief)
             if verdict.ok:
                 action = self._act(decision)
-                self.trace.append(TraceEntry(now, asked, snapshot, decision, verdict, action))
+                self.trace.append(TraceEntry(now, asked, snapshot, decision, verdict, action, read))
                 return
-            self.trace.append(TraceEntry(now, asked, snapshot, decision, verdict, "refused"))
+            self.trace.append(TraceEntry(now, asked, snapshot, decision, verdict, "refused", read))
             asked = asked + (Event(Trigger.GUARD_REJECTED, now,
                                    {"refused": decision.as_json(), "reasons": list(verdict.reasons)}),)
         # Refused every time: hold where it is, and think again at the next event.

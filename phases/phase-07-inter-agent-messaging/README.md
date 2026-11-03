@@ -41,7 +41,7 @@ beliefs do not move. Optionally, two drones talking in CarlaAir.
 |---|---|---|
 | Message types and the envelope | `agentic_uav/core/messages.py` | **Done** 2026-11-02; goldens unedited |
 | The bus, and the two-function handle | `agentic_uav/simulator/message_bus.py`, `agentic_uav/core/messages.py` (`Comms`) | **Done** 2026-11-02; goldens unedited |
-| The message log | `agentic_uav/simulator/message_bus.py`, `agentic_uav/agents/` | step 3 |
+| The message log | `agentic_uav/experiments/message_log.py`, `agentic_uav/core/team.py`, `agentic_uav/agents/belief_state.py`, `agentic_uav/agents/drone_agent.py` | **Done** 2026-11-02; goldens unedited; Phases 5–6 reproduce |
 | Agents that talk | `agentic_uav/agents/drone_agent.py`, `agentic_uav/agents/belief_state.py` | step 4 |
 | The exit | `agentic_uav/experiments/`, `scripts/`, `results/`, `evidence/` | step 5 |
 | Optional live flight; close | `results/`, `evidence/` | step 6 |
@@ -235,6 +235,61 @@ millimetre now.
 **The goldens did not move.** `record_golden.py --check` matches all four.
 678 tests pass, 22 skipped; audit clean.
 
+### 2026-11-02 — step 3: the message log, and whether a message mattered (7.4)
+
+AUV-07 asks the log for each message's "creation time, scheduled delivery
+time, actual delivery time, dropped-or-delivered status, sender and
+recipient, size, expiration -- and whether the message influenced a
+decision." The first eight come from the bus's record; the last needs a
+chain from a message to a decision with no gap in it.
+
+**The chain:**
+
+* **A record keeps its message.** `core/team.TeamReport` gains `message_id`,
+  and the belief's snapshot shows it beside each teammate's record.
+* **The belief notes what the policy read.** Between `start_reading()` and
+  `read()`, it collects the message ids of the records looked at through
+  `teammate()` or `current_teammates()`. The rule policy reads its team
+  through them only (its `teammates` assumption).
+* **The decision keeps it.** `DroneAgent` starts the reading before the
+  policy decides and collects it straight after -- before the validation
+  step, whose reads are not the policy's -- and the `TraceEntry` carries the
+  ids as `read`, refused decisions included.
+* **The log joins them** (`experiments/message_log.py`): one row per message
+  per recipient, with the eight columns, distance at sending, and influence
+  at two levels -- *in the belief* (the first decision of the recipient whose
+  belief held a record from this message) and *read by the policy* (the
+  first decision that read it). A message never delivered can do neither, and
+  the row says why: out of range, expired, or pending at the end. `summary`
+  adds it up: counts by status and type, bytes sent and delivered, how many
+  were in a belief, how many were read.
+
+**Phase 5's and Phase 6's records reproduce exactly:** the knowledge exit's
+1380 flight and decision rows, and Phase 5's exit decisions and reports,
+identical to their runs of record (`agentic_uav` digest `8f754f0e16fbad25`).
+Their team records were never heard, so the new column never appears in them.
+
+**Tests: 15, in `tests/test_message_log.py`:** the snapshot naming the
+message; reading through the accessors noted (current records only, an
+expired one asked for by name, none for a record that came in no message);
+each decision starting afresh; the rule policy reading its teammates; the
+trace keeping what the policy read, in JSON too; the validation step's reads
+not counted; a refused decision keeping its reads; each decision keeping
+only its own; every column AUV-07 asks for, on a clock that does not start
+at 0; what was not delivered and why; influence at two levels, and as the
+recipient's own; the summary; a Phase 6 snapshot without message ids; trace
+entries or their JSON.
+
+**Mutations: 19, all caught.** The first pass caught 16. The three survivors
+were test gaps: the agent never starting a decision's reading afresh (my
+test policy read the same record every time, so the pile-up never showed);
+the first read kept rather than the last (no message was read twice); and a
+record without a `message_id` key, as Phase 6's are (it would have crashed
+the log).
+
+**The goldens did not move.** `record_golden.py --check` matches all four.
+693 tests pass, 22 skipped; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -244,6 +299,7 @@ millimetre now.
 | 2026-11-02 | **The envelope validates; the copies are the bus's** | No two agents may share a mutable payload; that is a property of delivery, and keeping the module free of dunders keeps it inside the boundary |
 | 2026-11-02 | **Delivery is judged when a message is sent, over a direct link within 100 m** | Phase 4's hard edge, the evaluator's own rule; judging at sending keeps "was it delivered" a fact of one instant. Relays, latency and loss are Phase 10's |
 | 2026-11-02 | **A concurrency test may set Python's switch interval** | A race the GIL hides at the default 5 ms is real all the same; forcing frequent switches makes the test certain rather than lucky, and the interval is restored after |
+| 2026-11-02 | **A message "influenced a decision" if the policy read its record while deciding; "in the belief" is kept beside it** | The first is what a decision rested on; the second is what it could have rested on. The validation step's reads are not the policy's, and a policy reaching past `teammate()` and `current_teammates()` would not be counted |
 
 ## Open questions
 
