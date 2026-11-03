@@ -41,6 +41,14 @@ AND THREE CHECKS, each of which can fail:
 * NO LEAK: nothing in the truth gap appears in what it knew -- no unseen
   target's id or position, no teammate's true position. An agent that knew
   these would have crossed the boundary.
+
+TEAMMATES THAT ARE HEARD (Phase 7). A teammate's record comes in a delivered
+message (the message log traces which), so a teammate's position may rightly
+appear in it -- and only there: "no leak" looks for a teammate's true
+position everywhere EXCEPT that teammate's own record. And "correct" holds
+the record to the truth: the position it carries must be where that teammate
+really was when it sent the message -- now, less the record's age -- so an
+agent told something false, or holding a record older than it says, fails.
 """
 
 from __future__ import annotations
@@ -348,16 +356,28 @@ def _check(belief: dict[str, Any], drone: str, t: float, truth: Truth, out: Know
     real_seen = truth.seen_by(drone, t)
     if seen != real_seen:
         out.problems.append(f"incorrect: believed sightings {sorted(seen)}, truly detected {sorted(real_seen)}")
+    # A heard teammate's record must say where it truly was when it spoke.
+    for member, record in belief.get("team", {}).items():
+        if isinstance(record, dict) and isinstance(record.get("position"), list):
+            then = t - record["age_s"]
+            off = math.dist(record["position"], truth.position(member, then))
+            if off > tol["position_m"]:
+                out.problems.append(f"incorrect: its record of {member} is {off:.3f} m from where {member} "
+                                    f"was when it spoke")
     # No leak: nothing of the truth gap anywhere in what it knew.
     # Its own velocity is a speed, not a place: descending, [0.0, 0.0, -1.0] read as a teammate at [0.0, 0.0].
-    text = json.dumps([k for k in out.known if k["what"] != "self.velocity"])
+    known = [k for k in out.known if k["what"] != "self.velocity"]
+    text = json.dumps(known)
     for item in out.gap:
         truth_pos = item["truth"]["position"]
         name = item["what"].split()[-1]
         if item["what"].startswith("target") and (f'"{name}"' in text or _mentions(text, truth_pos[:2])):
             out.problems.append(f"leak: it knew something of {item['what']}, which it had not seen")
-        if item["what"].startswith("teammate") and _mentions(text, truth_pos[:2]):
-            out.problems.append(f"leak: it knew where {name} really was, never having heard it")
+        if item["what"].startswith("teammate"):
+            # Its own record, which came in a delivered message, may say where it is; nothing else may.
+            elsewhere = json.dumps([k for k in known if not k["what"].startswith(f"team.{name}.")])
+            if _mentions(elsewhere, truth_pos[:2]):
+                out.problems.append(f"leak: it knew where {name} really was, beyond what it heard from it")
 
 
 def _mentions(text: str, xy: list[float]) -> bool:

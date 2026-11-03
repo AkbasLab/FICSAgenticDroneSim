@@ -28,7 +28,10 @@ Mirrored from `AUV-22 — Phase Objectives Checklist`.
 > flying, and their **local team beliefs update only when messages are
 > delivered**.
 
-**Met:** no · **Evidence:** —
+**Met:** on the mock, 2026-11-02 — 20 of 20 seeds passed all six checks; 5,820 teammate records, in 2,020
+decisions, each traced to a message delivered before the decision · **Evidence:**
+[`evidence/exit-criterion-2026-11-02.md`](evidence/exit-criterion-2026-11-02.md).
+The optional live flight (step 6) is not yet flown.
 
 Planned evidence: four rule agents on `search_relay_001` (S1–S4) across 20
 seeds, every team-belief update traced to a delivered message and none
@@ -43,7 +46,7 @@ beliefs do not move. Optionally, two drones talking in CarlaAir.
 | The bus, and the two-function handle | `agentic_uav/simulator/message_bus.py`, `agentic_uav/core/messages.py` (`Comms`) | **Done** 2026-11-02; goldens unedited |
 | The message log | `agentic_uav/experiments/message_log.py`, `agentic_uav/core/team.py`, `agentic_uav/agents/belief_state.py`, `agentic_uav/agents/drone_agent.py` | **Done** 2026-11-02; goldens unedited; Phases 5–6 reproduce |
 | Agents that talk | `agentic_uav/agents/drone_agent.py`, `agentic_uav/agents/belief_state.py`, `agentic_uav/experiments/single_agent.py` (`messaging=True`) | **Done** 2026-11-02; goldens unedited; Phases 5–6 reproduce |
-| The exit | `agentic_uav/experiments/`, `scripts/`, `results/`, `evidence/` | step 5 |
+| The exit | `agentic_uav/experiments/messaging.py`, `agentic_uav/experiments/knowledge.py` (heard teammates), `scripts/messaging_exit.py`, `results/`, `evidence/` | **Done** 2026-11-02; exit met on the mock |
 | Optional live flight; close | `results/`, `evidence/` | step 6 |
 
 ## Plan
@@ -364,6 +367,83 @@ which falls short of 0.1 in floating point.
 **The goldens did not move.** `record_golden.py --check` matches all four.
 712 tests pass, 22 skipped; audit clean.
 
+### 2026-11-02 — step 5: the exit, met on the mock
+
+**Each seed flown three ways** (`experiments/messaging.py`): **talking**, the
+four canonical agents on Phase 7's perfect network; **blocked**, the radio's
+range cut to 1 m, so every message is sent and none arrives; and **silent**,
+no messaging, the reference. **Six checks**, each shown able to fail:
+
+| Check | What it requires |
+|---|---|
+| met | the talking flight completes its four tasks |
+| exchanged | every agent sent heartbeats and status updates, and received both kinds from teammates |
+| only on delivery | every teammate record in every decision came in a message from that teammate, delivered to that drone at or before the decision, with that teammate's task, aged from sending; nothing undelivered ever believed |
+| known exactly | Phase 6's knowledge log passes every decision |
+| blocked moves nothing | messages sent, none delivered, every teammate "never heard" throughout |
+| steers nothing | talking and blocked flights make exactly the silent flight's decisions |
+
+**The knowledge log, taught that teammates can now be heard.** Phase 6's
+leak check was written when no teammate could be: run on the talking four it
+called a heard teammate's position a leak, on 12 of 101 decisions. It now
+looks for a teammate's true position everywhere *except that teammate's own
+record* -- which came in a delivered message, traced above -- and "correct"
+gains a check: a heard teammate's record must say where it truly was when it
+spoke (now, less the record's age). So an agent that knows more than it was
+told fails, and so does one told something false or holding a record older
+than it says. All 101 pass; Phase 6's record still reproduces row for row.
+
+**The run of record** (`results/messaging-exit-20261102-213008-exit`, at
+`8e24d56` with the step-5 files uncommitted, `agentic_uav` digest
+`480cafb6ab4486b4`, 60 flights): **20 of 20 seeds passed every check.**
+
+* **5,820 teammate records, in 2,020 decisions,** each traced to a message
+  delivered to that drone before the decision, from that teammate, with its
+  task, aged from sending.
+* **31,927 messages delivered, 12,869 out of range** (the sectors put drones
+  up to 188.7 m apart), 3,084 pending for agents that had landed, **none
+  expired**: every delivered message was read at the next tick.
+* **Every blocked flight:** each seed's messages sent, none delivered, every
+  teammate "never heard" at every decision; and talking and blocked flights
+  made exactly the silent flight's decisions on every seed.
+* **Beliefs go stale when delivery stops.** In seed 17, Drone1 heard all
+  three teammates at every decision to 47 s; at 57 s its records of Drone3
+  and Drone4 had expired, those two being out of range in the far sectors;
+  at 73 s, back in range, they were fresh again. 90 decision-records in that
+  seed held an expired teammate, shown as expired, not current.
+* **What mattered:** in seed 17, 208 messages were in a belief when a
+  decision was made, and 195 were read by the policy deciding.
+
+The record keeps, for every seed, the checks and every decision's team block
+(which message each record came from, its age, whether current, what the
+policy read), and for seed 17 the talking flight's full message log: 1.5 MB.
+
+**Evidence:** [`evidence/exit-criterion-2026-11-02.md`](evidence/exit-criterion-2026-11-02.md),
+generated from the record: every seed's checks; who heard whom in seed 17;
+what Drone1 believed of each teammate at each of its decisions; a teammate
+going stale.
+
+**Tests: 20, in `tests/test_messaging_exit.py`:** every check passes on a real
+seed; the three flights are what they say; and each check failing on a real
+flight altered to break it -- a record from no delivered message, from
+another drone's, delivered after the decision, with the wrong task or age;
+something undelivered believed; no record at all is not a pass; an agent
+that sent or heard nothing of a kind; a blocked flight that heard
+something, or sent nothing; talking that changed a decision (and one check
+failing fails the seed); a flight that did not meet its tasks; the team
+blocks compact and in order; and the knowledge log's heard-teammate rules --
+allowed in its own record, the wrong place, a record fresher than it is,
+one teammate's place in another's record, a teammate's place anywhere else.
+One test of mine first assumed Drone2 was moving at the decision it used; it
+was hovering, so the test now finds a moment it truly was.
+
+**Mutations: 19, all caught.** The first pass caught 16; the three survivors
+were test gaps -- the leak exception widened to every teammate's record, a
+blocked flight that sends nothing, and "all checks" reduced to "met".
+
+**The goldens did not move.** `record_golden.py --check` matches all four.
+732 tests pass, 22 skipped; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -377,6 +457,8 @@ which falls short of 0.1 in floating point.
 | 2026-11-02 | **A heartbeat carries task and stage, not only who and where** | A record is the latest report; a bare heartbeat after a status would wipe the task |
 | 2026-11-02 | **Messages are delayed a fixed 0.1 s, below the 0.5 s tick** | Zero delay let thread order decide whether a same-instant message was read, so beliefs varied run to run; a fixed sub-tick delay keeps "read at the next tick" and makes it certain. A modelling choice, not a radio claim |
 | 2026-11-02 | **An agent's latency estimate is a message's age when read** | It cannot see the bus's delay, only when a message was sent and when it took it in; 0.5 s is the truthful figure from its side |
+| 2026-11-02 | **Each seed is flown talking, blocked and silent** | "Only when delivered" needs a case where messages are sent and not delivered; the blocked flight is that case, and the silent one is the reference the others' decisions are held to |
+| 2026-11-02 | **A heard teammate's position may stand only in its own record, and must be true to when it spoke** | The leak check now has messages to allow for; allowing them only in the record that came in one, and checking that record against the truth, keeps the check as strict as before |
 
 ## Open questions
 
