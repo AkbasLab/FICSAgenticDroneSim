@@ -162,6 +162,21 @@ Not study data: single solo drone, deterministic policy, no model, zone switched
 - **Confirming distance.** With the zone present the drone confirms from where it first saw the target, 3.2 to 3.5 m from T1 (closest approach), not from on top of it.
 - **Limits.** One drone, one scenario, one seed of the zone trigger; the zone is set off by the drone's own detection; d1-d5 are the old behaviour and are kept because they are the evidence for the two fixes. A zone that never leaves, two or more drones, and a model in the policy slot are still untested live. `live_zone_smoke.py` is kept outside the repo (`--drift`, event log) and is backed up with the results.
 
+### 2026-11-02 first two-drone live flights: one live drone, one simulated teammate (no `runs/` folder)
+
+Not study data, and **mixed fidelity**: Drone1 is the live CarlaAir vehicle, Drone2 is the repo's kinematic mock (15 m/s, no physics, no ground), both on one shared message bus, as `run_team_threaded` does. Same drifting zone, same trigger (the zone switches on when Drone1 itself senses T1, 12 s window) and same code as the solo d9-d11 runs. Script `live_team_smoke.py` is kept outside the repo and backed up with the results (`live_team_<tag>.json` on Heidi).
+
+| Runs | Teammate's sector | Cruise height | Result |
+|---|---|---|---|
+| t1 | B (no target there) | 8 m (by mistake) | T1 confirmed, 1.0 s inside the zone |
+| t2 | A (same sector as Drone1) | 8 m (by mistake) | Drone2 found and confirmed T1 first; Drone1 never saw the zone (0 s) but still swept all of sector A, took 199 s, 34% battery left, and stalled on the way home (below) |
+| t5-t7 | B | 12 m | T1 confirmed 3 of 3, 1.0 / 1.0 / 2.25 s inside the zone (t5 pulled away slower), 102-107 s, battery 64-66%, Drone1 landed within 0.5 m of home each time |
+
+- **The mistake in t1-t2.** The team script did not set the 12 m cruise height the solo runs use, so Drone1 flew at 8 m. In t2 the return leg passed near (30, 31), where the Sector A awnings and pole are: the drone crawled for about 35 s, then landed there, and had to be flown home by hand before the next flight. The obstacle as the cause is a guess, not checked. t1 and t2 are kept only as the record of that mistake; do not compare them with the solo runs. t5-t7 are the valid ones. A chain run now stops itself if Drone1 does not land within 4 m of home.
+- **What the teammate changed in t5-t7: nothing visible.** Drone2 (sector B) stayed at least 15 m away, heard Drone1's `target_sighted` (zone-blocked sighting) and `target_found` messages on the bus, finished its own sector, listened, and went home. Drone1 behaved as in the solo runs (same exit point (34.2, 25.0), same blocked-then-confirm sequence, 1.0 s inside the zone in two of three).
+- **t2 is the one that shows the team doing something.** The simulated teammate reached T1 about 7 s in, long before the live drone, and confirmed it; Drone1 got the `target_found` message but kept searching its whole sector, so a teammate's confirmation did not stop its search (the code was not read for why). This was seen once at 8 m cruise height, so repeat it at 12 m before citing it.
+- **Limits.** One live drone beside a mock: the mock has no physics, the two drones were never closer than 13.9 m, and the live-to-mock separation check was therefore never tested. Two live vehicles, a teammate near the target, and a teammate that is the better-placed confirmer are untested live. The zone is still set off by the drone's own detection.
+
 ## 4. Conditions of the data
 
 Recorded because a run's conditions are part of the result.
