@@ -42,7 +42,7 @@ beliefs do not move. Optionally, two drones talking in CarlaAir.
 | Message types and the envelope | `agentic_uav/core/messages.py` | **Done** 2026-11-02; goldens unedited |
 | The bus, and the two-function handle | `agentic_uav/simulator/message_bus.py`, `agentic_uav/core/messages.py` (`Comms`) | **Done** 2026-11-02; goldens unedited |
 | The message log | `agentic_uav/experiments/message_log.py`, `agentic_uav/core/team.py`, `agentic_uav/agents/belief_state.py`, `agentic_uav/agents/drone_agent.py` | **Done** 2026-11-02; goldens unedited; Phases 5–6 reproduce |
-| Agents that talk | `agentic_uav/agents/drone_agent.py`, `agentic_uav/agents/belief_state.py` | step 4 |
+| Agents that talk | `agentic_uav/agents/drone_agent.py`, `agentic_uav/agents/belief_state.py`, `agentic_uav/experiments/single_agent.py` (`messaging=True`) | **Done** 2026-11-02; goldens unedited; Phases 5–6 reproduce |
 | The exit | `agentic_uav/experiments/`, `scripts/`, `results/`, `evidence/` | step 5 |
 | Optional live flight; close | `results/`, `evidence/` | step 6 |
 
@@ -290,6 +290,80 @@ the log).
 **The goldens did not move.** `record_golden.py --check` matches all four.
 693 tests pass, 22 skipped; audit clean.
 
+### 2026-11-02 — step 4: agents that talk
+
+**`DroneAgent` with `comms`** (`agents/drone_agent.py`). Each tick, after
+updating its belief and before deciding, the agent **takes in** what has
+arrived: each message becomes a `TeamReport` -- sender, sent time, position,
+task, stage, the message's lifetime and id -- for the belief to keep or
+refuse (Phase 6's rules), and is noted for the link estimates. It **says**
+who it is, where and on what in a `HEARTBEAT` every second, and after each
+decision a `STATUS_UPDATE` (task, stage, skill, position, battery, health).
+All its messages are broadcast and numbered from 1 in one sequence. It
+refuses another drone's comms.
+
+**The link, estimated from what was heard** (`agents/belief_state.py`;
+AUV-10, 10.5): peers heard in the last 3 s, the share of sequence numbers
+skipped, and the mean age on arrival of the last ten messages. A message
+missed for any reason is a gap: the agent cannot tell range from loss and
+does not pretend to. An agent not listening keeps all three unknown, as in
+Phases 5 and 6. **The latency it estimates is 0.5 s, not the bus's 0.1 s:**
+it can only measure a message's age when it reads it, at its next tick --
+the honest figure from its side.
+
+**Two refinements of the plan, both said before building:**
+
+* **A heartbeat says what the sender is doing** -- task and stage -- as well
+  as who and where. A teammate's record is its latest report, so a bare
+  heartbeat after a status would have wiped the task.
+* **"Delivered at the next tick" is a fixed 0.1 s delay**, below the 0.5 s
+  tick (`MESSAGE_DELAY_S`; the bus's `delay_s`). With none, a message sent at
+  the instant a teammate's thread read its inbox arrived or not by which
+  thread ran first, and team beliefs would differ run to run. The message
+  log orders its rows by sent time, sender, sequence and recipient for the
+  same reason.
+
+**The four canonical agents talking** (`fly_agents_on_mock(...,
+messaging=True)`, `search_relay_001`, S1–S4): the tasks met, **exactly the
+decisions and report they make without messaging** (recommendation 4), and
+the same message log and beliefs on every run. Seed 17: 2,394 deliveries --
+1,595 delivered, 645 out of range, 154 still waiting for agents that had
+landed; 208 messages in a belief at a decision, 195 read by a policy.
+
+**Phase 5's and Phase 6's records reproduce exactly** (digest
+`994a1620446375cf`): an agent without comms takes in and says nothing.
+
+**Tests: 18, in `tests/test_agents_talk.py`, and 1 in
+`tests/test_message_bus.py`:** the four complete their tasks; talking changes
+no decision; a heartbeat a second and a status after each decision; one
+sequence from 1; **team beliefs update only on delivery** -- every teammate
+record in every decision came in a message delivered to that drone at or
+before the decision, carries that teammate's task, and is aged from when the
+message was sent; nothing undelivered is ever believed; a teammate out of
+range goes stale; the policy reads what it believes; the link estimates
+against the log; deterministic; unlimited range has no gaps; an agent not
+listening keeps the link unknown; the estimates from arrivals alone (gaps,
+a late arrival, the connected window, the last ten); an agent with comms
+reaches no bus; another drone's comms refused; and the bus's fixed delay.
+
+**Mutations: 25, all caught.** The first pass ran 24 and three survived, all
+test gaps: a record aged from arrival rather than sending, the task not
+carried, and a negative or infinite delay accepted. The 25th -- a heartbeat
+schema without task and stage -- did not fail: **it hung the suite.** The
+bus's stress test (step 2) left its "done" flag unset when the sender
+raised, and the reader waited for ever. That is a defect of the test, and
+of the kind that hides others; the sender now sets the flag however it
+ends, the threads are joined with a time limit, and the mutant fails in a
+second. The pair flight itself, with the same mutant, raised at once,
+naming the agent -- a crashed agent does not hang a team flight.
+
+Also: one mutation target was mistyped (indentation) and stopped the run
+before anything was mutated; and a delay test of mine summed 0.09 and 0.01,
+which falls short of 0.1 in floating point.
+
+**The goldens did not move.** `record_golden.py --check` matches all four.
+712 tests pass, 22 skipped; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -300,6 +374,9 @@ the log).
 | 2026-11-02 | **Delivery is judged when a message is sent, over a direct link within 100 m** | Phase 4's hard edge, the evaluator's own rule; judging at sending keeps "was it delivered" a fact of one instant. Relays, latency and loss are Phase 10's |
 | 2026-11-02 | **A concurrency test may set Python's switch interval** | A race the GIL hides at the default 5 ms is real all the same; forcing frequent switches makes the test certain rather than lucky, and the interval is restored after |
 | 2026-11-02 | **A message "influenced a decision" if the policy read its record while deciding; "in the belief" is kept beside it** | The first is what a decision rested on; the second is what it could have rested on. The validation step's reads are not the policy's, and a policy reaching past `teammate()` and `current_teammates()` would not be counted |
+| 2026-11-02 | **A heartbeat carries task and stage, not only who and where** | A record is the latest report; a bare heartbeat after a status would wipe the task |
+| 2026-11-02 | **Messages are delayed a fixed 0.1 s, below the 0.5 s tick** | Zero delay let thread order decide whether a same-instant message was read, so beliefs varied run to run; a fixed sub-tick delay keeps "read at the next tick" and makes it certain. A modelling choice, not a radio claim |
+| 2026-11-02 | **An agent's latency estimate is a message's age when read** | It cannot see the bus's delay, only when a message was sent and when it took it in; 0.5 s is the truthful figure from its side |
 
 ## Open questions
 

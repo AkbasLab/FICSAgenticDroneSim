@@ -33,7 +33,7 @@ from agentic_uav.core.messages import (  # noqa: E402
     payload_problems,
 )
 
-BEAT = {"position": [40.0, -12.0, 12.0], "airborne": True, "battery": 97.4}
+BEAT = {"position": [40.0, -12.0, 12.0], "airborne": True, "battery": 97.4, "task": "search S1", "stage": "searching"}
 STATUS = {"task": "search S1", "stage": "searching", "skill": "SEARCH_REGION",
           "position": [60.0, -30.0, 12.0], "battery": 88.0, "degraded": False}
 

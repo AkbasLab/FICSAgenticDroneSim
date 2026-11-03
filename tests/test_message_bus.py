@@ -50,7 +50,8 @@ class World:
 
 def beat(sender, seq=1, to=BROADCAST, at=0.0, battery=90.0):
     return new_message(MessageType.HEARTBEAT, sender, to, "m", at, seq,
-                       {"position": [0.0, 0.0, 10.0], "airborne": True, "battery": battery})
+                       {"position": [0.0, 0.0, 10.0], "airborne": True, "battery": battery,
+                        "task": None, "stage": None})
 
 
 def make(range_m=100.0, **at):
@@ -101,6 +102,22 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual(len(bus.comms("Drone2").receive_available()), 1)        # it was in range when sent
         self.assertEqual(bus.comms("Drone3").receive_available(), ())             # it was not
 
+    def test_a_fixed_delay_holds_it_back(self):
+        clock, world = SimClock(), World()
+        bus = MessageBus(DRONES, clock, world, 100.0, delay_s=0.1)
+        bus.comms("Drone1").send(beat("Drone1", to=("Drone2",)))
+        clock.sleep(0.09)
+        self.assertEqual(bus.comms("Drone2").receive_available(), ())             # not yet
+        on_time = MessageBus(DRONES, SimClock(), world, 100.0, delay_s=0.1)
+        on_time.comms("Drone1").send(beat("Drone1", to=("Drone2",)))
+        on_time.clock.sleep(0.1)                                                   # (0.09 + 0.01 falls short in floats)
+        self.assertEqual(len(on_time.comms("Drone2").receive_available()), 1)     # at exactly the delay
+        (d,) = on_time.deliveries()
+        self.assertEqual((d.sent_at, d.scheduled_at, d.delivered_at), (0.0, 0.1, 0.1))
+        for bad in (-0.1, float("inf"), float("nan")):
+            with self.subTest(delay_s=bad), self.assertRaisesRegex(ValueError, "delay_s must be zero or more"):
+                MessageBus(DRONES, clock, world, 100.0, delay_s=bad)
+
     def test_nothing_after_it_expires(self):
         bus, clock, _ = make()
         bus.comms("Drone1").send(beat("Drone1", to=("Drone2",)))                   # expires at 3.0
@@ -148,7 +165,8 @@ class RefusalTests(unittest.TestCase):
         with self.assertRaisesRegex(TypeError, "not an AgentMessage"):
             me.send({"message_type": "heartbeat"})
         other = new_message(MessageType.HEARTBEAT, "Drone1", BROADCAST, "another mission", 0.0, 1,
-                            {"position": [0.0, 0.0, 0.0], "airborne": False, "battery": 100.0})
+                            {"position": [0.0, 0.0, 0.0], "airborne": False, "battery": 100.0,
+                             "task": None, "stage": None})
         with self.assertRaisesRegex(ValueError, "the bus carries m"):
             me.send(other)
         self.assertEqual(bus.deliveries(), ())                                     # nothing refused was recorded
@@ -192,15 +210,22 @@ class RefusalTests(unittest.TestCase):
         sys.setswitchinterval(1e-6)
         self.addCleanup(sys.setswitchinterval, old)
         bus, _, _ = make(range_m=None)
-        got, done = [], threading.Event()
+        got, done, failed = [], threading.Event(), []
 
         def sender():
-            for seq in range(1, 5001):
-                bus.comms("Drone1").send(beat("Drone1", seq=seq, to=("Drone2",)))
-            done.set()
+            # The flag is set however the sender ends: a first version left it
+            # unset when sending raised, and the reader waited for ever (found
+            # when a mutation broke every heartbeat and the suite hung).
+            try:
+                for seq in range(1, 5001):
+                    bus.comms("Drone1").send(beat("Drone1", seq=seq, to=("Drone2",)))
+            except Exception as exc:
+                failed.append(exc)
+            finally:
+                done.set()
 
         def reader():
-            while not done.is_set():
+            while not done.wait(0):
                 got.extend(bus.comms("Drone2").receive_available())
             got.extend(bus.comms("Drone2").receive_available())
 
@@ -208,7 +233,9 @@ class RefusalTests(unittest.TestCase):
         for t in threads:
             t.start()
         for t in threads:
-            t.join()
+            t.join(timeout=60.0)
+        self.assertFalse(any(t.is_alive() for t in threads), "a thread did not finish")
+        self.assertEqual(failed, [])
         self.assertEqual(len(got), 5000)
         self.assertEqual([m.sequence_number for m in got], list(range(1, 5001)))
         self.assertEqual({d.status for d in bus.deliveries()}, {DELIVERED})

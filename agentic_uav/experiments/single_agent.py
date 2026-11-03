@@ -32,6 +32,13 @@ clock and the airspace, nothing else: no agent hears another (Phase 7's
 messages will change that), and each flies at its own height, Phase 4's
 12 m plus 4 m per drone. It is what Phase 6's knowledge log needs to show an
 agent that knows a teammate is on the roster and nothing more.
+
+WITH MESSAGING (Phase 7, `messaging=True`), the same agents talk through a
+`simulator.message_bus.MessageBus`: Phase 7's perfect network, a direct link
+within the scenario's radio range (or `range_m`; None is unlimited), with
+MESSAGE_DELAY_S so that a message is read at the recipient's next tick
+whichever thread ran first. Each agent is handed only its `Comms`. The
+bus's record of every delivery comes back with the run, for the message log.
 """
 
 from __future__ import annotations
@@ -53,6 +60,7 @@ from ..core.events import Trigger
 from ..core.models import Position, PrimitiveKind
 from ..core.scenario import BatterySpec, Scenario
 from ..simulator.fault_injection import FaultyAdapter, PassingFaults
+from ..simulator.message_bus import MessageBus
 from ..simulator.mock_adapter import MockVehicleAdapter, MockWorld
 from ..simulator.observer import DEFAULT_POLL_HZ, PollingObserver, mock_trajectories, trajectories_from_samples
 from ..simulator.scenario_manager import ensure_vehicles
@@ -223,6 +231,8 @@ def trouble_runs(scenario: Scenario, task: str = EXIT_TASK,
 # ------------------------------------------------- several independent agents
 
 PAIR_TASKS = {"Drone1": "search S1", "Drone2": "search S2"}
+TEAM_TASKS = {"Drone1": "search S1", "Drone2": "search S2", "Drone3": "search S3", "Drone4": "search S4"}
+MESSAGE_DELAY_S = 0.1          # below the agents' 0.5 s tick: read at the next tick, deterministically
 
 
 @dataclass(frozen=True)
@@ -238,6 +248,7 @@ class TeamAgentRun:
     skills: dict[str, tuple[tuple[str, str], ...]]
     start: float
     trajectories: dict[str, Trajectory] = field(default_factory=dict, repr=False)
+    deliveries: tuple[Any, ...] = field(default=(), repr=False)       # the bus's record, when they talked
 
     @property
     def met(self) -> bool:
@@ -248,9 +259,9 @@ class TeamAgentRun:
         return self.report.success and all(self.finished.values()) and chosen
 
 
-def fly_agents_on_mock(scenario: Scenario, tasks: dict[str, str] | None = None,
-                       label: str = "independent") -> TeamAgentRun:
-    """One agent per drone in `tasks` (default: every drone on PAIR_TASKS), together, none hearing another."""
+def fly_agents_on_mock(scenario: Scenario, tasks: dict[str, str] | None = None, label: str = "independent",
+                       messaging: bool = False, range_m: float | None | str = "scenario") -> TeamAgentRun:
+    """One agent per drone in `tasks` (default PAIR_TASKS), together; talking through a bus if `messaging`."""
     tasks = dict(PAIR_TASKS if tasks is None else tasks)
     drones = [v.id for v in scenario.vehicles]
     unknown = sorted(set(tasks) - set(drones))
@@ -263,6 +274,14 @@ def fly_agents_on_mock(scenario: Scenario, tasks: dict[str, str] | None = None,
     heights = {d: BASE_ALTITUDE_M + i * ALTITUDE_STEP_M for i, d in enumerate(drones)}
     executors = {d: ActionExecutor(SkillRunner(MockVehicleAdapter(world), d, world.clock)) for d in tasks}
     sensors = {d: mock_sensors(world, scenario, d) for d in tasks}
+    bus = None
+    if messaging:
+        def where(drone: str) -> tuple[float, float, float]:
+            p = world.position(drone)
+            return (p.x, p.y, world.ground_z - p.z)
+        reach = scenario.network.communication_range_m if range_m == "scenario" else range_m
+        bus = MessageBus(list(tasks), world.clock, where, reach, mission_id=scenario.scenario_id,
+                         delay_s=MESSAGE_DELAY_S)
     agents: dict[str, DroneAgent] = {}
     errors: dict[str, BaseException] = {}
     barrier = threading.Barrier(len(tasks))
@@ -273,7 +292,8 @@ def fly_agents_on_mock(scenario: Scenario, tasks: dict[str, str] | None = None,
             try:
                 barrier.wait()                    # every agent on the timeline before time moves
                 agent = DroneAgent(scenario.brief(), sensors[drone], executors[drone],
-                                   RulePolicy(altitude_m=heights[drone]))
+                                   RulePolicy(altitude_m=heights[drone]),
+                                   comms=None if bus is None else bus.comms(drone))
                 agent.assign(tasks[drone])
                 agent.run(max_s=MAX_FLIGHT_S)
                 agents[drone] = agent
@@ -297,7 +317,8 @@ def fly_agents_on_mock(scenario: Scenario, tasks: dict[str, str] | None = None,
                        for e in executors[d].history()) for d in tasks}
     return TeamAgentRun(label, scenario.random_seed, tasks, report,
                         {d: tuple(a.trace) for d, a in agents.items()},
-                        {d: a.finished for d, a in agents.items()}, skills, start, trajectories)
+                        {d: a.finished for d, a in agents.items()}, skills, start, trajectories,
+                        () if bus is None else bus.deliveries())
 
 
 # ------------------------------------------------------------------- live

@@ -188,7 +188,8 @@ DRONES = ("Drone1", "Drone2", "Drone3", "Drone4")
 
 def beat(sender, seq, at, to=BROADCAST, ttl_s=None):
     return new_message(MessageType.HEARTBEAT, sender, to, "m", at, seq,
-                       {"position": [0.0, 0.0, 10.0], "airborne": True, "battery": 90.0}, ttl_s=ttl_s)
+                       {"position": [0.0, 0.0, 10.0], "airborne": True, "battery": 90.0,
+                        "task": None, "stage": None}, ttl_s=ttl_s)
 
 
 class MessageLogTests(unittest.TestCase):

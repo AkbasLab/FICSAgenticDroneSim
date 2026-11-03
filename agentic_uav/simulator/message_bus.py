@@ -23,6 +23,14 @@ of range is never delivered, and the record says why. `range_m=None` is
 unlimited range, for protocol tests. Relaying a message through other drones,
 latency, loss and partitions are Phase 10's network model.
 
+A FIXED DELAY, `delay_s`, below an agent's tick. With none, a message sent
+at the instant a teammate's thread reads its inbox would arrive or not by
+which thread ran first, and team beliefs would differ from run to run. A
+delay shorter than the tick (agents use 0.1 s against a 0.5 s tick) gives
+the same "read at the recipient's next tick" every time. It is a modelling
+choice for determinism, not a claim about a radio; zero is kept for the
+bus's own protocol tests.
+
 A message is never delivered after it expires: one still waiting when its
 lifetime ends is dropped as expired when its recipient next looks.
 
@@ -68,11 +76,14 @@ class Delivery:
 
 class MessageBus:
     def __init__(self, drones: list[str] | tuple[str, ...], clock: Clock, positions: Callable[[str], Point],
-                 range_m: float | None, mission_id: str | None = None) -> None:
+                 range_m: float | None, mission_id: str | None = None, delay_s: float = 0.0) -> None:
         if len(set(drones)) != len(drones) or not drones:
             raise ValueError(f"the roster must name each drone once: {drones}")
         if range_m is not None and not (range_m > 0 and math.isfinite(range_m)):
             raise ValueError(f"range_m must be positive, or None for unlimited: {range_m}")
+        if not (delay_s >= 0 and math.isfinite(delay_s)):
+            raise ValueError(f"delay_s must be zero or more: {delay_s}")
+        self.delay_s = delay_s
         self.drones = tuple(drones)
         self.clock = clock
         self.positions = positions
@@ -117,7 +128,7 @@ class MessageBus:
             for r in recipients:
                 d = math.dist(here, self.positions(r))
                 if self.range_m is None or d <= self.range_m:
-                    delivery = Delivery(self._copy(message), r, now, now, PENDING, distance_m=d)
+                    delivery = Delivery(self._copy(message), r, now, now + self.delay_s, PENDING, distance_m=d)
                     self._inbox[r].append(delivery)
                 else:
                     delivery = Delivery(message, r, now, None, OUT_OF_RANGE, distance_m=d)

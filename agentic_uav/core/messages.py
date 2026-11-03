@@ -84,7 +84,10 @@ KINDS: dict[str, Callable[[Any], bool]] = {
 
 # Field -> kind. Every field is required; text fields may be None (not known).
 SCHEMAS: dict[MessageType, dict[str, str]] = {
-    MessageType.HEARTBEAT: {"position": "point", "airborne": "flag", "battery": "number"},
+    # A heartbeat says who is alive, where, and on what: a teammate's record is
+    # its latest report, so a bare heartbeat after a status would wipe the task.
+    MessageType.HEARTBEAT: {"position": "point", "airborne": "flag", "battery": "number",
+                            "task": "text_or_none", "stage": "text_or_none"},
     MessageType.STATUS_UPDATE: {"task": "text_or_none", "stage": "text_or_none", "skill": "text_or_none",
                                 "position": "point", "battery": "number", "degraded": "flag"},
 }

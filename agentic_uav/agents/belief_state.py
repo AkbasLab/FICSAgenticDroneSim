@@ -33,6 +33,18 @@ already held never replaces it: news arriving out of order is not newer.
 A report about itself, about a drone not on the roster, or dated in the
 future is refused, and the reason is returned.
 
+THE LINK, ESTIMATED FROM WHAT WAS HEARD (Phase 7; AUV-10, 10.5). Once the
+agent listens (`listening`), every message it takes in is noted (`heard`):
+who sent it, its sequence number, when it was sent and when it arrived. From
+those alone -- never from the network's settings -- the belief estimates
+`connected_peers` (teammates heard within CONNECTED_WINDOW_S), the
+`recent_loss_rate` (sequence numbers skipped, over those expected, across
+the flight) and the `estimated_latency_s` (the mean of the last LATENCY_SAMPLES
+arrivals). A message missed for any reason -- out of range or lost -- is a
+gap; the agent cannot tell which, and does not pretend to. Until it has
+heard something, loss and latency stay unknown; an agent that is not
+listening keeps all three unknown, as in Phases 5 and 6.
+
 WHAT THE POLICY READ (Phase 7, 7.4). A record keeps the message it came from,
 and while a decision is being made the belief notes which teammate records
 the policy looked at through `teammate()` and `current_teammates()`
@@ -67,6 +79,8 @@ SCHEMA_VERSION = 2                     # 1 was Phase 5's three blocks
 ESTIMATED = "estimated from own positions"
 HEADING_MIN_SPEED_MPS = 0.2            # slower than this, the heading is not known
 FAILED_STATUSES = ("failed", "timeout")
+CONNECTED_WINDOW_S = 3.0               # heard within this, a teammate counts as connected
+LATENCY_SAMPLES = 10                   # the latency estimate is the mean of the last this many
 
 
 @dataclass(frozen=True)
@@ -195,6 +209,8 @@ class BeliefState:
     assumptions: dict[str, Assumption] = field(default_factory=dict)
     skill_serial_seen: int = field(default=0, repr=False)      # the last ended skill counted in health
     read_ids: set[str] = field(default_factory=set, repr=False)    # message ids read during this decision
+    listening: bool = False                                        # does the agent take in messages
+    links: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)   # per sender: what was heard
 
     @classmethod
     def start(cls, brief: MissionBrief, vehicle_id: str, first: Observation) -> "BeliefState":
@@ -238,6 +254,7 @@ class BeliefState:
         me.x, me.y, me.altitude_m, me.airborne = obs.x, obs.y, obs.altitude_m, obs.airborne
         me.battery, me.base_link, me.current_skill, me.updated_at = obs.battery, obs.base_link, obs.skill, obs.at
         self.communication.base_reachable = obs.base_link
+        self._estimate_link(obs.at)
         expired = sorted(d for d, r in self.team.members.items()
                          if r is not None and not r.current(obs.at) and d not in self.team.expired)
         if expired:
@@ -276,6 +293,32 @@ class BeliefState:
         for r in current.values():
             self._noted(r)
         return current
+
+    def heard(self, sender: str, sequence_number: int, sent_at: float, now: float) -> None:
+        """Note one message taken in, for the link estimates. Called for every arrival, kept or not."""
+        link = self.links.setdefault(sender, {"last_seq": 0, "received": 0, "missed": 0, "last_heard": None,
+                                              "latencies": []})
+        if sequence_number > link["last_seq"]:
+            if link["last_seq"]:
+                link["missed"] += sequence_number - link["last_seq"] - 1
+            link["last_seq"] = sequence_number
+        link["received"] += 1
+        link["last_heard"] = now
+        link["latencies"] = (link["latencies"] + [now - sent_at])[-LATENCY_SAMPLES:]
+        self._estimate_link(now)
+
+    def _estimate_link(self, now: float) -> None:
+        if not self.listening:
+            return
+        c = self.communication
+        c.connected_peers = tuple(sorted(s for s, l in self.links.items()
+                                         if l["last_heard"] is not None and now - l["last_heard"] <= CONNECTED_WINDOW_S))
+        received = sum(l["received"] for l in self.links.values())
+        if received:
+            missed = sum(l["missed"] for l in self.links.values())
+            c.recent_loss_rate = missed / (received + missed)
+            samples = [x for l in self.links.values() for x in l["latencies"]]
+            c.estimated_latency_s = sum(samples) / len(samples)
 
     def start_reading(self) -> None:
         """A decision begins: forget what the last one read."""
@@ -333,8 +376,10 @@ class BeliefState:
             "team": {d: _team_view(rec, now) for d, rec in sorted(self.team.members.items())},
             "communication": {"base_reachable": c.base_reachable,
                               "base_reachable_for_s": round(now - c.base_reachable_since, 3),
-                              "estimated_latency_s": _known(c.estimated_latency_s),
-                              "recent_loss_rate": _known(c.recent_loss_rate),
+                              "estimated_latency_s": _known(None if c.estimated_latency_s is None
+                                                            else round(c.estimated_latency_s, 3)),
+                              "recent_loss_rate": _known(None if c.recent_loss_rate is None
+                                                         else round(c.recent_loss_rate, 4)),
                               "connected_peers": _known(None if c.connected_peers is None else list(c.connected_peers))},
             "assumptions": [{"key": a.key, "statement": a.statement, "evidence": a.evidence,
                              "age_s": round(now - a.at, 3), "confidence": a.confidence}

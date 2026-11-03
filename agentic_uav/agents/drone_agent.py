@@ -38,8 +38,20 @@ belief it was made on (a snapshot), the decision, the verdict, and what the
 agent then did. Phase 6 turns this into the full "what it knew and what it
 did not know" logger; it starts here.
 
-The agent holds a brief, its sensors and its executor -- nothing that leads
-to ground truth (`agents/__init__.py`).
+TALKING (Phase 7). Given `comms` -- the network handle, `send` and
+`receive_available` and nothing else (AUV-07, 7.3) -- the agent, each tick
+after updating its belief and before deciding, TAKES IN what has arrived:
+each message becomes a teammate report (`core.team`, with the message's id)
+for the belief to keep or refuse, and is noted for the link estimates. It
+SAYS who it is, where and on what in a HEARTBEAT every `heartbeat_s`, and,
+after each decision, a STATUS_UPDATE: task, stage, skill, position, battery,
+health. All its messages are broadcast and numbered from 1 in one sequence,
+so a teammate can tell what it missed. Heartbeats and status updates raise
+no event (plan, recommendation 4): an agent decides on them exactly as it
+would without them, and Phase 8 is where messages change what agents do.
+
+The agent holds a brief, its sensors, its executor handle and its comms --
+nothing that leads to ground truth or to the network (`agents/__init__.py`).
 """
 
 from __future__ import annotations
@@ -49,6 +61,8 @@ from typing import Any, Callable
 
 from ..control.action_executor import ActionExecutor, SkillHandle
 from ..core.events import Event, Trigger
+from ..core.messages import BROADCAST, Comms, MessageType, new_message
+from ..core.team import TeamReport
 from ..core.scenario import MissionBrief
 from ..core.sensing import Sensors
 from .belief_state import BeliefState, Observation
@@ -57,6 +71,7 @@ from .validation import Verdict, validate
 
 DEFAULT_TICK_S = 0.5
 DEFAULT_PERIODIC_S = 10.0
+DEFAULT_HEARTBEAT_S = 1.0     # Phase 7: a heartbeat a second; a heartbeat lives 3 s (core.messages)
 DEFAULT_BATTERY_LEVELS = (50.0, 35.0)       # percent: the agent re-thinks as it falls through each
 MAX_REJECTIONS = 3
 
@@ -85,9 +100,12 @@ class DroneAgent:
     def __init__(self, brief: MissionBrief, sensors: Sensors, executor: ActionExecutor | SkillHandle, policy: Policy,
                  validator: Callable[[Decision, BeliefState], Verdict] = validate,
                  tick_s: float = DEFAULT_TICK_S, periodic_s: float = DEFAULT_PERIODIC_S,
-                 battery_levels: tuple[float, ...] = DEFAULT_BATTERY_LEVELS) -> None:
-        if tick_s <= 0 or periodic_s <= 0:
-            raise ValueError("tick and periodic check must be positive")
+                 battery_levels: tuple[float, ...] = DEFAULT_BATTERY_LEVELS, comms: Comms | None = None,
+                 heartbeat_s: float = DEFAULT_HEARTBEAT_S) -> None:
+        if tick_s <= 0 or periodic_s <= 0 or heartbeat_s <= 0:
+            raise ValueError("tick, periodic check and heartbeat must be positive")
+        if comms is not None and comms.drone != sensors.drone:
+            raise ValueError(f"{sensors.drone}'s agent was handed {comms.drone}'s comms")
         self.brief = brief
         self.sensors = sensors
         # Only the handle: the executor itself leads, through its runner and
@@ -109,6 +127,11 @@ class DroneAgent:
         # next tick. So replacing a skill makes no false SKILL_ABORTED news.
         self.belief = BeliefState.start(brief, sensors.drone, self.observe())
         self._last_decision_at = self.belief.self_.updated_at
+        self.comms = comms
+        self.heartbeat_s = heartbeat_s
+        self.belief.listening = comms is not None
+        self._sequence = 0
+        self._last_heartbeat_at: float | None = None
 
     # ---------------------------------------------------------- interface
 
@@ -130,9 +153,15 @@ class DroneAgent:
         """One tick: observe, update, and decide if anything happened. Returns the events."""
         obs = self.observe()
         changes = self.belief.update(obs)
+        self._listen(obs.at)
         events = self._events(obs, changes)
         if events:
             self._decide(events)
+            self._say(MessageType.STATUS_UPDATE, obs.at)
+        if self.comms is not None and (self._last_heartbeat_at is None
+                                       or obs.at - self._last_heartbeat_at >= self.heartbeat_s - 1e-9):
+            self._say(MessageType.HEARTBEAT, obs.at)
+            self._last_heartbeat_at = obs.at
         return events
 
     def observe(self) -> Observation:
@@ -202,6 +231,33 @@ class DroneAgent:
         self.trace.append(TraceEntry(now, asked, self.belief.snapshot(), Decision.abort(reason="refused "
                                      f"{MAX_REJECTIONS + 1} times"), Verdict(True),
                                      "held after repeated refusals" if held else "nothing to hold"))
+
+    def _listen(self, now: float) -> None:
+        """Take in what has arrived: each message a teammate report, and a note for the link estimates."""
+        if self.comms is None:
+            return
+        for m in self.comms.receive_available():
+            self.belief.heard(m.sender_id, m.sequence_number, m.timestamp, now)
+            p = m.payload
+            report = TeamReport(m.sender_id, m.timestamp, "message", position=tuple(p["position"]),
+                                task=p.get("task"), status=p.get("stage"),
+                                confidence=1.0 if m.confidence is None else m.confidence,
+                                ttl_s=m.time_to_live_s, message_id=m.message_id)
+            self.belief.receive(report, now)
+
+    def _say(self, kind: MessageType, now: float) -> None:
+        if self.comms is None:
+            return
+        me = self.belief.self_
+        payload = {"position": [me.x, me.y, me.altitude_m], "battery": me.battery,
+                   "task": me.current_task, "stage": self.belief.mission.progress.get("stage")}
+        if kind is MessageType.HEARTBEAT:
+            payload["airborne"] = me.airborne
+        else:
+            payload.update(skill=me.current_skill, degraded=me.health.degraded)
+        self._sequence += 1
+        self.comms.send(new_message(kind, me.vehicle_id, BROADCAST, self.belief.mission.mission_id, now,
+                                    self._sequence, payload))
 
     def _act(self, decision: Decision) -> str:
         if decision.objective is not None:

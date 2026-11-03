@@ -20,7 +20,9 @@ INFLUENCE, AT TWO LEVELS (Phase 7 plan, recommendation 5):
 
 A message that was never delivered can do neither, and the log says why it
 was not: out of range, expired, or still pending when the flight ended.
-Times are counted from `start`, the flight's beginning.
+Times are counted from `start`, the flight's beginning. Rows come in a fixed
+order -- sent time, sender, sequence number, recipient -- since agents on
+their own threads may send at the same instant in either order.
 """
 
 from __future__ import annotations
@@ -51,7 +53,7 @@ def message_log(deliveries: Iterable[Any], traces: dict[str, Iterable[Any]], sta
             for mid in entry.get("read", []):
                 read.setdefault((drone, mid), entry["at"])
     rows = []
-    for d in deliveries:
+    for d in sorted(deliveries, key=lambda d: (d.sent_at, d.message.sender_id, d.message.sequence_number, d.recipient)):
         m = d.message
         key = (d.recipient, m.message_id)
         rows.append({
