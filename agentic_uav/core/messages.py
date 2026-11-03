@@ -1,0 +1,209 @@
+"""What one drone can say to another: the message types and the common envelope (AUV-07, 7.1-7.2).
+
+    msg = new_message(MessageType.HEARTBEAT, "Drone1", BROADCAST, "search_relay_001",
+                      at=12.5, sequence_number=13,
+                      payload={"position": [40.0, -12.0, 12.0], "airborne": True, "battery": 97.4})
+    msg.size_bytes(), msg.expires_at, AgentMessage.from_json(msg.as_json()) == msg
+
+THE TYPES (7.1). AUV-07 says fourteen and names thirteen; these are the
+thirteen it names, and the gap is recorded in the phase record rather than
+filled with an invented type. Six are the contract-net protocol of Phase 8
+(`TASK_*`); `HEARTBEAT` is what Phase 9's failure detection is built on;
+`INTENT_UPDATE` is the shared-intent half of controlled emergence.
+
+PAYLOAD SCHEMAS ONLY FOR THE TYPES IN USE. Phase 7 sends `HEARTBEAT` and
+`STATUS_UPDATE`, and only those have a schema. The other eleven exist as
+names; a message of a type with no schema yet is refused, so no phase can
+start sending one without first saying what it carries. Every payload field
+is checked: none missing, none unknown, each of its kind.
+
+THE ENVELOPE (7.2) is AUV-07's, field for field. Two fields are not
+decoration: `sequence_number` and `time_to_live_s` are what let an agent
+ESTIMATE its own link -- from gaps and from staleness -- rather than be told
+it (AUV-10, 10.5). The id is the sender and its sequence number, so the same
+flight gives the same ids. `recipient_ids` is a tuple of drones, or
+BROADCAST. A message expires `time_to_live_s` after its timestamp: a
+heartbeat soon, since a stale one says nothing about now (AUV-10, 10.4).
+
+This module is plain data: it knows nothing of how a message travels. The
+bus that carries them is simulation infrastructure (`simulator/`); an agent
+only ever sends and receives these. An `AgentMessage` only validates itself:
+`new_message` builds the plain copy of the payload a sender hands over, and
+the bus gives each recipient a copy of its own, so no two agents ever hold
+the same mutable payload -- which would be a channel no message went through.
+It touches no dunder attribute, so the boundary checks can hold it to the
+same rules as the agent code that imports it.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Callable
+
+
+class MessageType(str, Enum):
+    HEARTBEAT = "heartbeat"
+    STATUS_UPDATE = "status_update"
+    TASK_ANNOUNCEMENT = "task_announcement"          # Phase 8, contract-net
+    TASK_BID = "task_bid"                            # Phase 8
+    TASK_AWARD = "task_award"                        # Phase 8
+    TASK_ACCEPT = "task_accept"                      # Phase 8
+    TASK_RELEASE = "task_release"                    # Phase 8
+    TASK_COMPLETE = "task_complete"                  # Phase 8
+    INTENT_UPDATE = "intent_update"                  # Phases 8-9, shared intent
+    TARGET_FOUND = "target_found"
+    HELP_REQUEST = "help_request"                    # Phase 9
+    ROLE_CHANGE = "role_change"                      # Phase 9
+    MISSION_UPDATE = "mission_update"
+
+
+BROADCAST = ("*",)
+
+
+def _point(v: Any) -> bool:
+    return isinstance(v, (list, tuple)) and len(v) == 3 and all(_number(c) for c in v)
+
+
+def _number(v: Any) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
+def _flag(v: Any) -> bool:
+    return isinstance(v, bool)
+
+
+def _text_or_none(v: Any) -> bool:
+    return v is None or (isinstance(v, str) and bool(v))
+
+
+KINDS: dict[str, Callable[[Any], bool]] = {
+    "point": _point, "number": _number, "flag": _flag, "text_or_none": _text_or_none}
+
+# Field -> kind. Every field is required; text fields may be None (not known).
+SCHEMAS: dict[MessageType, dict[str, str]] = {
+    MessageType.HEARTBEAT: {"position": "point", "airborne": "flag", "battery": "number"},
+    MessageType.STATUS_UPDATE: {"task": "text_or_none", "stage": "text_or_none", "skill": "text_or_none",
+                                "position": "point", "battery": "number", "degraded": "flag"},
+}
+
+# How long a message is current after its timestamp (AUV-10, 10.4: a
+# heartbeat short-lived, longer for what changes less often). Phase 10 will
+# put these under the network model; until then they are fixed here.
+DEFAULT_TTL_S: dict[MessageType, float] = {
+    MessageType.HEARTBEAT: 3.0,          # three heartbeats at 1 Hz
+    MessageType.STATUS_UPDATE: 10.0,     # a decision's worth: the periodic check is 10 s
+}
+
+
+def payload_problems(message_type: MessageType, payload: Any) -> list[str]:
+    """What is wrong with `payload` for `message_type`; empty if nothing is."""
+    schema = SCHEMAS.get(message_type)
+    if schema is None:
+        return [f"{message_type.value} has no payload schema yet: no phase sends it so far"]
+    if not isinstance(payload, dict):
+        return [f"payload must be a dict, got {payload!r}"]
+    try:
+        json.dumps(payload, allow_nan=False)
+    except (TypeError, ValueError) as exc:
+        return [f"payload is not plain JSON: {exc}"]
+    problems = [f"missing {k}" for k in schema if k not in payload]
+    problems += [f"unknown field {k}" for k in payload if k not in schema]
+    problems += [f"{k} is not a {schema[k]}: {payload[k]!r}" for k in schema
+                 if k in payload and not KINDS[schema[k]](payload[k])]
+    return problems
+
+
+@dataclass(frozen=True)
+class AgentMessage:
+    message_id: str
+    message_type: MessageType
+    sender_id: str
+    recipient_ids: tuple[str, ...]
+    mission_id: str
+    timestamp: float
+    sequence_number: int
+    time_to_live_s: float
+    payload: dict[str, Any] = field(default_factory=dict)
+    confidence: float | None = None
+
+    def __post_init__(self) -> None:
+        problems = self.problems()
+        if problems:
+            raise ValueError("not a valid message: " + "; ".join(problems))
+
+    def problems(self) -> list[str]:
+        p: list[str] = []
+        if not isinstance(self.message_type, MessageType):
+            return [f"unknown message type {self.message_type!r}"]
+        for name, value in (("message_id", self.message_id), ("sender_id", self.sender_id),
+                            ("mission_id", self.mission_id)):
+            if not isinstance(value, str) or not value:
+                p.append(f"{name} must be a non-empty string")
+        if not isinstance(self.recipient_ids, tuple):
+            p.append(f"recipient_ids must be a tuple, got {self.recipient_ids!r}")
+        elif not self.recipient_ids:
+            p.append("no recipients")
+        elif self.recipient_ids != BROADCAST:
+            if any(not isinstance(r, str) or not r or r == "*" for r in self.recipient_ids):
+                p.append(f"recipients must be drone ids, or BROADCAST alone: {self.recipient_ids}")
+            if self.sender_id in self.recipient_ids:
+                p.append("a drone does not send to itself")
+            if len(set(self.recipient_ids)) != len(self.recipient_ids):
+                p.append("a recipient is named twice")
+        if not _number(self.timestamp):
+            p.append(f"timestamp must be a finite number, got {self.timestamp!r}")
+        if not isinstance(self.sequence_number, int) or isinstance(self.sequence_number, bool) \
+                or self.sequence_number < 1:
+            p.append(f"sequence_number must be an integer from 1, got {self.sequence_number!r}")
+        if not _number(self.time_to_live_s) or self.time_to_live_s <= 0:
+            p.append(f"time_to_live_s must be positive, got {self.time_to_live_s!r}")
+        if self.confidence is not None and not (_number(self.confidence) and 0.0 <= self.confidence <= 1.0):
+            p.append(f"confidence must be in [0, 1] or None, got {self.confidence!r}")
+        p += payload_problems(self.message_type, self.payload)
+        return p
+
+    @property
+    def expires_at(self) -> float:
+        return self.timestamp + self.time_to_live_s
+
+    def expired(self, now: float) -> bool:
+        return now >= self.expires_at
+
+    def is_for(self, drone: str) -> bool:
+        return drone != self.sender_id and (self.recipient_ids == BROADCAST or drone in self.recipient_ids)
+
+    def as_json(self) -> dict[str, Any]:
+        return {"message_id": self.message_id, "message_type": self.message_type.value,
+                "sender_id": self.sender_id, "recipient_ids": list(self.recipient_ids),
+                "mission_id": self.mission_id, "timestamp": self.timestamp,
+                "sequence_number": self.sequence_number, "time_to_live_s": self.time_to_live_s,
+                "payload": self.payload, "confidence": self.confidence}
+
+    @classmethod
+    def from_json(cls, row: dict[str, Any]) -> "AgentMessage":
+        return cls(row["message_id"], MessageType(row["message_type"]), row["sender_id"],
+                   tuple(row["recipient_ids"]), row["mission_id"], row["timestamp"],
+                   row["sequence_number"], row["time_to_live_s"], row["payload"], row["confidence"])
+
+    def size_bytes(self) -> int:
+        """The message's size as it would travel: compact JSON, UTF-8."""
+        return len(json.dumps(self.as_json(), separators=(",", ":"), sort_keys=True).encode("utf-8"))
+
+
+def new_message(message_type: MessageType, sender_id: str, recipient_ids: tuple[str, ...], mission_id: str,
+                at: float, sequence_number: int, payload: dict[str, Any], ttl_s: float | None = None,
+                confidence: float | None = None) -> AgentMessage:
+    """A message with its id made from the sender and sequence number, and the type's default TTL."""
+    if ttl_s is None:
+        if message_type not in DEFAULT_TTL_S:
+            raise ValueError(f"{message_type.value} has no default time to live yet; give one")
+        ttl_s = DEFAULT_TTL_S[message_type]
+    problems = payload_problems(message_type, payload)
+    if problems:
+        raise ValueError(f"not a valid {message_type.value} payload: " + "; ".join(problems))
+    plain = json.loads(json.dumps(payload))                 # the sender keeps its dict; the message its own
+    return AgentMessage(f"{sender_id}#{sequence_number}", message_type, sender_id, tuple(recipient_ids),
+                        mission_id, at, sequence_number, ttl_s, plain, confidence)
