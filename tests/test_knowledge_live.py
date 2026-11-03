@@ -309,6 +309,15 @@ class RealPollTests(unittest.TestCase):
         self.assertGreater(self.tol["position_m"], poll_tolerance(LIVE, self.polled["asked_hz"],
                                                                   SPEED)["position_m"])
 
+    def test_the_rate_kept_is_not_the_worst_gaps_rate(self):
+        # The first live flight printed the worst gap's rate, 8 Hz, as the rate
+        # kept; it had kept 9.09. Both are recorded, each under its own name.
+        self.assertLess(self.polled["hz"], self.polled["kept_hz"])
+        self.assertLess(self.polled["kept_hz"], self.polled["asked_hz"])
+        rows = self.flight.samples["Drone1"]
+        self.assertAlmostEqual(self.polled["kept_hz"], (len(rows) - 1) / (rows[-1][0] - rows[0][0]), places=3)
+        self.assertEqual(self.polled["samples"], len(rows))
+
     def test_the_script_writes_a_met_record_of_it(self):
         import knowledge_exit
         out = tempfile.mkdtemp()

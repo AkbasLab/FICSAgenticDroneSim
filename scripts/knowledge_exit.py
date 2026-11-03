@@ -239,10 +239,11 @@ def report_live(args, started: str, connect, clock) -> int:
              f"between the polls around it, so they stand up to one poll of flight apart however right the "
              f"logger is. The mock's own allowance, {TOLERANCE['position_m']:g} m, holds only where both "
              f"sides come from one trajectory.", "",
-             f"The poller was asked for {polled['asked_hz']:g} Hz and kept {polled['hz']:.4g} Hz across "
-             f"{polled['samples']} samples: worst gap {polled['worst_gap_s']} s, median "
-             f"{polled['median_gap_s']} s. The allowance is the WORST gap, since that is what bounds the "
-             f"lag; the median is here so that one stalled poll widening it would show.", "",
+             f"The poller was asked for {polled['asked_hz']:g} Hz and kept {polled['kept_hz']:.4g} Hz "
+             f"across {polled['samples']} samples: median gap {polled['median_gap_s']} s, worst gap "
+             f"{polled['worst_gap_s']} s, a rate of {polled['hz']:.4g} Hz. The allowance is taken from the "
+             f"WORST gap, since that is what bounds the lag; the median is here so that one stalled poll "
+             f"widening it would show.", "",
              "| | Live | Mock twin |", "|---|---|---|",
              f"| Task met | {'yes' if run.met else '**no**'} | {'yes' if mock.met else 'no'} |",
              f"| Decisions | {s['decisions']} | {ms['decisions']} |",

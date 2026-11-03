@@ -255,6 +255,8 @@ and kept on purpose. Planning data from every 70B session stands.
 | **`20261021-232940-live2`** single-agent, live | none (rule-based agent) | 1 flight, judged on 20 seeds | **Phase 5 live flight 2** — met, 20/20; within 0.29 m of flight 1 throughout |
 | **`20261021-233315-live3`** single-agent, live | none (rule-based agent) | 1 flight, judged on 20 seeds | **Phase 5 live flight 3** — met, 20/20; within 0.22 and 0.13 m of flights 1 and 2 |
 | **`20261021-233618-fault1`** single-agent, live | none (rule-based agent) | 1 flight, judged on 20 seeds | **Phase 5 fault-once flight** — the first horizontal move refused once in our code: retried at once, "fault once" check met, 20/20 |
+| **`20261023-095034-exit`** knowledge log, mock | none (rule-based agents) | 40 flights (single + pair, seeds 1–20), 1340 decisions | **Phase 6 exit run** — every decision logged with what the agent knew, what it recorded as unknown, and the truth gap: 1340/1340 complete, correct, no leak; 40/40 tasks met |
+| **`20261102-194003-live1`** knowledge log, live | none (rule-based agent) | 1 flight, 10 decisions | **Phase 6 live flight** — Drone1 in CarlaAir told only "search S1": 10/10 decisions passed, "correct" within one observed poll (0.625 m; worst 0.567 m); the mock twin's decisions |
 
 The `p2-` sessions are in `phases/phase-02-repository-architecture/results/`,
 not Phase 1's. They meet every condition in §1 and are the Phase 2 exit
@@ -346,7 +348,7 @@ vertical movement. That GPU load is in the protocol deliberately.
 
 ---
 
-## 4. Phases 2 to 5 have no run inventory
+## 4. Phases 2 to 6 have no run inventory
 
 None is a measurement phase, so none has a run count. Their exit criteria
 are demonstrations.
@@ -357,6 +359,7 @@ are demonstrations.
 | **3** — Flight-skill layer | Four drones take off, navigate, hold, return, land, each skill returning a structured result | Flights, but a capability demonstration rather than a scored matrix. **Done 2026-10-21**: one live four-drone run, 20/20 skills, no contacts; see §3 |
 | **4** — Search-and-relay mission | A scripted, non-agentic controller completes the canonical mission | A feasibility check (AUV-19's gate G1), judged against AUV-05's six criteria on fixed seeds, not a scored comparison. **Done 2026-10-21**: 20/20 exit seeds on the mock (twice: before and after a controller fix), and three live flights of a small variant, 20/20 each; see §3 |
 | **5** — Persistent single agent | One agent completes a search task with no preflight action list, recognises success or failure, and decides what next | A demonstration on fixed seeds and fixed troubles, judged by Phase 4's evaluator, not a scored comparison. **Done 2026-10-21**: 20/20 seeds and 5/5 troubles on the mock; three nominal live flights of a small variant, 20/20 each, and one live flight with an injected fault, met; see §3 |
+| **6** — Belief state | The logger can show, for each decision, exactly what the agent knew and what it did not know | A demonstration on fixed seeds, every decision checked, not a scored comparison. **Done 2026-11-02**: 1340/1340 decisions on the mock (a single agent and an independent pair, 20 seeds each), and 10/10 in one live flight; see §3 |
 
 > **Phase 3's exit criterion names four drones**, and on the evidence of M09 it
 > is not blocked: multi-drone flight works when the extra drones are spawned at

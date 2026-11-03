@@ -1,7 +1,7 @@
 # Phase 6 — Create a structured belief state for every drone
 
 **Stage:** 2 · One agent · **Vault note:** `AUV-06 — The Persistent Agent Loop`
-**Started:** 2026-10-22 · **Completed:** —
+**Started:** 2026-10-22 · **Completed:** 2026-11-02
 
 > Before drones talk to each other, each must hold what it believes in a form
 > that can be read back: about itself, its mission, the map, its team and its
@@ -24,17 +24,26 @@ Mirrored from `AUV-22 — Phase Objectives Checklist`.
 > The experiment logger can show, for each decision, **exactly what the agent
 > knew and what it did not know**.
 
-**Met:** on the mock, 2026-10-23 — 1340 of 1340 decisions, in 40 flights,
-logged complete, correct and without a leak · **Evidence:**
-[`evidence/exit-criterion-2026-10-23.md`](evidence/exit-criterion-2026-10-23.md).
-Step 6's live path is built and tested, 2026-10-23; **the CarlaAir flight
-itself is not yet flown**, so nothing here is claimed of the simulator.
+**Met:** **yes, 2026-11-02** · **Evidence:**
+[`evidence/exit-criterion-2026-10-23.md`](evidence/exit-criterion-2026-10-23.md)
+and [`evidence/live-run-2026-11-02.md`](evidence/live-run-2026-11-02.md).
 
-Planned evidence: a knowledge log for every decision of the single agent's 20
-exit seeds, and of a two-drone run of two independent agents: what each knew
-(every field with its age and source), what it marked unknown, and — joined
-afterwards, outside the agent — the truth gap: targets present but not yet
-seen, and where teammates really were.
+**On the mock**, the knowledge log (`experiments/knowledge.py`) showed, for
+every decision of 40 flights on seeds 1–20 — one rule agent told only
+"search S3", and a pair of independent agents that never hear each other —
+what the agent knew (each field, its source, its age), what it recorded as
+unknown, and the truth gap against the flight's ground truth. **1340 of 1340
+decisions** passed all three checks: complete, correct and without a leak,
+each check shown able to fail. Re-run on the closing code, every flight and
+decision row is identical.
+
+**In CarlaAir**, flown by the user, one flight of the live-sized scenario,
+told only "search S1": **10 of 10 decisions** passed, "correct" taken within
+one observed poll of flight (0.625 m; the worst decision 0.567 m), with the
+same decisions as the mock twin's.
+
+The plan was the mock log across 20 seeds of each set, with an optional
+small live flight. Both were done.
 
 ## Deliverables
 
@@ -45,7 +54,7 @@ seen, and where teammates really were.
 | The boundary, hardened | `agentic_uav/control/action_executor.py` (`SkillHandle`), `agentic_uav/agents/drone_agent.py`, `tests/test_sensing.py` | **Done** 2026-10-22; goldens unedited; Phase 5's decisions unchanged |
 | Assumptions, recorded by the policy | `agentic_uav/agents/rule_policy.py` | **Done** 2026-10-23; goldens unedited; Phase 5's decisions unchanged |
 | The knowledge log and the exit | `agentic_uav/experiments/knowledge.py`, `agentic_uav/experiments/single_agent.py` (`fly_agents_on_mock`), `configs/scenarios/search_pair_001.toml`, `scripts/knowledge_exit.py`, `results/`, `evidence/` | **Done** 2026-10-23; exit met on the mock |
-| Optional live flight; close | `scripts/knowledge_exit.py --sim airsim`, `agentic_uav/experiments/knowledge.py` (`poll_tolerance`, `observed_poll_hz`), `tests/test_knowledge_live.py` | **Path built** 2026-10-23, 19 tests; **the CarlaAir flight is not yet flown** |
+| Optional live flight; close | `scripts/knowledge_exit.py --sim airsim`, `agentic_uav/experiments/knowledge.py` (`poll_tolerance`, `observed_poll_hz`), `tests/test_knowledge_live.py` | **Done** 2026-11-02: one CarlaAir flight, 10 of 10 decisions passed; phase closed |
 
 ## Plan
 
@@ -497,6 +506,91 @@ live one**, and the live record says so rather than inviting the comparison.
 651 tests pass, 15 skipped (19 new, 4 of them only under `AUV_SLOW_TESTS`);
 audit clean; the four Phase 2 goldens unedited.
 
+### 2026-11-02 — step 6, the live flight: 10 of 10 decisions, one poll of flight apart at worst
+
+**Not built in this session:** steps 5 and 6's first part were committed
+(`09c9a0a`, `95a9be3`) and pushed to `fics` on 2026-10-23 outside the session
+that wrote steps 1–4; on 2026-10-27 they were read, and found to pass as
+committed — 651 tests, the 19 live-path tests with `AUV_SLOW_TESTS` on, the
+goldens and the audit — before anything was built on them. No Vega: Phase 6
+runs on `RulePolicy`.
+
+**The scene.** CarlaAir launched fresh (`.\CarlaAir.ps1 Town10HD`),
+`settings.json` declaring Drone1 only. A read-only check by the user:
+`vehicles ['Drone1']`, Drone1 at x −0.05, y 0.05, z 29.25, not under API
+control — Phase 5's fresh launch exactly. (The first try ran outside the
+`carlaAir` env — `No module named 'airsim'` — and was rerun inside it.)
+
+**The flight**, `python scripts\knowledge_exit.py --sim airsim --block live1`,
+at `95a9be3` with a clean tree (`agentic_uav` digest `e9d8480cd863758b`) →
+`results/knowledge-live-20261102-194003-live1`. Drone1 came to rest 2.45 s
+after the reset; ground 29.245, as in Phase 5. Contacts only SM_seaM, the
+floor mesh, counted as ground.
+
+* **MET: 10 of 10 decisions logged complete, correct and without a leak.**
+  The task met, the same five skills as Phase 5's live flights, completion
+  37.1 s (Phase 5: 37.2–37.3); the mock twin 30.0 s.
+* **The same decisions as the mock twin, on the same events**, with the same
+  counts: 431 known items, 46 unknown, 9 in the truth gap.
+* **How close "correct" came, decision by decision** (recomputed from the
+  record): position off the interpolated truth from 0.000 m (take-off) to a
+  worst of **0.567 m** at 29.1 s, flying home at 5 m/s, against an allowance
+  of **0.625 m** — 91 % of it; battery at worst 0.0118 % against 0.0188 %;
+  the base link right at all ten. Under the nominal 0.5 m the worst decision
+  would have failed: the flight bears out taking the allowance from the gaps
+  the poller actually left (step 6's first part), not the ones it was asked
+  for.
+
+**A mislabel, found reading the output.** The printout said the poller was
+asked for 10 Hz and "kept 8 Hz across 351 samples", beside a median gap of
+0.109 s. 8 Hz is 1 ÷ the worst gap, 0.125 s — the right number for the
+allowance under the wrong name. It kept **9.09 Hz**: 351 samples over
+38.5 s. `observed_poll_hz` now returns both, `hz` (the worst gap's rate, which
+the allowance uses) and `kept_hz` (samples over time), and the printout names
+each; a test holds them apart, and three mutations of the fix are caught. The
+live1 record is kept as it ran: its JSON gaps were right all along; only its
+sentence misnamed the rate.
+
+652 tests pass, 22 skipped (15 need a live CarlaAir, 7 real time); with
+`AUV_SLOW_TESTS` on, the 20 live-path tests pass; the goldens unedited.
+
+### 2026-11-02 — close: Phase 6 complete
+
+**The exit holds at the closing code.** Re-run with step 6's poll-rate fix in
+place (`agentic_uav` digest `19532819915a4040`, only the fix and this record
+changed since `95a9be3`): the knowledge exit's 1381 rows — 40 flights, 1340
+decisions — identical, row for row, to the run of record
+`knowledge-exit-20261023-095034-exit`; and Phase 5's exit, decisions, events,
+verdicts, actions and reports identical to its run of record. Neither re-run
+is kept: each is the same record.
+
+**What Phase 6 leaves for Phase 7 onwards:**
+
+* **A belief in AUV-06's six blocks**, every field from a reading, a received
+  report, the brief or the agent itself; unknowns written as unknown, never
+  as a default; estimates labelled as estimates.
+* **A place for messages to land.** `core/team.TeamReport` and
+  `BeliefState.receive`: age from when the news was true, confidence falling
+  to zero at expiry, expired records kept but never current, older news never
+  replacing newer. Phase 7's network has only to deliver reports.
+* **A boundary checked twice.** The agent holds a handle, not the executor;
+  agent code may not reach through dunders, introspection or dynamic lookups;
+  a walk of a flying agent finds no simulator object.
+* **Assumptions on the record**, each with its evidence, age and confidence:
+  the slot an LLM policy (Phase 12) will have to fill.
+* **A logger that shows exactly what an agent knew and did not**, and the gap
+  to the truth, for every decision, mock and live — the instrument Phase 16's
+  trace inspection and Phase 19's analysis will read.
+* **Two independent agents on one mock**, and what they did not know of each
+  other: in seed 17 they passed within 3.25 m, each holding the other as
+  "never heard". Phase 7 is where that blindness ends.
+
+**Test and check totals at close:** 652 tests, 22 skipped (15 need a live
+CarlaAir, 7 real time), 86 more than at Phase 5's close. The four Phase 2
+goldens are unedited through every step, and the audit is clean. Mutations:
+20, 22, 16, 20 and 24 by step, and 3 of the poll-rate fix, 105 in all, every
+one caught; step 6's live path (`95a9be3`) recorded none of its own.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -516,6 +610,16 @@ audit clean; the four Phase 2 goldens unedited.
 
 ## Open questions
 
+- **The live allowance was 91 % used.** The worst decision stood 0.567 m from
+  the truth against 0.625 m. It is derived, not tuned, so it should hold; but
+  a slower poll or a faster drone moves both sides, and a later phase flying
+  faster should watch the margin rather than assume it.
+- **Teammate records have only ever been fed by tests.** Staleness, expiry
+  and out-of-order refusal are tested on hand-made reports; Phase 7's network
+  is their first real source, and the first chance to see them under load.
+- **The mock hides a decision's cost in time.** On the simulated clock a
+  policy that thinks for seconds costs no simulated time; Phase 12 has to
+  charge it, or the mock will flatter the LLM.
 - **The poller's 3 m airborne line costs the first 3 m of every climb**, in
   the battery a reconstructed truth charges (0.43 here) and in what counts as
   airborne. Phases 4 and 5 already live with it, and live-against-live it

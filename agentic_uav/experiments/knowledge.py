@@ -185,15 +185,23 @@ def observed_poll_hz(samples: dict[str, Any], nominal_hz: float) -> dict[str, An
     The median goes in beside it, because a single stalled poll would widen
     the worst gap and ought to be visible rather than silently generous.
 
+    Two rates come back, and they are not the same thing. `hz` is the rate
+    of the WORST gap, 1 / worst gap: the one the allowance is taken from.
+    `kept_hz` is the rate the poller actually kept over the flight, samples
+    over time. The first live flight printed the first as "kept 8 Hz" while it
+    had kept 9.09 (2026-11-02); both are recorded now, each under its name.
+
     A flight too short to have two samples falls back to the nominal rate.
     """
     gaps = sorted(b[0] - a[0] for rows in samples.values() for a, b in zip(rows, rows[1:]))
     if not gaps:
-        return {"hz": nominal_hz, "asked_hz": nominal_hz, "worst_gap_s": None,
+        return {"hz": nominal_hz, "kept_hz": nominal_hz, "asked_hz": nominal_hz, "worst_gap_s": None,
                 "median_gap_s": None, "samples": 0}
     worst = gaps[-1]
-    return {"hz": 1.0 / worst, "asked_hz": nominal_hz, "worst_gap_s": round(worst, 4),
-            "median_gap_s": round(gaps[len(gaps) // 2], 4), "samples": len(gaps) + 1}
+    span = sum(rows[-1][0] - rows[0][0] for rows in samples.values() if len(rows) > 1)
+    return {"hz": 1.0 / worst, "kept_hz": round(len(gaps) / span, 4), "asked_hz": nominal_hz,
+            "worst_gap_s": round(worst, 4), "median_gap_s": round(gaps[len(gaps) // 2], 4),
+            "samples": sum(len(rows) for rows in samples.values())}
 
 
 @dataclass
