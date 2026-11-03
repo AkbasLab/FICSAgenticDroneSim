@@ -193,6 +193,21 @@ Not study data: both drones are real sim vehicles (Drone1 = `SimpleFlight`, Dron
 - **l2b ending.** Drone2 was blocked twice by separation near the target, the guardian ended its mission (`escalated after repeated unsafe proposals (separation)`), and the fallback return flew it to about 21 m and left it hovering at (30.2, 21.6). Commands to fly home then barely moved it and its reported position jumped around; the collision record named `InstancedFoliageActor` (a tree) at about (30.0, 22.1, height 21 m). The sim has to be restarted to clear it; flying it home by hand did not work (it climbed but would not move sideways).
 - **Limits.** Five flights, one drone pair, deterministic policy; the zone is triggered by the drone's own detection; wall times are not comparable with the solo runs (Drone2's long search sets the run length, and some legs failed). The rule that stops a drone whose teammate already confirmed the target was not studied.
 
+### 2026-11-03 same-sector flights after the separation fix (no `runs/` folder)
+
+Not study data: the same fully live two-drone setup as the entry above (both drones real, 12 m, drifting zone switched on by Drone1's detection, deterministic policy), both drones sent to Sector A, which is the case that nearly collided.
+
+- **What changed in the code** (commit 526cd51). A drone now announces where it is heading in the heartbeat it sends as it sets off. The guardian's separation check compares the target and the straight path to it with every point a teammate holds (its last reported position, and its announced destination while that is under 30 s old), not only the target against the last position. A drone blocked only by separation holds still in 2 s steps for up to 25 s and asks again; those waits do not count toward the guardian's repeated-rejection escalation (that escalation is what ended Drone2's mission in l2b). Going home is exempt, as before. Nine new tests; the full suite passes (394).
+- **Result.**
+
+| Runs | Closest the drones got | Samples under 5 m | Target confirmed | Landed near home |
+|---|---|---|---|---|
+| l2a, l2b (before the fix) | 0.52 m, 0.09 m | 40, 41 | yes, yes | yes, no (Drone2 stuck) |
+| l3a, l3b (after) | 7.44 m, 6.05 m | 0, 0 | yes (by Drone2 in l3a, by Drone1 in l3b) | yes, yes (within 0.5 m) |
+
+- **What it costs.** The second drone into a shared sector waits at the entrance until the first has moved on and then follows it along the same lanes. In l3a Drone1 waited 26 s and then 16 s and finished with 26% battery after 223 s; in l3b Drone2 waited about 36 s at the entrance before entering and finished with 33% battery after 201 s. Two drones sharing one sector is a deliberate worst case; the cost for sectors that do not overlap was not measured.
+- **Limits.** Two flights. The check is a distance rule on straight paths and on the last announced points, not a prediction in time, so it can block a crossing that would have been safe, and a teammate's last reported position counts however old it is. The cause of the l2b hang in the tree was not studied and the fallback return that led there was not changed. Wall times and battery are not comparable with the solo runs.
+
 ## 4. Conditions of the data
 
 Recorded because a run's conditions are part of the result.
