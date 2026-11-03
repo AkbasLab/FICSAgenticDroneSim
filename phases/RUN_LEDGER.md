@@ -143,6 +143,25 @@ Not study data: one run, a zone set off by the drone's own detection, no model. 
 - **Result (z4).** `target_detected`, `sighting_blocked(T1, clears=148.6s)`, `confirm_target`, `exit_zone` steer-out south to (33.4, 21.0), `sighting_confirmed(T1)`, `return_home`, `land`. About 2.25 s inside the zone (9 samples), 187 s in all with 38% battery left, closest approach 1.4 m, then about 10 s within 2.5 to 3.9 m of T1 for the confirming dwell. The drone passed the awning row without touching it.
 - **Limits.** One run. The zone was triggered by the drone's detection, not scheduled. Only the appear shape was flown; a drifting zone, a zone that never leaves, two or more drones and a model in the policy slot are still untested live.
 
+### 2026-11-02 live repeats of the real scenario, and the drifting zone that exposed two live-only problems (no `runs/` folder)
+
+Not study data: single solo drone, deterministic policy, no model, zone switched on by the drone's own detection (`--trigger-on detect`, 12 s window, cruise height 12 m, collisions on). Result files are `live_smoke_<tag>.json` on Heidi, copied to the laptop backup. Each tag was one flight.
+
+| Runs | Zone | Adapter / exit rule | Target confirmed | Time inside zone | Wall time | Battery left |
+|---|---|---|---|---|---|---|
+| r1-r3 | none (control) | old / old | 3 of 3 found | 0 | 113-117 s | 61-62% |
+| z4-z7 | appears at the target (lab box) | old / old | 4 of 4 | 2.25 s each | 140-187 s | 38-53% |
+| d1-d5 | drifts west over the target (lab drift box) | old / old | 2 of 5 (d1, d5) | 3.0-4.0 s | 177-243 s | 19-41% |
+| d6-d8 | same drift | 2 m/s short moves / exit across the drift | 2 of 3 | 1.0-1.5 s | 87-96 s | 68-71% |
+| d9-d11 | same drift | 1 m/s short moves / exit across the drift | 3 of 3 | 1.0 s each | 102-109 s | 64-66% |
+
+- **What the first drifting runs showed (d2-d4).** The steer-out was a 3 m move west, the way the zone was heading. The live drone does not start a position move of 2 to 3 m at all (probe from a hover: 1 m is inside the 1 m tolerance, 2 m and 3 m sat still for 20 s, 5 m and 8 m arrived in about 7 s). So it sat while the zone passed over it, the 30 s timeout fired, the confirm retried twice more (30 s each) and gave up. Event log of d5 (timeouts and positions) is what pinned this down; d4's guardian log showed every later command approved, so the failure was in flight, not the guardian.
+- **Two changes (commits `8427ab5`, `ba6ebe9`).** Moves under 4.5 m go out as a velocity command; the guardian's exit point must stay outside every zone until the drone has arrived plus 2 s (new test, suite 385 passed).
+- **d6 failed for a third reason.** At 2 m/s the drone coasted 1.0 to 1.3 m after a short hop, so the 3 s report hold failed ("drifted more than 1.0 m"). Coast measured at 2, 1.5 and 1 m/s: 1.0-1.3, 0.75-1.0 and 0.5-0.6 m. 1 m/s was chosen and d9-d11 followed.
+- **Condition change to remember.** Short search hops (3.3 m) used to stall, so runs before `8427ab5` took about twice as long (T1 reached near 120 s vs 50-73 s). Do not compare wall time or battery across that line. No control without a zone was flown with the new adapter.
+- **Confirming distance.** With the zone present the drone confirms from where it first saw the target, 3.2 to 3.5 m from T1 (closest approach), not from on top of it.
+- **Limits.** One drone, one scenario, one seed of the zone trigger; the zone is set off by the drone's own detection; d1-d5 are the old behaviour and are kept because they are the evidence for the two fixes. A zone that never leaves, two or more drones, and a model in the policy slot are still untested live. `live_zone_smoke.py` is kept outside the repo (`--drift`, event log) and is backed up with the results.
+
 ## 4. Conditions of the data
 
 Recorded because a run's conditions are part of the result.
