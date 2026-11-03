@@ -245,6 +245,26 @@ With no zone every arm confirms 3 of 3 at about 6.5 s. Zone profile "appear, sta
 - **Reading.** A NavRL drone that stops at its goal does not react to a zone appearing over it and sits inside for the zone's whole life (35 s, 7 s) or until the drift passes (3.2 s). The same planner that keeps planning dodges on its own and is out in about 1 s or never enters. With the guardian vetting each step, time in a zone is at most 0.40 s whichever planner flies, and confirmation is never lost relative to the planner alone. Guardian alone and NavRL plus guardian differ only where NavRL's own dodging avoids the drifting zone entirely (0.00 s against 0.13 s).
 - **Limits.** Three starts per cell, so differences of a fraction of a second are not evidence. A 2D world with one target and a direct flight: no altitude, battery, teammates, targets to search for or confirm flow (NavRL has no notion of targets, so this measures avoidance and exposure only). The guardian is asked every 0.1 s step here, where in a mission it is asked once per leg plus a per-tick zone monitor, so arm A and C's 0.40 s is the per-tick monitor's reaction, not the mission stack's. The fake lidar is built from the exact zone rectangles, so NavRL always "sees" a zone that is on. Not yet run through the real mission stack.
 
+### 2026-11-03 NavRL against straight legs in the four-drone mission stack (mock, no `runs/` folder in the repo)
+
+Not live and not a model arm: `scripts/run_navrl_study.py`, kinematic mock, four drones, deterministic search policy, guardian per leg, per-tick zone monitor on, confirm flow on. The two arms differ only in how an approved leg is flown: `straight` (one move command, as before) or `navrl` (NavRL's pretrained policy, arXiv 2409.15634, one velocity per 0.1 s tick, shown the zones that are on as lidar-style rays; the guardian's steer-out still flies straight). Both arms fly at 1.9 m/s (NavRL's free speed) so speed does not favour either; zone start times and drift speed are stretched by k = 15 / 1.9 = 7.9 so zones appear at the same point of the flight as in the 15 m/s studies. Three repeats per cell; repeats were nearly identical (the mock is deterministic apart from thread timing). Times below are divided by k ("mock-equivalent seconds"). Results in `heidi-live-2026-11-02\navrl-spike\mission-study\` (log, `results.json`, the script); run folders on Heidi in `~/navrl_runs`.
+
+| Zone profile | Arm | Time in a zone | Targets found | Guardian interventions (4 drones) | Steer-outs | Mission time | All home |
+|---|---|---|---|---|---|---|---|
+| none | straight | 0.00 s | 2 of 2 | 0 | 0 | 11.8 s | yes |
+| none | NavRL | 0.00 s | 2 of 2 | 0 | 0 | 12.9-13.1 s | yes |
+| appears at 5 s, stays | straight | 0.35 s | 2 of 2 | 1 | 1 | 11.8 s | yes |
+| appears at 5 s, stays | NavRL | 0.53-0.56 s | 1 of 2 | 4 | 1 | 12.9 s | yes |
+| appears at 5 s, expires at 12 s | straight | 0.35 s | 2 of 2 | 1 | 1 | 11.8 s | yes |
+| appears at 5 s, expires at 12 s | NavRL | 0.53-0.58 s | 1 of 2 | 4 | 1 | 12.9 s | yes |
+| drifts from 3 s | straight | 0.03 s | 2 of 2 | 3 | 1 | 11.8 s | yes |
+| drifts from 3 s | NavRL | 0.00 s | 2 of 2 | 2 | 0 | 12.9 s | yes |
+
+- **Reading.** With no zone NavRL flies the mission like straight legs (same 91% coverage, both targets, about 1.1 s slower in mock-equivalent time). With a zone, time in a zone stays under 0.6 s whichever way the legs are flown, so the guardian bounds exposure and the planner does not change that order of magnitude. NavRL dodges the drifting zone on its own (no time inside, no steer-out); in the appearing-zone profiles it spends about 0.2 s more in the zone than straight legs, cause not traced (it goes with more guardian interventions: 4 against 1).
+- **The 1 of 2 targets is a timing effect.** Drone1's position records show straight-leg Drone1 within 5 m of T1 from 36 s to 41 s (before the zone switched on at 39.7 s, so it confirmed), and NavRL Drone1 never within 5 m of T1 in the two profiles with a zone: with no zone it arrives at about 43 s, after the zone is on, and the guardian blocks the approach. In the "expires" profile the zone clears at 95 s, when the mission is nearly over. A different zone start time would move this either way; do not cite it as NavRL finding fewer targets.
+- **Two bugs found only with the real NavRL planner (fixed in the same commit).** NavRL returns NaN for a leg with no horizontal distance (the climb to cruise height), which sent drone positions to NaN and stalled the first run at 8 commands in 240 s; and one planner object shared by four drone threads kept the current leg's direction, so a drone steered with another drone's (Drone2 flew north-east and clipped the static zone, 10.8 s inside, before the fix). The table is from after both fixes.
+- **Limits.** NavRL alone with no guardian is not an arm here (the stack's guardian is always on); that case is the 2D harness entry above. The planner is shown the exact zone rectangles, not a sensed picture; one scenario, one target pair, deterministic policy, mock only, no model in the loop, no live flight. Mission times are real wall-clock time at a stretched clock, so thread timing adds small noise. The full suite passes (410 tests).
+
 ## 4. Conditions of the data
 
 Recorded because a run's conditions are part of the result.
