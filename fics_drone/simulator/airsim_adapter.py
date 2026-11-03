@@ -63,6 +63,14 @@ MOVE_TIMEOUT_S = 30.0  # matches the skill-level timeout in control/navigation.p
 # supposed to be timing, not at the point where it checks the clock.
 RPC_READ_TIMEOUT_S = 10.0
 
+# Found live (2026-11-02): moveToPositionAsync does not start at all for a short hop. From a hover, moves of
+# 2 m and 3 m sat still for the whole 20 s timeout; 5 m and 8 m arrived in about 7 s. A short move is what
+# the guardian's steer-out out of a nearby zone edge asks for, so a short hop is sent as a gentle velocity
+# command toward the target instead. The skill loop already calls start_hover() once the drone is within
+# its tolerance, so the velocity command only has to start the motion.
+SHORT_MOVE_M = 4.5
+SHORT_MOVE_SPEED_MPS = 1.0   # 2.0 left the drone creeping 1.0-1.3 m after arrival, enough to fail a 1 m hold; 1.0 creeps 0.5-0.6 m
+
 
 def _with_timeout(fn, timeout_s: float):
     """Runs fn() in a background thread and gives up after timeout_s. Python
@@ -182,6 +190,17 @@ class AirSimVehicleAdapter(VehicleAdapter):
         return (v.x_val ** 2 + v.y_val ** 2 + v.z_val ** 2) ** 0.5
 
     def start_move_to(self, x, y, z):
+        ned_z = self._to_ned(z)
+        pos = self._get_position_ned()
+        dx, dy, dz = x - pos.x_val, y - pos.y_val, ned_z - pos.z_val
+        dist = (dx * dx + dy * dy + dz * dz) ** 0.5
+        if 0.0 < dist < SHORT_MOVE_M:
+            k = SHORT_MOVE_SPEED_MPS / dist
+            with self._lock:
+                self.client.moveByVelocityAsync(
+                    dx * k, dy * k, dz * k, dist / SHORT_MOVE_SPEED_MPS + 2.0, vehicle_name=self.vehicle_name,
+                )
+            return
         with self._lock:
             self.client.moveToPositionAsync(
                 x, y, self._to_ned(z), MOVE_SPEED, vehicle_name=self.vehicle_name,
