@@ -124,6 +124,21 @@ class TestSteerOutWhenAlreadyInside(unittest.TestCase):
         belief = _belief(position=(15.0, 5.0, 8.0), t=7.5)  # zone now spans x in [15, 25]
         self.assertEqual(g.evaluate(_fly(15, 5), belief).fallback, FallbackAction.EXIT_ZONE)
 
+    def test_exit_from_a_drifting_zone_does_not_run_along_with_it(self):
+        # The lab's drift zone: it switches on east of the target and slides west at 2.5 m/s. At t=4.7 s its
+        # west edge (33.75) has just passed a drone hovering at x=34. The nearest edge is 3.25 m to the west,
+        # which is where the zone is heading; the exit must be a point the zone will not reach.
+        z = NoFlyZone("D", 38, 46, 28, 36, active_from_s=3.0, vx=-2.5)
+        ev = _guardian(z).evaluate(_fly(33.4, 29.4, 12.0), _belief(position=(34.0, 29.9, 12.0), t=4.7))
+        self.assertEqual(ev.fallback, FallbackAction.EXIT_ZONE)
+        tx, ty, _ = ev.command.target
+        arrive = 4.7 + ev.move_m / 5.0 + 2.0
+        t = 4.7
+        while t <= arrive:
+            self.assertFalse(z.contains(tx, ty, t), (t, tx, ty))
+            t += 0.5
+        self.assertGreater(abs(ty - 29.9), 4.0, "leave across the drift, not along it")
+
     def test_no_clear_exit_falls_back_to_the_escalated_return_home(self):
         # a zone covering the whole geofence leaves nowhere to exit to
         huge = NoFlyZone("H", -500, 500, -500, 500, active_from_s=10.0)

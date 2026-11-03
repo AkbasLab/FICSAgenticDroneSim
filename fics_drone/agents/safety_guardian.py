@@ -97,6 +97,7 @@ class SafetyLimits:
     battery_reserve_frac: float = 0.10
     min_separation_m: float = 5.0
     exit_margin_m: float = 3.0  # how far outside a zone's edge an exit point is placed
+    exit_settle_s: float = 2.0  # an exit point must stay clear this long after the drone has arrived
 
     @classmethod
     def from_scenario(cls, scenario: Scenario, margin_m: float = 40.0) -> "SafetyLimits":
@@ -271,7 +272,22 @@ class SafetyGuardian:
         names = [zone.id for zone in inside]
         if not usable:
             return self._escalate(belief, [f"inside_active_zone({', '.join(names)})"])
-        cx, cy = min(usable, key=lambda c: math.dist((x, y), c))
+        # A drifting zone keeps moving while the aircraft escapes, so the nearest edge right now can be the one the
+        # zone is heading for (found live: a 3 m exit toward the drift was overrun). Prefer exit points that stay
+        # clear of every zone until the aircraft has arrived and settled; if none do, use the nearest as before.
+        exit_speed = min(5.0, self.limits.max_speed_mps) or 5.0
+
+        def stays_clear(c):
+            until = t + math.dist((x, y), c) / exit_speed + self.limits.exit_settle_s
+            step = t
+            while step <= until:
+                if any(zn.contains(c[0], c[1], step) for zn in self.limits.restricted_zones):
+                    return False
+                step += 0.5
+            return True
+
+        durable = [c for c in usable if stays_clear(c)]
+        cx, cy = min(durable or usable, key=lambda c: math.dist((x, y), c))
         command = Command(kind="fly", target=(cx, cy, z), speed_mps=min(5.0, self.limits.max_speed_mps),
                            timeout_s=30.0, purpose="home")
         self._command_in_flight = True
