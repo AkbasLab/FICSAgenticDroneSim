@@ -1,7 +1,7 @@
 # Phase 9 — Add dynamic roles and failure recovery
 
 **Stage:** 3 · The team · **Vault note:** `AUV-09 — Roles and Controlled Emergence`
-**Started:** 2026-11-04 · **Completed:** —
+**Started:** 2026-11-04 · **Completed:** 2026-11-04
 
 > Phase 8's drones divide one team mission between themselves; a drone that
 > stops reporting loses its task to the pool when its lease runs out. But a
@@ -19,10 +19,10 @@
 
 Mirrored from `AUV-22 — Phase Objectives Checklist`.
 
-- [ ] **9.1** Begin with three roles — `SCOUT`, `RELAY`, `RESERVE`, with defined change triggers
-- [ ] **9.2** Implement teammate-failure detection — `HEALTHY` → `SUSPECTED` → `UNREACHABLE` → `FAILED` → `RECOVERED`; **do not declare failure after one missed message**
-- [ ] **9.3** Implement recovery behaviour — lease expires, tasks return to pool, drones rebid, reserve→scout, scout→relay, **objective reprioritized if full completion is no longer possible**
-- [ ] **9.4** Define controlled emergence operationally — five conditions
+- [x] **9.1** Begin with three roles — `SCOUT`, `RELAY`, `RESERVE`, with defined change triggers
+- [x] **9.2** Implement teammate-failure detection — `HEALTHY` → `SUSPECTED` → `UNREACHABLE` → `FAILED` → `RECOVERED`; **do not declare failure after one missed message**
+- [x] **9.3** Implement recovery behaviour — lease expires, tasks return to pool, drones rebid, reserve→scout, scout→relay, **objective reprioritized if full completion is no longer possible**
+- [x] **9.4** Define controlled emergence operationally — five conditions
 
 ## Exit criterion
 
@@ -30,10 +30,11 @@ Mirrored from `AUV-22 — Phase Objectives Checklist`.
 > The remaining agents detect the disruption, reassign its task, and continue
 > **without a new human command**.
 
-**Met:** on the mock, 2026-11-04 — 20 of 20 seeds passed all eight checks, each seed flown with no stop and with
+**Met:** yes, on the mock, 2026-11-04 — 20 of 20 seeds passed all eight checks, each seed flown with no stop and with
 each drone stopped in turn at 60 s, each stopped flight twice (180 flights, every message delivered) · **Evidence:**
 [`evidence/exit-criterion-2026-11-04.md`](evidence/exit-criterion-2026-11-04.md).
-The optional live flight (step 5) is not yet flown.
+The optional live flight is built and passed its real-time dry run on the mock (step 5), but is not yet
+flown in CarlaAir: `python scripts/recovery_exit.py --sim airsim --block live1`, the user's to fly.
 
 Planned evidence: the four canonical drones on `search_relay_001`, seeds
 1–20, each seed flown with no stop and with each drone stopped in turn
@@ -458,6 +459,24 @@ aborted, as step 3's does on the mock.
 **The goldens did not move.** 977 tests pass, 28 skipped; audit clean;
 Phases 5–9's runs of record reproduce.
 
+### 2026-11-04 — close
+
+**Phase 9 is complete on the mock.** All four objectives are done and the exit
+criterion is met: on 20 of 20 seeds, with each of the four drones stopped in
+turn mid-search, every survivor detected the stop from silence alone at its
+thresholds, the stopped drone's task came back through its lease and a reserve
+finished it, the mission was met, and nobody was told anything after the team
+mission -- identical when flown again. Beside the exit, a team that could not
+finish lowered its ambition (the task abandoned, the partial result brought
+home), and the five conditions of controlled emergence each held on the record,
+with AUV-19's proxies reported and not claimed.
+
+**Not done, and said so:** the optional live flight is built and dry-run, not
+flown -- like Phase 8's, it is the user's to fly. RELAY's second trigger and
+the high-priority-target trigger wait for a message that carries sightings.
+Telling a partition from a failure waits for a network that partitions --
+Phase 10.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -476,6 +495,23 @@ Phases 5–9's runs of record reproduce.
 | 2026-11-04 | **The ladder shows in the belief only for a drone with a detector** | Every earlier agent's snapshot, and every run of record built on it, stays exactly as it was |
 
 ## Open questions
+
+1. **A partition or a failure?** Under Phase 9's network silence means a
+   stopped drone. On Phase 10's radio, silence also means out of range: the
+   ladder keeps UNREACHABLE and FAILED apart by time, but what should a team
+   do differently on each, and how long should it wait before believing a
+   failure?
+2. **What a teammate could still do.** "Nobody can finish it" judges a
+   teammate from its last known position, its battery unknown -- an
+   optimistic estimate. Should STATUS_UPDATE carry battery, so the team can
+   give up sooner and more truly?
+3. **Sightings in a message.** RELAY's second trigger (the base out of reach
+   with sightings unreported) and the high-priority-target trigger both need a
+   teammate's sightings, which no message carries (`TARGET_FOUND` has no
+   schema).
+4. **Measuring emergence.** These agents are deterministic and bid on
+   geometry, so allocation divergence across seeds is one division by design.
+   What would count as emergence measured, rather than conditions held?
 
 ---
 
