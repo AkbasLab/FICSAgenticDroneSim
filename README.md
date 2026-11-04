@@ -94,7 +94,7 @@ model.
 
 ## Where the project is
 
-**Phases 1 to 8 are complete** (2026-10-20 to 2026-11-04); 1 to 7 are tagged
+**Phases 1 to 8 are complete** (2026-10-20 to 2026-11-04), each tagged
 `phase-NN-complete`. **Phase 9, roles and failure recovery, is next.**
 
 | Phase | Done | What it left |
