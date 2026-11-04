@@ -147,7 +147,9 @@ class DroneAgent:
             self.step()
             if self.finished or (end is not None and self.clock.now() >= end):
                 break
-            self.clock.sleep(self.tick_s)
+            # After everything else due at the tick, so a skill ending at this
+            # instant is always seen at it (the clock's SAME-INSTANT ORDER).
+            self.clock.sleep_after_others(self.tick_s)
 
     def step(self) -> tuple[Event, ...]:
         """One tick: observe, update, and decide if anything happened. Returns the events."""

@@ -47,7 +47,8 @@ beliefs do not move. Optionally, two drones talking in CarlaAir.
 | The message log | `agentic_uav/experiments/message_log.py`, `agentic_uav/core/team.py`, `agentic_uav/agents/belief_state.py`, `agentic_uav/agents/drone_agent.py` | **Done** 2026-11-02; goldens unedited; Phases 5–6 reproduce |
 | Agents that talk | `agentic_uav/agents/drone_agent.py`, `agentic_uav/agents/belief_state.py`, `agentic_uav/experiments/single_agent.py` (`messaging=True`) | **Done** 2026-11-02; goldens unedited; Phases 5–6 reproduce |
 | The exit | `agentic_uav/experiments/messaging.py`, `agentic_uav/experiments/knowledge.py` (heard teammates), `scripts/messaging_exit.py`, `results/`, `evidence/` | **Done** 2026-11-02; exit met on the mock |
-| Optional live flight; close | `results/`, `evidence/` | step 6 |
+| The clock's same-instant order (6a) | `agentic_uav/core/clock.py` (`sleep_after_others`), `agentic_uav/agents/drone_agent.py` | **Done** 2026-11-04; goldens unedited; Phases 5–7 reproduce |
+| Optional live flight; close | `results/`, `evidence/` | step 6b–6e |
 
 ## Plan
 
@@ -87,6 +88,36 @@ some messages by itself, which is what the exit needs to show.
    Evidence generated from the records.
 6. **An optional live flight -- two drones in CarlaAir on the proven
    two-drone layout -- and the close.** Ask before tagging and pushing.
+
+**Step 6, as approved 2026-11-04** (shown in full first, on 2026-11-02). Planning
+it found a determinism defect from Phase 5 (see the record), so it begins with
+the fix:
+
+* **6a. Fix the same-instant race in the simulated clock.** A sleeper may ask
+  to wake after every other thread due at that instant has run and slept
+  again; the agent's tick uses it, so an agent always sees what ended at its
+  tick. Tested on a forced race; the live variant's seeds then repeat
+  identically; Phases 5–7's runs of record must still reproduce, and any
+  decision that moves gets a dated note, the old record kept.
+* **6b. The live variant's mock gate:** two talking agents on
+  `search_relay_live_small`, 20 seeds, all six checks.
+* **6c. The live path for agents that talk:** `fly_agents_live` -- reset, Drone2
+  spawned at runtime, both at rest, the poller and the separation monitor, a
+  connection per skill per drone, sensors from the poller, the bus fed the
+  poller's latest positions -- and `messaging_exit.py --sim airsim`, with a
+  real-time dry run on the mock behind `AUV_SLOW_TESTS`.
+* **6d. One live flight, flown by the user** on Windows, CarlaAir fresh with
+  Drone1 only. No Vega.
+* **6e. The close:** record, ledger, index; AUV-22 7.1–7.4, the AUV-07 callout,
+  the MOC, the report AUV-P7…; ask before tagging `phase-07-complete` and
+  pushing.
+
+Its four recommendations: fix the race in the clock, not by shifting the
+agents' ticks (which would move every decision time); one live flight, two
+drones on the variant's 20 m radio, so they talk near the pads and fall silent
+searching some 36 m apart; live checks met, exchanged, only on delivery and
+known exactly, with the mock twin beside it; live, the bus judges range from
+the poller's latest positions.
 
 **The six recommendations:**
 
@@ -444,6 +475,62 @@ blocked flight that sends nothing, and "all checks" reduced to "met".
 **The goldens did not move.** `record_golden.py --check` matches all four.
 732 tests pass, 22 skipped; audit clean.
 
+### 2026-11-04 — step 6a: the clock's same-instant order
+
+**The defect, found planning step 6.** Phase 3's `SimClock` wakes every thread
+due at one instant together, and which runs first is the operating system's
+choice. That is harmless for threads that only act; it is not for one that
+reads what the others did at that instant. On `search_relay_live_small` the
+silent pair, seed 1, gave two different decision sets in twelve runs: Drone1's
+skill ended at exactly 30.0 s, on an agent tick, and the agent saw the ending
+at 30.0 s on some runs and at 30.5 s on others. Twelve of the twenty seeds
+could flip so. No run of record was affected: the canonical four, Phase 5's
+single agent and Phase 6's pair were stable across repeats. A probe on the
+clock alone showed the race can be forced: a worker ending something at 1.0 s
+and an observer due then, the observer saw it 300 of 300 times at Python's
+default switch interval and 291 of 300 at 1e-6 s.
+
+**The fix, in the clock** (`agentic_uav/core/clock.py`). A thread may sleep
+with `sleep_after_others`: it wakes at its instant only once every other
+participant due then has run and is asleep again, or has left. Late sleepers
+do not wait for one another. `RealClock`'s is a plain sleep: real time has no
+shared instants to order. The agent's tick (`DroneAgent.run`) uses it, and
+nothing else changed: skills, waits and the executor sleep as before. So an
+agent always sees what ended at its tick, as Phase 5 meant it to. The fix
+moves no tick; shifting the agents' ticks off the skills' instants was the
+alternative, and it would have moved every decision time.
+
+**What it shows:**
+
+* **The forced race, always seen:** at a 1e-6 s switch interval the observer
+  sees the ending 300 of 300 times; with the fix switched off the same test
+  fails at once.
+* **The live variant repeats:** the pair on all 20 seeds, silent and talking,
+  six runs each, made identical decisions every run; and again at a 1e-5 s
+  switch interval, three runs each.
+* **Every run of record reproduces.** Re-run at this code: Phase 7's messaging
+  exit (2,415 rows) and Phase 6's knowledge exit (1,381 rows) are identical to
+  their records but for timestamps and provenance; Phase 5's exit (26 rows,
+  532 decisions) is identical in everything it recorded -- its belief snapshots
+  predate the fields Phase 6 added. No decision moved, so no record needed a
+  note.
+
+**Tests: 7 new, in `tests/test_clock.py`:** the forced race always seen; late
+sleepers wake at their own time and do not wait for each other; a thread
+leaving at the instant releases a late sleeper; a late sleep does not make a
+thread late for good; a sleep cut short by an exception leaves nothing
+registered; alone, unshared or on real time it is a plain sleep; and the
+agent's tick uses it.
+
+**Mutations: 10, all caught.** The first pass caught 8; the two survivors were
+test gaps -- a thread left marked late after a late sleep, and left marked
+late when it leaves -- and the last two tests above are theirs. Reviewing the
+fix first took out two redundant lines (a notify after waking, and the caller
+skipping itself), so that every line left is tested.
+
+**The goldens did not move.** `record_golden.py --check` matches all four.
+739 tests pass, 22 skipped; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -459,6 +546,7 @@ blocked flight that sends nothing, and "all checks" reduced to "met".
 | 2026-11-02 | **An agent's latency estimate is a message's age when read** | It cannot see the bus's delay, only when a message was sent and when it took it in; 0.5 s is the truthful figure from its side |
 | 2026-11-02 | **Each seed is flown talking, blocked and silent** | "Only when delivered" needs a case where messages are sent and not delivered; the blocked flight is that case, and the silent one is the reference the others' decisions are held to |
 | 2026-11-02 | **A heard teammate's position may stand only in its own record, and must be true to when it spoke** | The leak check now has messages to allow for; allowing them only in the record that came in one, and checking that record against the truth, keeps the check as strict as before |
+| 2026-11-04 | **Fix the same-instant race in the clock: an agent's tick wakes after everything else due then** | It is a defect of the shared timeline, so it is fixed there; moving the agents' ticks off the skills' instants would have moved every decision time, and the runs of record would no longer reproduce |
 
 ## Open questions
 

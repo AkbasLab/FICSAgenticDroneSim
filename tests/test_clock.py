@@ -168,5 +168,200 @@ class SimClockSharedTimelineTests(unittest.TestCase):
                     pass
 
 
+class SameInstantOrderTests(unittest.TestCase):
+    """A thread that reads what others did at an instant sees all of it.
+
+    Threads due at one instant wake in an order the operating system picks.
+    Phase 7 step 6 found an agent ticking at 30.0 s that saw its skill's
+    ending at 30.0 s on some runs and not others. `sleep_after_others` is the
+    fix; these force the race by making thread switches as frequent as
+    Python allows.
+    """
+
+    TRIALS = 300
+
+    def setUp(self):
+        self.interval = sys.getswitchinterval()
+        sys.setswitchinterval(1e-6)
+
+    def tearDown(self):
+        sys.setswitchinterval(self.interval)
+
+    def trial(self, observer_sleep):
+        """A worker ends something at 1.0 s; the observer, due then, reads it."""
+        clock = SimClock()
+        start = threading.Barrier(2)
+        ended, seen = [], {}
+
+        def worker():
+            with clock.participate():
+                start.wait()
+                clock.sleep(1.0)
+                ended.append(clock.now())
+                clock.sleep(5.0)
+
+        def observer():
+            with clock.participate():
+                start.wait()
+                getattr(clock, observer_sleep)(1.0)
+                seen["at"], seen["ended"] = clock.now(), list(ended)
+
+        threads = [threading.Thread(target=worker), threading.Thread(target=observer)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+            self.assertFalse(t.is_alive(), "a participant never woke: the clock deadlocked")
+        return seen
+
+    def test_a_late_sleeper_always_sees_what_ended_at_its_instant(self):
+        for _ in range(self.TRIALS):
+            seen = self.trial("sleep_after_others")
+            self.assertEqual(seen, {"at": 1.0, "ended": [1.0]})
+
+    def test_a_late_sleeper_wakes_at_its_own_time(self):
+        clock = SimClock()
+        woke = {}
+        start = threading.Barrier(3)
+
+        def plain():
+            with clock.participate():
+                start.wait()
+                clock.sleep(0.5)
+                clock.sleep(0.5)            # due again at the late sleeper's instant
+                clock.sleep(9.0)
+
+        def late(name, seconds):
+            with clock.participate():
+                start.wait()
+                clock.sleep_after_others(seconds)
+                woke[name] = clock.now()
+
+        threads = [threading.Thread(target=plain), threading.Thread(target=late, args=("a", 1.0)),
+                   threading.Thread(target=late, args=("b", 1.0))]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+            self.assertFalse(t.is_alive(), "late sleepers waited for each other, or for nothing")
+        self.assertEqual(woke, {"a": 1.0, "b": 1.0})
+
+    def test_a_thread_leaving_at_the_instant_releases_a_late_sleeper(self):
+        clock = SimClock()
+        start = threading.Barrier(2)
+        seen = {}
+
+        def leaver():
+            with clock.participate():
+                start.wait()
+                clock.sleep(2.0)
+            seen["left"] = True
+
+        def late():
+            with clock.participate():
+                start.wait()
+                clock.sleep_after_others(2.0)
+                seen["at"] = clock.now()
+
+        threads = [threading.Thread(target=leaver), threading.Thread(target=late)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+            self.assertFalse(t.is_alive())
+        self.assertEqual(seen, {"left": True, "at": 2.0})
+
+    def test_a_late_sleep_does_not_make_a_thread_late_for_good(self):
+        # A thread that once slept late, then ends something on a plain sleep,
+        # is waited for like any other.
+        for _ in range(self.TRIALS):
+            clock = SimClock()
+            start = threading.Barrier(2)
+            ended, seen = [], {}
+
+            def worker():
+                with clock.participate():
+                    start.wait()
+                    clock.sleep_after_others(0.5)
+                    clock.sleep(0.5)
+                    ended.append(clock.now())
+                    clock.sleep(5.0)
+
+            def observer():
+                with clock.participate():
+                    start.wait()
+                    clock.sleep_after_others(1.0)
+                    seen["at"], seen["ended"] = clock.now(), list(ended)
+
+            threads = [threading.Thread(target=worker), threading.Thread(target=observer)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=10)
+                self.assertFalse(t.is_alive(), "a participant never woke: the clock deadlocked")
+            self.assertEqual(seen, {"at": 1.0, "ended": [1.0]})
+
+    def test_a_sleep_cut_short_leaves_nothing_behind(self):
+        # Thread ids are reused, so a thread that leaves mid-sleep (an
+        # exception) must not stay registered as asleep, or as late.
+        clock = SimClock()
+        joined, done = threading.Event(), threading.Event()
+        cut = {}
+
+        class Cut(Exception):
+            pass
+
+        real_wait = clock._cv.wait
+
+        def wait(*args, **kwargs):
+            if threading.get_ident() == cut.get("ident"):
+                raise Cut()
+            return real_wait(*args, **kwargs)
+
+        clock._cv.wait = wait
+
+        def holder():                       # keeps the timeline shared, awake
+            with clock.participate():
+                joined.set()
+                done.wait(10)
+
+        def sleeper():
+            cut["ident"] = threading.get_ident()
+            joined.wait(10)
+            with self.assertRaises(Cut):
+                with clock.participate():
+                    clock.sleep_after_others(1.0)
+            done.set()
+
+        threads = [threading.Thread(target=holder), threading.Thread(target=sleeper)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+            self.assertFalse(t.is_alive())
+        self.assertEqual((clock._wake_at, clock._late, clock._participants), ({}, set(), set()))
+
+    def test_alone_or_unshared_it_is_a_plain_sleep(self):
+        clock = SimClock()
+        clock.sleep_after_others(2.5)
+        self.assertEqual(clock.now(), 2.5)
+        with clock.participate():
+            clock.sleep_after_others(1.0)
+        self.assertEqual(clock.now(), 3.5)
+        tick = time.get_clock_info("monotonic").resolution
+        real = RealClock()
+        t0 = real.now()
+        real.sleep_after_others(0.05)
+        self.assertGreaterEqual(real.now() - t0, 0.05 - tick)
+
+    def test_the_agent_ticks_after_the_others(self):
+        # The fix is only a fix if the agent's tick uses it.
+        import inspect
+        from agentic_uav.agents import drone_agent
+        source = inspect.getsource(drone_agent.DroneAgent.run)
+        self.assertIn("self.clock.sleep_after_others(self.tick_s)", source)
+        self.assertNotIn("self.clock.sleep(", source)
+
+
 if __name__ == "__main__":
     unittest.main()

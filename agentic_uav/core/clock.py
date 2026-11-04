@@ -19,6 +19,17 @@ wake. Time never passes while any participant is computing, which is what
 makes a run deterministic: the simulated instant at which anything happens
 does not depend on how fast the machine is.
 
+SAME-INSTANT ORDER. Threads due at one instant all wake together, and which
+runs first is the operating system's choice. For most threads that does not
+matter. It matters for one that READS what the others did at that instant:
+an agent ticking at 30.0 s, when its skill ends at 30.0 s, saw the ending
+on some runs and not others (found in Phase 7, step 6). So such a thread
+calls `sleep_after_others`: it wakes at its instant only once every other
+participant due then has run and is asleep again, or has left. An agent's
+tick uses it, so an agent always sees what ended at its tick. Late sleepers
+do not wait for one another; they read, they do not write what another
+late sleeper reads at the same instant.
+
 Whether computing time -- a language model thinking, in Phase 12 -- should be
 charged to simulated time is a decision AUV-19 asks to be made deliberately.
 This clock does not charge it. A caller that wants it charged sleeps for it.
@@ -42,6 +53,10 @@ class Clock(Protocol):
         """Let `seconds` pass for the caller."""
         ...
 
+    def sleep_after_others(self, seconds: float) -> None:
+        """Like `sleep`, but wake after everything else due at that instant."""
+        ...
+
 
 class RealClock:
     """The machine's monotonic clock. What a real simulator runs on."""
@@ -51,6 +66,10 @@ class RealClock:
 
     def sleep(self, seconds: float) -> None:
         time.sleep(max(0.0, seconds))
+
+    def sleep_after_others(self, seconds: float) -> None:
+        # Real time has no shared instants to order.
+        self.sleep(seconds)
 
 
 class SimClock:
@@ -65,6 +84,7 @@ class SimClock:
         self._cv = threading.Condition()
         self._participants: set[int] = set()
         self._wake_at: dict[int, float] = {}
+        self._late: set[int] = set()
 
     def now(self) -> float:
         with self._cv:
@@ -88,10 +108,20 @@ class SimClock:
             with self._cv:
                 self._participants.discard(me)
                 self._wake_at.pop(me, None)
+                self._late.discard(me)
                 self._advance()
                 self._cv.notify_all()
 
     def sleep(self, seconds: float) -> None:
+        self._sleep(seconds, late=False)
+
+    def sleep_after_others(self, seconds: float) -> None:
+        """Sleep, then wake only once every other participant due at the same
+        instant has run and is asleep again (or has left). See SAME-INSTANT
+        ORDER in the module docstring."""
+        self._sleep(seconds, late=True)
+
+    def _sleep(self, seconds: float, late: bool) -> None:
         seconds = max(0.0, float(seconds))
         me = threading.get_ident()
         with self._cv:
@@ -102,11 +132,14 @@ class SimClock:
                 raise RuntimeError("a thread sleeping on a shared SimClock must participate()")
             wake = self._now + seconds
             self._wake_at[me] = wake
+            if late:
+                self._late.add(me)
             self._advance()
             self._cv.notify_all()
-            while self._now < wake:
+            while self._now < wake or (late and self._others_due()):
                 self._cv.wait()
             del self._wake_at[me]
+            self._late.discard(me)
 
     def advance(self, seconds: float) -> None:
         """Move time forward from outside, with no participants waiting on it."""
@@ -114,6 +147,18 @@ class SimClock:
             if self._participants:
                 raise RuntimeError("advance() would race the participants; let them sleep instead")
             self._now += max(0.0, float(seconds))
+
+    def _others_due(self) -> bool:
+        # Caller holds the lock. Is any non-late participant still to run at
+        # this instant: awake, or woken and not yet asleep again? (The caller
+        # is late, so it is never among them.)
+        for other in self._participants:
+            if other in self._late:
+                continue
+            due = self._wake_at.get(other)
+            if due is None or due <= self._now:
+                return True
+        return False
 
     def _advance(self) -> None:
         # Caller holds the lock. Move only when every participant is asleep.
