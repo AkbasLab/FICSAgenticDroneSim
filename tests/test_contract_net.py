@@ -250,6 +250,34 @@ class LateClaimTests(unittest.TestCase):
         self.assertEqual(net.book.get("search S1").assigned_agent, "Drone2")
 
 
+class StaleBidTests(unittest.TestCase):
+
+    def test_a_bid_counts_only_while_it_is_current(self):
+        # Only S2 is open; Drone2 bid lower for it, then never claimed (busy, unheard, or gone).
+        net = ContractNet("Drone1", tasks_from_brief(BRIEF), DELIBERATING)
+        for seq, (who, task) in enumerate((("Drone3", "search S1"), ("Drone4", "search S3"), ("Drone5", "search S4")), 1):
+            net.receive(new_message(MessageType.TASK_AWARD, who, BROADCAST, BRIEF.scenario_id, 0.0, seq,
+                                    {"task_id": task, "version": 1, "value": 50.0}), 0.0)
+        net.receive(new_message(MessageType.TASK_BID, "Drone2", BROADCAST, BRIEF.scenario_id, 0.0, 9,
+                                {"task_id": "search S2", "version": 1, "value": 1.0,
+                                 "d": 1.0, "b": 0.0, "l": 0.0, "c": 0.0, "r": 0.0}), 0.0)
+        me = Bidder("Drone1", 0.0, 0.0, 100.0, (0.0, 0.0), 900.0, 12.0, 5.0)
+        claimed_at, bids_sent = None, []
+        t = 0.0
+        while t <= 12.0 and claimed_at is None:
+            for out in net.tick(t, lambda task: bid_for(task, me, BRIEF, BidWeights())):
+                if out.kind is MessageType.TASK_AWARD:
+                    claimed_at, claimed = t, out.payload["task_id"]
+                if out.kind is MessageType.TASK_BID and out.payload["task_id"] == "search S2":
+                    bids_sent.append(t)
+            t += TICK
+        self.assertEqual(claimed_at, 11.0)                  # held back until its bid lapsed (10 s), then a window
+        self.assertEqual(claimed, "search S2")
+        self.assertEqual(bids_sent, [0.0, 10.0])            # and its own bid, lapsed too, made again
+        # (The other three holders, never renewing in this test, lost their leases at 10 s too.)
+        self.assertEqual(net.claims_made[-1].heard, {"Drone1": net.claims_made[-1].value})
+
+
 class LeaseTests(unittest.TestCase):
 
     def test_a_silent_holder_loses_its_task_to_the_pool(self):
@@ -314,6 +342,18 @@ class EndingsTests(unittest.TestCase):
             self.assertEqual((t.status, t.assigned_agent), (TaskStatus.COMPLETE, "Drone4"))
         self.assertTrue(w.nets["Drone4"].idle)                           # nothing open: nothing for it
         self.assertFalse(w.nets["Drone4"].done)
+
+    def test_a_task_completed_by_a_teammate_frees_its_holder(self):
+        w = self.wire
+        net = w.nets["Drone1"]                                         # holds S3
+        done = new_message(MessageType.TASK_COMPLETE, "Drone2", BROADCAST, BRIEF.scenario_id, w.now, 99,
+                           {"task_id": "search S3", "version": 1})
+        net.take_news()
+        net.receive(done, w.now)
+        self.assertIsNone(net.holding)
+        self.assertEqual(net.book.get("search S3").status, TaskStatus.COMPLETE)
+        self.assertEqual([n["what"] for n in net.take_news()], ["lost"])
+        self.assertEqual(net.tick(w.now, w.bid_fn("Drone1")), [])          # no progress on a finished task
 
     def test_a_holder_that_gives_up_returns_its_task(self):
         w = self.wire

@@ -34,6 +34,14 @@ bus's own protocol tests.
 A message is never delivered after it expires: one still waiting when its
 lifetime ends is dropped as expired when its recipient next looks.
 
+OLDEST FIRST, AND TIES IN A FIXED ORDER (Phase 8). An inbox is read in the
+order messages were sent; messages sent at one simulated instant by
+different drones are read by sender, then sequence number -- not in the order
+their threads happened to send them. Phase 7's agents held one record per
+teammate, so the order did not matter to them; a contract-net drone's book
+logs every change in the order it reads, and that log must come out the same
+on every run.
+
 EACH RECIPIENT GETS ITS OWN COPY, rebuilt from the message's JSON, so no two
 agents ever hold the same mutable payload -- a channel no message went
 through. A broadcast is one delivery per drone on the roster but the sender.
@@ -146,7 +154,7 @@ class MessageBus:
                 else:
                     d.status, d.delivered_at = DELIVERED, now
                     out.append(d.message)
-        return tuple(out)
+        return tuple(sorted(out, key=lambda m: (m.timestamp, m.sender_id, m.sequence_number)))
 
     # -------------------------------------------------------- the experiment's
 

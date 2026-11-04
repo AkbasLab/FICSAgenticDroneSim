@@ -50,6 +50,16 @@ so a teammate can tell what it missed. Heartbeats and status updates raise
 no event (plan, recommendation 4): an agent decides on them exactly as it
 would without them, and Phase 8 is where messages change what agents do.
 
+DIVIDING THE WORK (Phase 8). Given a `coordinator` too -- a team policy
+holding its drone's side of the contract-net -- the agent is told the TEAM
+MISSION (`assign_team`) and no task. Each tick, after taking in what arrived,
+it hands the coordinator the task messages (`TASK_*`, and status updates
+carrying a holder's progress), sends what the coordinator says, and turns
+the coordinator's news -- a task claimed, lost, nothing left -- into MESSAGE
+events, the first time that trigger is raised. Every message still counts
+for the link estimates; only heartbeats and status updates make teammate
+records. Without a coordinator the agent is exactly the Phase 7 agent.
+
 The agent holds a brief, its sensors, its executor handle and its comms --
 nothing that leads to ground truth or to the network (`agents/__init__.py`).
 """
@@ -57,11 +67,11 @@ nothing that leads to ground truth or to the network (`agents/__init__.py`).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Protocol
 
 from ..control.action_executor import ActionExecutor, SkillHandle
 from ..core.events import Event, Trigger
-from ..core.messages import BROADCAST, Comms, MessageType, new_message
+from ..core.messages import BROADCAST, AgentMessage, Comms, MessageType, new_message
 from ..core.team import TeamReport
 from ..core.scenario import MissionBrief
 from ..core.sensing import Sensors
@@ -74,6 +84,20 @@ DEFAULT_PERIODIC_S = 10.0
 DEFAULT_HEARTBEAT_S = 1.0     # Phase 7: a heartbeat a second; a heartbeat lives 3 s (core.messages)
 DEFAULT_BATTERY_LEVELS = (50.0, 35.0)       # percent: the agent re-thinks as it falls through each
 MAX_REJECTIONS = 3
+
+TEAM_MISSION = "team mission"
+_TEAM_TALK = (MessageType.HEARTBEAT, MessageType.STATUS_UPDATE)
+
+
+class Coordinator(Protocol):
+    """A team policy's side of the contract-net, as the agent loop sees it (Phase 8)."""
+
+    def coordinate(self, belief: BeliefState, messages: list[AgentMessage], now: float) -> list[Any]: ...
+
+    def drain(self) -> list[Any]: ...
+
+    def news(self) -> list[Event]: ...
+
 
 _ENDINGS = {"success": Trigger.SKILL_SUCCEEDED, "failed": Trigger.SKILL_FAILED,
             "timeout": Trigger.SKILL_FAILED, "aborted": Trigger.SKILL_ABORTED}
@@ -101,11 +125,14 @@ class DroneAgent:
                  validator: Callable[[Decision, BeliefState], Verdict] = validate,
                  tick_s: float = DEFAULT_TICK_S, periodic_s: float = DEFAULT_PERIODIC_S,
                  battery_levels: tuple[float, ...] = DEFAULT_BATTERY_LEVELS, comms: Comms | None = None,
-                 heartbeat_s: float = DEFAULT_HEARTBEAT_S) -> None:
+                 heartbeat_s: float = DEFAULT_HEARTBEAT_S, coordinator: Coordinator | None = None) -> None:
         if tick_s <= 0 or periodic_s <= 0 or heartbeat_s <= 0:
             raise ValueError("tick, periodic check and heartbeat must be positive")
         if comms is not None and comms.drone != sensors.drone:
             raise ValueError(f"{sensors.drone}'s agent was handed {comms.drone}'s comms")
+        if coordinator is not None and comms is None:
+            raise ValueError("a coordinating agent needs comms: the work is divided by messages")
+        self.coordinator = coordinator
         self.brief = brief
         self.sensors = sensors
         # Only the handle: the executor itself leads, through its runner and
@@ -140,6 +167,13 @@ class DroneAgent:
         self.belief.self_.current_task = task
         self._pending.append(Event(Trigger.TASK_ASSIGNED, self.clock.now(), {"task": task}))
 
+    def assign_team(self) -> None:
+        """Tell the agent the team mission, and no task: its coordinator divides the work (Phase 8)."""
+        if self.coordinator is None:
+            raise ValueError("only a coordinating agent can be given the team mission")
+        self.belief.self_.current_task = None
+        self._pending.append(Event(Trigger.TASK_ASSIGNED, self.clock.now(), {"task": TEAM_MISSION, "team": True}))
+
     def run(self, max_s: float | None = None) -> None:
         """Tick until the policy says FINISH, or `max_s` has passed."""
         end = None if max_s is None else self.clock.now() + max_s
@@ -155,10 +189,15 @@ class DroneAgent:
         """One tick: observe, update, and decide if anything happened. Returns the events."""
         obs = self.observe()
         changes = self.belief.update(obs)
-        self._listen(obs.at)
+        task_messages = self._listen(obs.at)
+        if self.coordinator is not None:
+            self._send_all(self.coordinator.coordinate(self.belief, task_messages, obs.at), obs.at)
+            self._pending.extend(self.coordinator.news())
         events = self._events(obs, changes)
         if events:
             self._decide(events)
+            if self.coordinator is not None:
+                self._send_all(self.coordinator.drain(), obs.at)
             self._say(MessageType.STATUS_UPDATE, obs.at)
         if self.comms is not None and (self._last_heartbeat_at is None
                                        or obs.at - self._last_heartbeat_at >= self.heartbeat_s - 1e-9):
@@ -234,20 +273,26 @@ class DroneAgent:
                                      f"{MAX_REJECTIONS + 1} times"), Verdict(True),
                                      "held after repeated refusals" if held else "nothing to hold"))
 
-    def _listen(self, now: float) -> None:
-        """Take in what has arrived: each message a teammate report, and a note for the link estimates."""
+    def _listen(self, now: float) -> list[AgentMessage]:
+        """Take in what has arrived: a note of each for the link estimates; heartbeats and status
+        updates as teammate reports; and the task messages, returned for the coordinator."""
         if self.comms is None:
-            return
+            return []
+        task_messages = []
         for m in self.comms.receive_available():
             self.belief.heard(m.sender_id, m.sequence_number, m.timestamp, now)
             p = m.payload
-            report = TeamReport(m.sender_id, m.timestamp, "message", position=tuple(p["position"]),
-                                task=p.get("task"), status=p.get("stage"),
-                                confidence=1.0 if m.confidence is None else m.confidence,
-                                ttl_s=m.time_to_live_s, message_id=m.message_id)
-            self.belief.receive(report, now)
+            if m.message_type in _TEAM_TALK:
+                report = TeamReport(m.sender_id, m.timestamp, "message", position=tuple(p["position"]),
+                                    task=p.get("task"), status=p.get("stage"),
+                                    confidence=1.0 if m.confidence is None else m.confidence,
+                                    ttl_s=m.time_to_live_s, message_id=m.message_id)
+                self.belief.receive(report, now)
+            if m.message_type not in _TEAM_TALK or "task_id" in p:
+                task_messages.append(m)
+        return task_messages
 
-    def _say(self, kind: MessageType, now: float) -> None:
+    def _say(self, kind: MessageType, now: float, extra: dict[str, Any] | None = None) -> None:
         if self.comms is None:
             return
         me = self.belief.self_
@@ -257,9 +302,22 @@ class DroneAgent:
             payload["airborne"] = me.airborne
         else:
             payload.update(skill=me.current_skill, degraded=me.health.degraded)
+        if extra:
+            payload.update(extra)
+        self._send(kind, payload, now)
+
+    def _send(self, kind: MessageType, payload: dict[str, Any], now: float) -> None:
         self._sequence += 1
-        self.comms.send(new_message(kind, me.vehicle_id, BROADCAST, self.belief.mission.mission_id, now,
-                                    self._sequence, payload))
+        self.comms.send(new_message(kind, self.belief.self_.vehicle_id, BROADCAST, self.belief.mission.mission_id,
+                                    now, self._sequence, payload))
+
+    def _send_all(self, outs: list[Any], now: float) -> None:
+        """What the coordinator says: a holder's progress on a status update; the rest as they are."""
+        for out in outs:
+            if out.kind is MessageType.STATUS_UPDATE:
+                self._say(MessageType.STATUS_UPDATE, now, out.payload)
+            else:
+                self._send(out.kind, out.payload, now)
 
     def _act(self, decision: Decision) -> str:
         if decision.objective is not None:

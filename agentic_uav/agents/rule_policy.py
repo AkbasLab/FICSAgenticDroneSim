@@ -140,6 +140,12 @@ class Stage(Enum):
 
 class RulePolicy:
     def __init__(self, altitude_m: float = DEFAULT_ALTITUDE_M, speed_mps: float = DEFAULT_SPEED_MPS) -> None:
+        self._setup(altitude_m, speed_mps)
+
+    def _setup(self, altitude_m: float, speed_mps: float) -> None:
+        # Its own method, so a policy built on this one (Phase 8's team policy) can set
+        # up the same state without reaching through `super().__init__`, a dunder the
+        # agents' boundary check refuses.
         self.altitude_m = altitude_m
         self.speed_mps = speed_mps
         self.stage = Stage.READY
@@ -192,7 +198,16 @@ class RulePolicy:
         if len(words) != 2 or words[0] != "search" or words[1] not in sectors:
             self.stage = Stage.DONE
             return Decision.finish(reason=f"not a task this policy knows: {task!r}")
-        self.sector = sectors[words[1]]
+        self._prepare(belief, sectors[words[1]])
+        if belief.self_.airborne:
+            return self._to_sector(belief, f"task {task!r}, already airborne")
+        self.stage = Stage.TAKING_OFF
+        return Decision.start(TakeOffCommand(altitude_m=self.altitude_m, speed_mps=self.speed_mps),
+                              f"take off for {self.sector.id}", f"task {task!r}")
+
+    def _prepare(self, belief: BeliefState, sector: Sector) -> None:
+        """Make `sector` the drone's work: its searched region and lanes (Phase 4's geometry)."""
+        self.sector = sector
         obstacles = [grown(z.polygon, ZONE_CLEARANCE_M) for z in belief.brief.restricted_zones]
         r = self.sector.region
         self.spacing = lane_spacing(r.y_max - r.y_min, belief.brief.detection, self.speed_mps)
@@ -200,11 +215,6 @@ class RulePolicy:
                                       lane_end_overrun(belief.brief.detection, self.speed_mps), obstacles)
         self.lanes = [(w.x, w.y) for w in nav.lawnmower(self.region, self.spacing, self.altitude_m)]
         self._assume_from_brief(belief)
-        if belief.self_.airborne:
-            return self._to_sector(belief, f"task {task!r}, already airborne")
-        self.stage = Stage.TAKING_OFF
-        return Decision.start(TakeOffCommand(altitude_m=self.altitude_m, speed_mps=self.speed_mps),
-                              f"take off for {self.sector.id}", f"task {task!r}")
 
     def _succeeded(self, belief: BeliefState) -> Decision:
         self.retries = 0

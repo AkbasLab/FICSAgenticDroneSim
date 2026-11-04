@@ -137,6 +137,16 @@ class DeliveryTests(unittest.TestCase):
         self.assertEqual([m.sequence_number for m in bus.comms("Drone2").receive_available()], [1, 2, 3])
         self.assertEqual({d.delivered_at for d in bus.deliveries()}, {clock.now()})
 
+    def test_ties_at_one_instant_are_read_by_sender_then_sequence(self):
+        # Phase 8: whatever order their threads sent them in, messages of one instant read the same way.
+        bus, clock, _ = make()
+        for sender, seq in (("Drone3", 2), ("Drone1", 7), ("Drone3", 1)):
+            bus.comms(sender).send(beat(sender, seq=seq, to=("Drone2",), at=clock.now()))
+        clock.sleep(0.1)
+        bus.comms("Drone1").send(beat("Drone1", seq=8, to=("Drone2",), at=clock.now()))
+        got = [(m.sender_id, m.sequence_number) for m in bus.comms("Drone2").receive_available()]
+        self.assertEqual(got, [("Drone1", 7), ("Drone3", 1), ("Drone3", 2), ("Drone1", 8)])
+
 
 class CopyTests(unittest.TestCase):
 

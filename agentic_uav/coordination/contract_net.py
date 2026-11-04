@@ -25,7 +25,10 @@ THE PROTOCOL, AS AUV-08 GIVES IT, and what carries each step:
       announced again
 
 WHO CLAIMS WHAT. A drone holding nothing bids for every open task it has not
-bid for, and starts its BID WINDOW. When the window has passed, it reads the
+bid for, and starts its BID WINDOW. A bid counts only while its message is
+current (`BID_TTL_S`, the bid's time to live): a teammate heard bidding that
+has since become busy, unheard, or gone home stops counting, and a drone
+still waiting bids again when its own bid lapses. When the window has passed, it reads the
 bids it has heard -- its own and its teammates', for open tasks, from drones
 that hold nothing -- lowest first (the vehicle id breaking ties), and gives
 each task to the best bidder not yet given one. If that gives it a task, it
@@ -61,13 +64,14 @@ import math
 from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Iterable
 
-from ..core.messages import AgentMessage, MessageType
+from ..core.messages import DEFAULT_TTL_S, AgentMessage, MessageType
 from .bids import AllocationConfig, Bid
 from .tasks import MissionTask, TaskBook, TaskStatus
 
 EPS = 1e-9
 CLAIM_RANKING = 6               # decimal places a bid is compared to: no float noise decides a conflict
 RULES = ("task version", "lowest valid bid", "lower agent id")
+BID_TTL_S = DEFAULT_TTL_S[MessageType.TASK_BID]      # a bid counts for as long as its message is current
 
 
 @dataclass(frozen=True)
@@ -119,8 +123,9 @@ class ContractNet:
         self.owner = owner
         self.config = config
         self.book = TaskBook(owner, tasks)
-        self.bids: dict[tuple[str, int], dict[str, float]] = {}       # heard and own, eligible only
+        self.bids: dict[tuple[str, int], dict[str, tuple[float, float]]] = {}   # bidder -> (value, sent), eligible
         self.my_bids: dict[tuple[str, int], Bid] = {}
+        self._bid_at: dict[tuple[str, int], float] = {}
         self.claims: dict[tuple[str, int], dict[str, tuple[float, float]]] = {}   # claimant -> (bid, when)
         self._unsettled: set[tuple[str, int]] = set()
         self._logged: set[tuple[str, int, str]] = set()
@@ -177,7 +182,7 @@ class ContractNet:
                                                    RULES[0], self.owner))
             return out
         if kind is MessageType.TASK_BID:
-            self.bids.setdefault(key, {})[sender] = p["value"]
+            self.bids.setdefault(key, {})[sender] = (p["value"], message.timestamp)
         elif kind is MessageType.TASK_AWARD:
             if t.status is not TaskStatus.COMPLETE:
                 self.claims.setdefault(key, {})[sender] = (p["value"], message.timestamp)
@@ -194,6 +199,12 @@ class ContractNet:
                 held = t if (t.status is TaskStatus.CLAIMED and t.assigned_agent == sender) \
                     else t.claimed(sender, message.timestamp, self.config.lease_s)
                 self.book.update(held.completed(), now, f"{sender} completed it")
+                if self.holding == task_id:
+                    # Done by a teammate while this drone held it: there is nothing left to do here.
+                    self.holding = None
+                    self.last_progress_at = None
+                    self.round_started_at = now
+                    self.news.append({"what": "lost", "task": task_id, "why": f"{sender} completed it"})
         elif kind is MessageType.STATUS_UPDATE:
             if t.status is TaskStatus.CLAIMED and t.assigned_agent == sender:
                 self.book.update(t.renewed(message.timestamp, self.config.lease_s), now,
@@ -284,24 +295,27 @@ class ContractNet:
         out = []
         for t in self.book.open():
             key = (t.task_id, t.version)
-            if key in self.my_bids:
+            if key in self.my_bids and now - self._bid_at[key] < BID_TTL_S - EPS:
                 continue
             bid = bid_fn(t)
             self.my_bids[key] = bid
+            self._bid_at[key] = now
             self.round_started_at = now
             if bid.eligible:
-                self.bids.setdefault(key, {})[self.owner] = bid.value
+                self.bids.setdefault(key, {})[self.owner] = (bid.value, now)
                 tm = bid.terms
                 out.append(Out(MessageType.TASK_BID, {"task_id": t.task_id, "version": t.version, "value": bid.value,
                                                       "d": tm["D"], "b": tm["B"], "l": tm["L"], "c": tm["C"],
                                                       "r": tm["R"]}))
         return out
 
-    def _choice(self) -> str | None:
-        """The task the bids heard give this drone: each task to the best free bidder not yet given one."""
+    def _choice(self, now: float) -> str | None:
+        """The task the current bids give this drone: each task to the best free bidder not yet given one."""
         entries = []
         for t in self.book.open():
-            for who, value in self.bids.get((t.task_id, t.version), {}).items():
+            for who, (value, sent) in self.bids.get((t.task_id, t.version), {}).items():
+                if now - sent >= BID_TTL_S - EPS:
+                    continue                                          # lapsed: no longer counts
                 if who == self.owner or not self.book.held_by(who):
                     entries.append((_key(value, who), t.task_id))
         given_tasks, given_drones = set(), set()
@@ -315,14 +329,15 @@ class ContractNet:
         return None
 
     def _claim(self, now: float) -> list[Out]:
-        task_id = self._choice()
+        task_id = self._choice(now)
         if task_id is None:
             return []
         t = self.book.get(task_id)
         key = (task_id, t.version)
-        value = self.bids[key][self.owner]
+        value = self.bids[key][self.owner][0]
         self.claims.setdefault(key, {})[self.owner] = (value, now)
-        self.claims_made.append(ClaimMade(now, task_id, t.version, value, dict(self.bids.get(key, {}))))
+        heard = {who: v for who, (v, sent) in self.bids.get(key, {}).items() if now - sent < BID_TTL_S - EPS}
+        self.claims_made.append(ClaimMade(now, task_id, t.version, value, heard))
         self.book.update(t.claimed(self.owner, now, self.config.lease_s), now, f"claimed it with {value:.3f}")
         self.holding = task_id
         self.round_started_at = None

@@ -44,7 +44,7 @@ deterministic. Optionally, two drones dividing two sectors in CarlaAir.
 | Tasks and the task book (8.1) | `agentic_uav/coordination/tasks.py` | **Done** 2026-11-04; goldens unedited |
 | Deterministic bids and their manifest (8.3) | `agentic_uav/coordination/bids.py`, `configs/allocation/default.toml`, `agentic_uav/experiments/allocation.py` | **Done** 2026-11-04; goldens unedited |
 | The contract-net protocol (8.2, 8.4, 8.5) | `agentic_uav/coordination/contract_net.py`, `agentic_uav/core/messages.py` | **Done** 2026-11-04; goldens unedited; Phase 7 reproduces |
-| Agents that allocate | `agentic_uav/agents/`, `agentic_uav/experiments/` | step 4 |
+| Agents that allocate | `agentic_uav/agents/team_policy.py`, `agentic_uav/agents/drone_agent.py` (coordinator), `agentic_uav/experiments/allocation.py` (`fly_team_on_mock`), `agentic_uav/simulator/message_bus.py` (tie order) | **Done** 2026-11-04; goldens unedited; Phases 5–7 reproduce |
 | The exit | `agentic_uav/experiments/`, `scripts/`, `results/`, `evidence/` | step 5 |
 | Optional live flight; close | `results/`, `evidence/` | step 6 |
 
@@ -334,10 +334,108 @@ dead, and is gone.
 **The goldens did not move.** `record_golden.py --check` matches all four.
 827 tests pass, 24 skipped; audit clean.
 
+### 2026-11-04 — step 4: agents that allocate
+
+**The agent loop** (`agents/drone_agent.py`) takes an optional **coordinator**
+and a new instruction, **`assign_team()`: the team mission, and no task**.
+Each tick, after taking in what arrived, it hands the coordinator the task
+messages (`TASK_*`, and status updates carrying a holder's progress), sends
+what the coordinator says, and turns its news -- a task claimed, lost, nothing
+left -- into **`MESSAGE` events, the first time that trigger is raised**. Every
+message still counts toward the link estimates; only heartbeats and status
+updates make teammate records. Without a coordinator the agent is exactly
+Phase 7's.
+
+**The team policy** (`agents/team_policy.py`) is the rule policy, flying as
+it always did once it holds a task -- the policy's sector set-up is now one
+method, `_prepare`, so it can be handed a sector by the protocol -- with what
+is new around it: take off at once on the team mission (the claims settle in
+the first seconds of the climb); airborne, go to the task it holds, or hold
+in 5 s slices waiting for one, or go home with nothing left; a task lost to a
+better claim, drop it; a search done, complete it so all hear; a shortfall or
+a give-up, **give the task back** (release) and go home. Flight decisions are
+made from the protocol's state, not from the order its news arrived.
+
+**`fly_team_on_mock`** (`experiments/allocation.py`): every drone on the
+roster an agent told the team mission, talking, nobody told a sector; each
+drone's book, corrections and claims come back with the flight.
+
+**The first flights failed, and the cause is a finding, not a typo.** On the
+canonical 100 m radio a drone searching a far sector is out of everyone's
+reach for most of its search: its progress reports go unheard, its 10 s
+lease runs out while it is still working, and a teammate that has finished
+claims the "returned" task and searches it again -- S1 and S4 searched twice,
+two drones holding for ever on stale bids, one crash. The plan had said the
+flights "only confirm no lease expires under perfect comms", assuming every
+message arrives. **The user decided (2026-11-04): the exit flies with every
+message delivered** -- the protocol under perfect communication, as the plan
+meant -- and one 100 m flight is recorded beside it as a finding; partitions,
+and leases under them, are Phase 10's subject.
+
+**Three defects found by flying it, fixed:**
+
+* **A task a teammate completed left its holder crashing.** It went on
+  reporting progress on a finished task. Now a completion heard for its own
+  task frees it ("lost: completed by …").
+* **Stale bids could leave a drone waiting for ever.** A bid heard from a
+  drone that then became busy (its claim unheard) or went home kept winning
+  the free drone's reading of the table. **A bid now counts only while its
+  message is current** (its 10 s time to live), and a drone still waiting
+  bids again when its own lapses (`BID_TTL_S`).
+* **Two contested flights logged their books in different orders.** Same
+  claims, corrections, decisions and division -- but progress reports sent at
+  one simulated instant by different drones reached an inbox in thread order.
+  **The bus now reads an inbox oldest first, ties by sender, then sequence**
+  (`simulator/message_bus.py`); Phase 7's agents, one record per teammate,
+  never noticed.
+
+**And one boundary catch.** The team policy first called
+`super().__init__` -- a dunder the agents' boundary check refuses. The rule
+policy's set-up is now its own method, `_setup`, which both call.
+
+**With every message delivered, on seeds 1–20, deliberating and contested:
+all 40 flights met, each sector searched exactly once** -- Drone1 S3, Drone2
+S4, Drone3 S1, Drone4 S2, the greedy reading of step 2's bids -- **188.0 s**
+against Phase 4's hand assignment at 192.1 s; in every contested flight each
+book logs the same three settled conflicts; no lease ran out.
+
+**Phases 5–7 reproduce**, re-run after every change above: Phase 5's exit,
+Phase 6's knowledge exit, Phase 7's exit and gate, identical.
+
+**Tests: 27 in `tests/test_team_policy.py`; 2 more in
+`tests/test_contract_net.py`, 1 in `tests/test_message_bus.py`.** Flights:
+the mission met and the work divided; nobody told a sector; each drone
+flying the task it claimed; every book agreeing; no conflict, no lease run
+out; the task messages on the record; every decision known exactly; no
+slower than the hand assignment; contested -- the same division, every book
+logging the conflict by the rules, the losers flying their second claim,
+deterministic; and the 100 m radio, kept visible. The policy, one reaction
+at a time: the team mission taking off; nothing for it, no take-off; no task,
+hold; a claim while waiting; searched with nothing left, complete and home;
+searched with work left, wait; a shortfall giving the task back; a task lost
+in flight; a second task costed as a trip out to it; nothing left sending a
+waiting drone home at once; no estimate on lanes it no longer has; progress
+along its lanes; a plain task, Phase 5's; the wiring refused without
+coordinator or comms. And a bid counting only while current, a task
+completed by a teammate freeing its holder, the inbox's tie order.
+
+**Mutations: 27, all caught.** The first pass caught 22; the five survivors
+were test gaps -- a second task costed from the wrong stage, the "nothing
+left" news (without it a waiting drone still goes home, a hold later), the
+guard that keeps a drone that lost its task from being costed on lanes it no
+longer has (removed, it crashes), the progress fraction, the completed-by-a-
+teammate fix -- each closed by a test above.
+
+**The goldens did not move.** `record_golden.py --check` matches all four.
+857 tests pass, 24 skipped; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-11-04 | **The exit flies with every message delivered; the 100 m radio is a finding beside it** | The user's decision: on the canonical radio far-sector holders go silent, leases expire mid-search and sectors are searched twice -- partitions are Phase 10's subject, and the exit is the protocol under perfect communication |
+| 2026-11-04 | **A bid counts only while its message is current** | A bid from a drone that has since become busy or gone home must stop counting, or a free drone can wait for ever; a message's own time to live is the measure |
+| 2026-11-04 | **An inbox is read oldest first, ties by sender then sequence** | Thread order decided the order of one instant's messages; a book logging in that order differed run to run |
 | 2026-11-04 | **A tick's claims are settled together, at the next tick** | Claims made at one instant are one conflict; settled one by one they leave a log of displacements that never happened |
 | 2026-11-04 | **Every losing claim is logged in every book, once** | Rule 5 asks for all corrections; logging only where a book's holder changed would leave the winner's own book silent about the conflict it won |
 | 2026-11-04 | **Progress rides on STATUS_UPDATE as an all-or-nothing group** | No type of the thirteen is a progress report; a group present only for a holder leaves every Phase 7 message, and record, as it was |
