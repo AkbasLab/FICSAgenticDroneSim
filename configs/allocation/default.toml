@@ -1,0 +1,19 @@
+# Phase 8's allocation manifest: the bid weights and the protocol's timings.
+#
+# Fixed on 2026-11-04, before any run (AUV-08: "Record them in the experiment
+# manifest, and do not tune them after seeing held-out results"). Every run
+# records the manifest it used. A bid is the expected seconds until a drone
+# would finish a task (agentic_uav/coordination/bids.py), so each weight is
+# seconds per second of its term.
+
+[weights]
+w_d = 1.0      # travel time to the task and through it
+w_b = 1.0      # battery: 0, or not eligible
+w_l = 1.0      # work already committed to
+w_c = 0.0      # communication risk: logged, not weighed, until Phase 10
+w_r = 1.0      # capability mismatch: 0, or not eligible
+
+[protocol]
+bid_window_s = 1.0        # deliberating: long enough to hear every bid (sent, then read a tick later)
+progress_period_s = 2.0   # a holder reports progress this often
+lease_s = 10.0            # and loses the task this long after its last report

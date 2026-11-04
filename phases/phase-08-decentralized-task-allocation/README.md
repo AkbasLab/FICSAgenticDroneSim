@@ -42,7 +42,7 @@ deterministic. Optionally, two drones dividing two sectors in CarlaAir.
 | Artifact | Location | State |
 |---|---|---|
 | Tasks and the task book (8.1) | `agentic_uav/coordination/tasks.py` | **Done** 2026-11-04; goldens unedited |
-| Deterministic bids and their manifest (8.3) | `agentic_uav/coordination/bids.py`, `configs/allocation/default.toml` | step 2 |
+| Deterministic bids and their manifest (8.3) | `agentic_uav/coordination/bids.py`, `configs/allocation/default.toml`, `agentic_uav/experiments/allocation.py` | **Done** 2026-11-04; goldens unedited |
 | The contract-net protocol (8.2, 8.4, 8.5) | `agentic_uav/coordination/contract_net.py`, `agentic_uav/core/messages.py` | step 3 |
 | Agents that allocate | `agentic_uav/agents/`, `agentic_uav/experiments/` | step 4 |
 | The exit | `agentic_uav/experiments/`, `scripts/`, `results/`, `evidence/` | step 5 |
@@ -174,10 +174,73 @@ pass, for a holder filter no test yet exercised.
 **The goldens did not move.** `record_golden.py --check` matches all four.
 779 tests pass, 24 skipped; audit clean.
 
+### 2026-11-04 — step 2: deterministic bids, and the manifest (8.3)
+
+**`coordination/bids.py`**: `bid_for(task, bidder, brief, weights)`, AUV-08's
+w_d·D + w_b·B + w_l·L + w_c·C + w_r·R, **in seconds until the drone would
+finish the task**, every term kept on the bid with the detail behind it
+(metres to the task, through it and home, the battery it would cost and
+leave, the time left). A `Bidder` is what the drone believes of itself --
+position, battery, home, time left, height, speed, committed work,
+capabilities -- and nothing more.
+
+* **D** -- to the task's first lane and through its lanes, at the drone's
+  speed. **The lanes are the rule policy's own**: `search_lanes` makes the
+  same calls in the same order, and a test pins them equal for every sector
+  at every drone's height, so the drone that "wins" is the one that would
+  finish soonest by the path it will really fly.
+* **B** -- the task and the way home costed with the brief's battery model;
+  short of the reserve plus the policy's 2 % margin, **not eligible**;
+  otherwise 0. The deadline gates the same way, with the policy's landing
+  allowance.
+* **L** -- seconds already committed; 0 for a free drone (one task at a time).
+* **C** -- seconds of the task's lanes beyond the base's radio range, sampled
+  every metre: logged, **weighted 0** until Phase 10.
+* **R** -- a missing capability makes it **not eligible**; otherwise 0.
+* **`rank`**: lowest value first, the vehicle id breaking ties; values are
+  compared to the microsecond, so no float noise decides a tie; an
+  ineligible bid is never ranked.
+
+**The manifest**, `configs/allocation/default.toml`, fixed today before any
+run: w_d = w_b = w_l = w_r = 1, w_c = 0; a bid window of 1 s, progress every
+2 s, a lease of 10 s. `experiments/allocation.py` reads it strictly -- every key
+required, none unknown, numbers only -- outside the boundary, and hands the
+agents an `AllocationConfig`; every run will record it.
+
+**What the bids say at the start of the canonical mission.** From the pads
+(x 0, 4, 8, 12): S2 108.0–108.8 s, S1 113.5–114.3, S4 126.8–127.6, S3
+129.4–130.3; Drone4, nearest, bids lowest on all four. So a greedy reading of
+the full table would give Drone4 S2, Drone3 S1, Drone2 S4, Drone1 S3 -- not
+the hand assignment (Drone *i* to S*i*) every earlier phase flew. Whether
+the flights agree is step 4's to show.
+
+**Tests: 19, in `tests/test_bids.py`:** a bid costs the policy's lanes; every
+term kept and summed; D the seconds to the task and through it (slower costs
+more, though not exactly twice -- the lanes depend on the speed); the battery
+costed with the way home, eligible with just enough and not with a little
+less; each weight weighing its term; nearer bids lower; L the committed work;
+C logged and not weighed, S1 only partly beyond the radio; not eligible on
+battery, deadline or capability; the same inputs the same bid; the JSON;
+lowest wins and the id breaks ties, to the microsecond; an ineligible bid
+never ranked; the manifest, typos refused not defaulted, bad values refused,
+a manifest by path.
+
+**Mutations: 21, all caught.** The first pass caught 16; the five survivors
+were test gaps -- the way home left out of the battery cost, w_d ignored, the
+tie rounding (my tie test had the two values the wrong way round), the
+radio-range sampling, a bool taken for a number. A first test of mine also
+assumed half the speed costs exactly twice the time; the lanes themselves
+change with the speed.
+
+**The goldens did not move.** `record_golden.py --check` matches all four.
+798 tests pass, 24 skipped; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-11-04 | **A bid costs the rule policy's own lanes, pinned by a test** | A bid that costs a different path from the one flown would let the wrong drone win; equality is checked for every sector and height |
+| 2026-11-04 | **Battery, deadline and capability gate eligibility rather than add a penalty** | A penalty would need a price for running out; there is none worth paying, so an unable drone simply does not bid a value |
 | 2026-11-04 | **A task carries a version, one higher each time it returns to the pool** | AUV-08's first conflict rule compares versions; without one a late claim for a task that has since been released and re-claimed would look current |
 | 2026-11-04 | **The task id is the policy's own task string, "search S1"** | A claimed task goes to the rule policy as it stands: allocation decides which sector, the Phase 5 policy flies it |
 
