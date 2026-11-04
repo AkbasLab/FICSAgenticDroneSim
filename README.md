@@ -94,8 +94,8 @@ model.
 
 ## Where the project is
 
-**Phases 1 to 9 are complete** (2026-10-20 to 2026-11-04), each tagged
-`phase-NN-complete`. **Phase 10, degraded communications, is next.**
+**Phases 1 to 10 are complete** (2026-10-20 to 2026-11-04), each tagged
+`phase-NN-complete`. **Phase 11, the runtime safety guardian, is next.**
 
 | Phase | Done | What it left |
 |---|---|---|
@@ -108,6 +108,7 @@ model.
 | 7 · Inter-agent messaging | 2026-11-04 | Thirteen message types, one envelope, a bus that is the only way to talk, a log of every message's fate: team beliefs only from delivery on 20 of 20 seeds, and two drones talking live |
 | 8 · Decentralized task allocation | 2026-11-04 | Tasks every drone derives from the brief, bids in seconds to finish, a contract-net with leases and AUV-08's conflict rules: four drones told only the team mission divide the sectors on 20 of 20 seeds, conflicts settled the same way in every book |
 | 9 · Roles and failure recovery | 2026-11-04 | A failure ladder read from silence alone, roles from what a drone holds and hears, reserves that wait for returned work: with each drone stopped in turn on 20 of 20 seeds, the rest detect it, take its task and finish with no new command |
+| 10 · Degraded communications | 2026-11-04 | A seeded network model -- latency, loss, rate limit, bandwidth, partitions -- with four conditions: the same mission replays message for message under each, the model verified statistically, the drones estimating their links never told; the team still finishes, at a cost |
 
 Each phase keeps its own record in [`phases/`](phases/): objectives, the exit
 criterion and whether it is actually met, deliverables, decisions taken, and the
@@ -121,7 +122,7 @@ Objectives Checklist`; each phase also has a detail note `AUV-01` … `AUV-23`.
 | 1 · Platform | 2–4 | **Complete**: Phases 2, 3 and 4 |
 | 2 · One agent | 5–6 | **Complete**: Phases 5 and 6 |
 | 3 · The team | 7–9 | **Complete**: Phases 7, 8 and 9 |
-| 4 · Adversity | 10–11 | Not started |
+| 4 · Adversity | 10–11 | **Phase 10 complete**; Phase 11 next |
 | 5 · Intelligence | 12 | Not started |
 | 6 · Apparatus | 13–16 | Not started |
 | 7 · Science | 17–20 | Not started |

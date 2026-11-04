@@ -1,7 +1,7 @@
 # Phase 10 — Build the degraded-communications simulator
 
 **Stage:** 4 · Adversity · **Vault note:** `AUV-10 — Degraded Communications`
-**Started:** 2026-11-04 · **Completed:** —
+**Started:** 2026-11-04 · **Completed:** 2026-11-04
 
 > Phases 7–9 flew with every message delivered: a stopped drone's silence was
 > the only silence. Phase 10 builds the network the central claim depends on
@@ -17,19 +17,19 @@
 
 Mirrored from `AUV-22 — Phase Objectives Checklist`.
 
-- [ ] **10.1** Implement a configurable network model — latency mean and jitter, packet loss, message rate limit, bandwidth, communication range
-- [ ] **10.2** Support four communication conditions — Nominal, Moderately degraded (~10% loss), Severely degraded (~30% loss), Partitioned
-- [ ] **10.3** Use a seeded random-number generator — same seed ⇒ same lost messages, same latency samples, same target placement, same failure time
-- [ ] **10.4** Add message expiration — TTL per message class
-- [ ] **10.5** Let agents estimate communication health — from heartbeat rate, round-trip time, missing sequence numbers, delivery acknowledgments; **never read the configured loss rate**
-- [ ] **10.6** Verify the network model statistically — thousands of mock messages; empirical loss and latency match configuration; partitions block only intended links; expired messages not delivered; identical seeds reproduce
+- [x] **10.1** Implement a configurable network model — latency mean and jitter, packet loss, message rate limit, bandwidth, communication range
+- [x] **10.2** Support four communication conditions — Nominal, Moderately degraded (~10% loss), Severely degraded (~30% loss), Partitioned
+- [x] **10.3** Use a seeded random-number generator — same seed ⇒ same lost messages, same latency samples, same target placement, same failure time
+- [x] **10.4** Add message expiration — TTL per message class
+- [x] **10.5** Let agents estimate communication health — from heartbeat rate, round-trip time, missing sequence numbers, delivery acknowledgments; **never read the configured loss rate**
+- [x] **10.6** Verify the network model statistically — thousands of mock messages; empirical loss and latency match configuration; partitions block only intended links; expired messages not delivered; identical seeds reproduce
 
 ## Exit criterion
 
 > The same mission can be replayed under nominal, degraded, severe and
 > partitioned conditions with **reproducible message delivery**.
 
-**Met:** on the mock, 2026-11-04 — 20 of 20 seeds passed all four checks: the canonical mission under each
+**Met:** yes, on the mock, 2026-11-04 — 20 of 20 seeds passed all four checks: the canonical mission under each
 condition, with no stop and with Drone1 stopped at 60 s, every flight twice, and on Phase 9's network once
 (360 flights) · **Evidence:**
 [`evidence/exit-criterion-2026-11-04.md`](evidence/exit-criterion-2026-11-04.md), and for 10.6
@@ -480,6 +480,22 @@ verdict, nominal required among the conditions.
 **The goldens did not move; Phases 5–9 reproduce.** 1076 tests pass, 28
 skipped; audit clean.
 
+### 2026-11-04 — close
+
+**Phase 10 is complete on the mock.** All six objectives are done and the exit
+criterion is met: the canonical mission replays under nominal, moderate,
+severe and partitioned conditions -- with and without a drone stopped -- every
+message meeting the same fate at the same time when flown again, each network
+doing message by message what its condition says, nominal being Phase 9's
+network exactly. The network model is verified statistically (10.6); the
+agents estimate their own links from what arrives, never told the condition.
+
+**Not done, and said so:** no live flight, by the plan (the network is our
+code; a real clock cannot replay it). The agents do not act on their link
+estimates (recommendation 1). The levels are placeholders until pilots
+calibrate them. Burst loss, interference zones and asymmetric links -- AUV-10's
+"later" -- are not modelled.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -500,6 +516,25 @@ skipped; audit clean.
 | 2026-11-04 | **The network condition never enters the scenario or the brief** | The brief is what an agent is told; a loss rate or a partition schedule in it would be an oracle (AUV-10, 10.5) |
 
 ## Open questions
+
+1. **A partition or a failure?** From silence alone, a partition longer than
+   the failure threshold is a failure: under the partitioned condition every
+   drone called the far side failed, then took it back. What evidence could
+   separate them -- a whole group falling silent at once, the base link, a
+   relay's word -- and what should a team do differently on each?
+2. **Thresholds under loss.** Severe loss raised 1,129 suspicions of live
+   drones. Should a drone's ladder scale with its own loss estimate -- the
+   bid's communication-risk term finally given a weight? That is the
+   experiment's factor, not this phase's.
+3. **Leases under loss.** A holder's progress lost on the way lets its lease
+   run out while it works (161 times under severe): longer leases, progress
+   sent more often, or a lease that waits for the holder's own silence on
+   the ladder?
+4. **Calibrating the levels** (AUV-16, 17.3): are 10 % and 30 % loss, and a 60 s
+   partition, defensibly different levels for the experiment?
+5. **One-way latency assumes synchronized clocks**, which a real fleet would
+   have to provide or estimate.
+6. **Burst loss, interference zones, asymmetric links** -- AUV-10's "later add".
 
 ---
 

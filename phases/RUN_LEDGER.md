@@ -262,6 +262,8 @@ and kept on purpose. Planning data from every 70B session stands.
 | **`20261104-015555-live1`** messaging, live | none (rule-based agents) | 1 flight, 2 drones, 17 decisions, 94 messages | **Phase 7 live flight** — two agents talking in CarlaAir, the radio judged on the poller: MET on the four checks one flight can be held to; 57 delivered, 35 out of range; every decision the mock twin's |
 | **`20261104-085636-exit`** allocation, mock | none (rule-based agents) | 80 flights (4 agents, seeds 1–20, deliberating and contested, each twice), 4,410 decisions | **Phase 8 exit run** — 20/20 seeds passed all seven checks: one team mission, no central assignment, every sector held once, conflicts settled by the rules, leases renewed, deterministic; beside it, the 100 m radio's finding (8 searches of 4 sectors) |
 | **`20261104-115126-exit`** recovery, mock | none (rule-based agents) | 180 flights (4 agents, seeds 1–20, no stop and each drone stopped at 60 s, each stopped flight twice), 14,630 decisions checked | **Phase 9 exit run** — 20/20 seeds passed all eight checks: every survivor detected the stop at 3, 10 and 30 s of silence, no false alarm, the stopped drone's task taken by a reserve, the mission met with no new command, roles from interactions, deterministic, known exactly; beside it, reprioritization (S3 abandoned, the partial result home) and 9.4 |
+| **`20261104-170034-check`** network check, no flight | none | 4 conditions × 20 seeds, about 12,000 deliveries each, plus bursts and two stress networks | **Phase 10, 10.6** — the network model verified statistically: loss in its 99 % interval and latency by KS at 1 % (1 rejection in 160 tests), every refusal, cut and expiry where the model says, seeds reproducing |
+| **`20261104-174326-exit`** network, mock | none (rule-based agents) | 360 flights (4 agents, seeds 1–20, 4 conditions, no stop and Drone1 stopped at 60 s, each twice; Phase 9's network once), 28,921 decisions | **Phase 10 exit run** — 20/20 seeds passed all four checks: reproducible delivery, each network as configured message by message, nominal exactly Phase 9, known exactly; beside it, the team met the mission under every condition, at a cost in repeated searches, expired leases and false alarms (a partition taken for a failure) |
 
 The `p2-` sessions are in `phases/phase-02-repository-architecture/results/`,
 not Phase 1's. They meet every condition in §1 and are the Phase 2 exit
@@ -353,7 +355,7 @@ vertical movement. That GPU load is in the protocol deliberately.
 
 ---
 
-## 4. Phases 2 to 9 have no run inventory
+## 4. Phases 2 to 10 have no run inventory
 
 None is a measurement phase, so none has a run count. Their exit criteria
 are demonstrations.
@@ -368,6 +370,7 @@ are demonstrations.
 | **7** — Inter-agent messaging | Four deterministic agents exchange heartbeats and status messages while flying; their team beliefs update only when messages are delivered | A demonstration on fixed seeds with negative controls, every record traced, not a scored comparison. **Done 2026-11-04**: 20/20 seeds on the mock (talking, blocked and silent), and one live flight of two talking drones, MET; see §3 |
 | **8** — Decentralized task allocation | Four drones receive one team mission, divide the sectors without a central assignment, complete the work, and resolve simultaneous claims deterministically | A demonstration on fixed seeds, conflicts made to happen, not a scored comparison. **Done 2026-11-04**: 20/20 seeds on the mock (deliberating and contested, each twice); the live flight not flown; see §3 |
 | **9** — Roles and failure recovery | During a four-drone mission, one agent can be intentionally stopped; the remaining agents detect the disruption, reassign its task, and continue without a new human command | A demonstration on fixed seeds, every drone stopped in turn, not a scored comparison. **Done 2026-11-04**: 20/20 seeds on the mock (no stop and each drone stopped, each stopped flight twice); the live flight not flown; see §3 |
+| **10** — Degraded communications | The same mission can be replayed under nominal, degraded, severe and partitioned conditions with reproducible message delivery | A demonstration of the network factor's reproducibility, not a scored comparison: that is Phases 17–19's. **Done 2026-11-04**: 20/20 seeds on the mock, four conditions, with and without a stop, each flight twice; the model verified statistically; no live flight by design; see §3 |
 
 > **Phase 3's exit criterion names four drones**, and on the evidence of M09 it
 > is not blocked: multi-drone flight works when the extra drones are spawned at
