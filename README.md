@@ -94,8 +94,8 @@ model.
 
 ## Where the project is
 
-**Phases 1 to 7 are complete** (2026-10-20 to 2026-11-04), each tagged
-`phase-NN-complete`. **Phase 8, decentralized task allocation, is next.**
+**Phases 1 to 8 are complete** (2026-10-20 to 2026-11-04); 1 to 7 are tagged
+`phase-NN-complete`. **Phase 9, roles and failure recovery, is next.**
 
 | Phase | Done | What it left |
 |---|---|---|
@@ -106,6 +106,7 @@ model.
 | 5 · Persistent single agent | 2026-10-21 | One rule-based agent, told only its task, choosing each next skill on events: 20 of 20 seeds and 5 of 5 troubles on the mock, four live flights |
 | 6 · Belief state | 2026-11-02 | A belief in six blocks, unknowns said not zeroed, and a log of exactly what each decision knew and did not: 1340 of 1340 decisions on the mock, 10 of 10 live |
 | 7 · Inter-agent messaging | 2026-11-04 | Thirteen message types, one envelope, a bus that is the only way to talk, a log of every message's fate: team beliefs only from delivery on 20 of 20 seeds, and two drones talking live |
+| 8 · Decentralized task allocation | 2026-11-04 | Tasks every drone derives from the brief, bids in seconds to finish, a contract-net with leases and AUV-08's conflict rules: four drones told only the team mission divide the sectors on 20 of 20 seeds, conflicts settled the same way in every book |
 
 Each phase keeps its own record in [`phases/`](phases/): objectives, the exit
 criterion and whether it is actually met, deliverables, decisions taken, and the
@@ -118,7 +119,7 @@ Objectives Checklist`; each phase also has a detail note `AUV-01` … `AUV-23`.
 | 0 · Foundations | 0–1 | Phase 0 deliverable done, its exit (the one-minute explanation) untested; **Phase 1 complete** |
 | 1 · Platform | 2–4 | **Complete**: Phases 2, 3 and 4 |
 | 2 · One agent | 5–6 | **Complete**: Phases 5 and 6 |
-| 3 · The team | 7–9 | **Phase 7 complete**; Phase 8 next |
+| 3 · The team | 7–9 | **Phases 7 and 8 complete**; Phase 9 next |
 | 4 · Adversity | 10–11 | Not started |
 | 5 · Intelligence | 12 | Not started |
 | 6 · Apparatus | 13–16 | Not started |

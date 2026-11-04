@@ -1,7 +1,7 @@
 # Phase 8 — Implement decentralized task allocation without an LLM
 
 **Stage:** 3 · The team · **Vault note:** `AUV-08 — Decentralized Task Allocation`
-**Started:** 2026-11-04 · **Completed:** —
+**Started:** 2026-11-04 · **Completed:** 2026-11-04
 
 > Until now each drone was told its sector. Phase 8 tells the team its
 > mission and nobody anything more: the drones divide the work between
@@ -17,11 +17,11 @@
 
 Mirrored from `AUV-22 — Phase Objectives Checklist`.
 
-- [ ] **8.1** Represent work as explicit tasks — `MissionTask` with id, type, region, priority, capabilities, deadline, status, assignee, lease expiry
-- [ ] **8.2** Implement a contract-net-style protocol — announce → bid → exchange → claim → acknowledge → progress → lease expiry → re-announce
-- [ ] **8.3** Compute bids deterministically — distance, battery, workload, communication risk, capability mismatch; **vehicle ID as tie-breaker**
-- [ ] **8.4** Add task leases — renewed through progress messages; on expiry the task returns to the pool
-- [ ] **8.5** Prevent duplicate claims — version numbers, lowest valid bid, lower agent ID, losers release, **all corrections logged**
+- [x] **8.1** Represent work as explicit tasks — `MissionTask` with id, type, region, priority, capabilities, deadline, status, assignee, lease expiry
+- [x] **8.2** Implement a contract-net-style protocol — announce → bid → exchange → claim → acknowledge → progress → lease expiry → re-announce
+- [x] **8.3** Compute bids deterministically — distance, battery, workload, communication risk, capability mismatch; **vehicle ID as tie-breaker**
+- [x] **8.4** Add task leases — renewed through progress messages; on expiry the task returns to the pool
+- [x] **8.5** Prevent duplicate claims — version numbers, lowest valid bid, lower agent ID, losers release, **all corrections logged**
 
 ## Exit criterion
 
@@ -29,16 +29,27 @@ Mirrored from `AUV-22 — Phase Objectives Checklist`.
 > central assignment**, complete the work, and resolve simultaneous claims
 > deterministically.
 
-**Met:** on the mock, 2026-11-04 — 20 of 20 seeds passed all seven checks, each seed flown deliberating and
-contested and each way twice (80 flights, every message delivered) · **Evidence:**
+**Met:** **yes, on the mock, 2026-11-04** · **Evidence:**
 [`evidence/exit-criterion-2026-11-04.md`](evidence/exit-criterion-2026-11-04.md).
-The optional live flight (step 6) is not yet flown.
 
-Planned evidence: the four canonical agents on `search_relay_001`, seeds
-1–20, each seed flown deliberating and contested (simultaneous claims made to
-happen), every claim traced to the bids behind it, every sector held by one
-drone once conflicts settle, and each flight flown twice to show it is
-deterministic. Optionally, two drones dividing two sectors in CarlaAir.
+The four canonical drones, each told only the team mission, every message
+delivered, each seed 1–20 flown **deliberating** (a 1 s bid window) and
+**contested** (every drone claiming at once, so simultaneous claims happen)
+and each way twice: **20 of 20 seeds passed all seven checks** -- the mission
+met; no central assignment, every claim traced to the bids behind it; every
+sector searched by exactly one drone and every book agreeing; four
+simultaneous claims for S2 settled for the lowest bid, the same three
+corrections in every book, every loser releasing; no lease run out; the same
+books, division and decisions when flown again; every decision known
+exactly. **188.0 s** every flight, against the hand assignment's 192.1 s.
+
+**Beside the exit, a finding**: on the scenario's own 100 m radio, far-sector
+holders go silent, their leases run out mid-search, and sectors are searched
+twice (8 searches of 4 sectors, 20 lease expiries) -- the exit flies with every
+message delivered by the user's decision; partitions are Phase 10's subject.
+
+**Live**: the path is built and passes its real-time dry run on the mock;
+**the optional CarlaAir flight is not flown**.
 
 ## Deliverables
 
@@ -50,7 +61,7 @@ deterministic. Optionally, two drones dividing two sectors in CarlaAir.
 | Agents that allocate | `agentic_uav/agents/team_policy.py`, `agentic_uav/agents/drone_agent.py` (coordinator), `agentic_uav/experiments/allocation.py` (`fly_team_on_mock`), `agentic_uav/simulator/message_bus.py` (tie order) | **Done** 2026-11-04; goldens unedited; Phases 5–7 reproduce |
 | The exit | `agentic_uav/experiments/allocation_exit.py`, `scripts/allocation_exit.py`, `results/`, `evidence/` | **Done** 2026-11-04; exit met on the mock |
 | The live path (6) | `agentic_uav/experiments/allocation.py` (`fly_team_live`), `agentic_uav/experiments/allocation_exit.py` (`live_checks`), `scripts/allocation_exit.py --sim airsim` | **Done** 2026-11-04; real-time dry run on the mock passes |
-| Optional live flight; close | `results/`, `evidence/` | the close; the live flight not flown |
+| Optional live flight; close | `results/`, `evidence/`, the ledger, the index, the vault | **Done** 2026-11-04; phase closed on the mock; the live flight not flown |
 
 ## Plan
 
@@ -544,6 +555,37 @@ for it is above.
 **The goldens did not move.** `record_golden.py --check` matches all four.
 890 tests pass, 26 skipped; audit clean.
 
+### 2026-11-04 — close: Phase 8 complete
+
+**The exit holds at the closing code**: the run of record re-run on the
+closing code, all 6,635 rows identical to `allocation-exit-20261104-085636-exit`
+but for timestamps and provenance; Phases 5–7's runs of record identical too.
+Neither re-run is kept.
+
+**The optional live flight is not flown.** The live path is built and passes
+its real-time dry run; the user may fly it -- `python
+scripts\allocation_exit.py --sim airsim --block live1`, CarlaAir launched
+fresh with Drone1 declared -- and its record would join this phase's.
+
+**What Phase 8 leaves for Phase 9 onwards:**
+
+* **Work as tasks, divided by the drones themselves**: a team mission from
+  the brief, each drone's own book, bids every reader can audit, the
+  contract-net with AUV-08's conflict rules, every correction logged.
+* **Leases**, renewed by progress, returning a silent holder's task to the
+  pool one version on -- the mechanism Phase 9's recovery from a lost drone is
+  built on.
+* **A team policy** that takes its work from the protocol and gives it back
+  when it cannot finish: the first policy steered by messages.
+* **A finding Phase 10 must face**: on a range-limited radio a lease cannot
+  tell a lost drone from an unheard one, and work is duplicated.
+
+**Test and check totals at close:** 890 tests, 26 skipped (15 need a live
+CarlaAir, the rest real time), 129 more than at Phase 7's close. The
+four Phase 2 goldens are unedited through every step, and the audit is
+clean. Mutations: 17, 21, 34, 27, 23 and 16 by step, 138 in all, every one
+caught.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -561,6 +603,18 @@ for it is above.
 | 2026-11-04 | **The task id is the policy's own task string, "search S1"** | A claimed task goes to the rule policy as it stands: allocation decides which sector, the Phase 5 policy flies it |
 
 ## Open questions
+
+- **Leases under a partition.** On the 100 m radio a holder out of reach
+  loses its task while it works, and the sector is searched twice. Longer
+  leases slow recovery from a real loss (Phase 9); relaying progress, or a
+  holder re-claiming on contact, are Phase 10's to weigh.
+- **One task at a time.** A drone holds one task; with more tasks than drones
+  the free ones bid again as they finish. Bidding for a queue (the L term) is
+  computed but unused so far.
+- **The division never varies with the seed** -- the bids depend on the
+  geometry, not the targets. Varied layouts, or tasks that appear in flight
+  (a target to inspect), are what would make allocation choose differently.
+- **The live flight is not flown**: the path passed its dry run on the mock.
 
 ---
 

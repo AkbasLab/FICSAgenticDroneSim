@@ -260,6 +260,7 @@ and kept on purpose. Planning data from every 70B session stands.
 | **`20261102-213008-exit`** messaging, mock | none (rule-based agents) | 60 flights (4 agents, seeds 1–20, each talking, blocked and silent), 2,020 decisions | **Phase 7 exit run** — 20/20 seeds passed all six checks: 5,820 teammate records each traced to a delivered message; blocked flights believed nothing; talking and blocked made the silent flight's decisions |
 | **`20261104-005602-live-variant-mock`** messaging, mock | none (rule-based agents) | 60 flights (the live variant's pair, seeds 1–20, three ways), 336 decisions | **Phase 7 live-variant gate** — the pair to be flown live, on its 20 m radio: 20/20 seeds passed all six checks; a gate, not the exit |
 | **`20261104-015555-live1`** messaging, live | none (rule-based agents) | 1 flight, 2 drones, 17 decisions, 94 messages | **Phase 7 live flight** — two agents talking in CarlaAir, the radio judged on the poller: MET on the four checks one flight can be held to; 57 delivered, 35 out of range; every decision the mock twin's |
+| **`20261104-085636-exit`** allocation, mock | none (rule-based agents) | 80 flights (4 agents, seeds 1–20, deliberating and contested, each twice), 4,410 decisions | **Phase 8 exit run** — 20/20 seeds passed all seven checks: one team mission, no central assignment, every sector held once, conflicts settled by the rules, leases renewed, deterministic; beside it, the 100 m radio's finding (8 searches of 4 sectors) |
 
 The `p2-` sessions are in `phases/phase-02-repository-architecture/results/`,
 not Phase 1's. They meet every condition in §1 and are the Phase 2 exit
@@ -351,7 +352,7 @@ vertical movement. That GPU load is in the protocol deliberately.
 
 ---
 
-## 4. Phases 2 to 7 have no run inventory
+## 4. Phases 2 to 8 have no run inventory
 
 None is a measurement phase, so none has a run count. Their exit criteria
 are demonstrations.
@@ -364,6 +365,7 @@ are demonstrations.
 | **5** — Persistent single agent | One agent completes a search task with no preflight action list, recognises success or failure, and decides what next | A demonstration on fixed seeds and fixed troubles, judged by Phase 4's evaluator, not a scored comparison. **Done 2026-10-21**: 20/20 seeds and 5/5 troubles on the mock; three nominal live flights of a small variant, 20/20 each, and one live flight with an injected fault, met; see §3 |
 | **6** — Belief state | The logger can show, for each decision, exactly what the agent knew and what it did not know | A demonstration on fixed seeds, every decision checked, not a scored comparison. **Done 2026-11-02**: 1340/1340 decisions on the mock (a single agent and an independent pair, 20 seeds each), and 10/10 in one live flight; see §3 |
 | **7** — Inter-agent messaging | Four deterministic agents exchange heartbeats and status messages while flying; their team beliefs update only when messages are delivered | A demonstration on fixed seeds with negative controls, every record traced, not a scored comparison. **Done 2026-11-04**: 20/20 seeds on the mock (talking, blocked and silent), and one live flight of two talking drones, MET; see §3 |
+| **8** — Decentralized task allocation | Four drones receive one team mission, divide the sectors without a central assignment, complete the work, and resolve simultaneous claims deterministically | A demonstration on fixed seeds, conflicts made to happen, not a scored comparison. **Done 2026-11-04**: 20/20 seeds on the mock (deliberating and contested, each twice); the live flight not flown; see §3 |
 
 > **Phase 3's exit criterion names four drones**, and on the evidence of M09 it
 > is not blocked: multi-drone flight works when the extra drones are spawned at
