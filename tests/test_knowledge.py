@@ -149,6 +149,16 @@ class SingleLogTests(unittest.TestCase):
         self.assertEqual(whats["targets"], "where 1 more target(s) are; it has seen 1")
         self.assertEqual(len([g for g in halfway.gap if g["what"].startswith("target")]), 1)
 
+    def test_a_belief_time_rounded_past_the_flights_end_is_judged_at_the_end(self):
+        # Phase 9: the snapshot writes its time to the millisecond, a hair past the last instant.
+        row = entry_json(self.flight.trace[-1])
+        over = self.truth.end + 0.0004
+        row["at"], row["belief"]["self"]["updated_at"] = over, over
+        self.assertNotIn("base link", " ".join(knowledge_entry(row, "Drone1", self.truth).problems))
+        beyond = self.truth.end + 0.002                                      # past the rounding: judged as it is
+        row["at"], row["belief"]["self"]["updated_at"] = beyond, beyond
+        self.assertIn("base link", " ".join(knowledge_entry(row, "Drone1", self.truth).problems))
+
     def test_the_first_sighting_counts_from_the_flights_start(self):
         # On the mock every flight starts at 0. Shift the whole flight 1000 s
         # on, as a live clock would be: the log must not move.
@@ -183,8 +193,12 @@ class SingleLogTests(unittest.TestCase):
         last = self.log[-1]
         self.assertTrue(last.ok, last.problems)
         self.assertLess(self.flight.trajectories["Drone1"].knots[-1].t, self.flight.report.until)
-        early = Truth(SINGLE, self.flight.trajectories, self.flight.report.start,
-                      self.flight.trajectories["Drone1"].knots[-1].t)
+        # Since Phase 9 a belief's time a rounding past the end is judged at the end, so a truth a
+        # rounding short no longer flips the verdict; one ending a second short still does.
+        hair = Truth(SINGLE, self.flight.trajectories, self.flight.report.start,
+                     self.flight.trajectories["Drone1"].knots[-1].t)
+        self.assertEqual(knowledge_entry(self.flight.trace[-1], "Drone1", hair).problems, [])
+        early = Truth(SINGLE, self.flight.trajectories, self.flight.report.start, self.flight.report.until - 1.0)
         self.assertIn("incorrect: believed base link True", " ".join(knowledge_entry(self.flight.trace[-1], "Drone1", early).problems))
 
     def test_a_logged_entry_reads_back_the_same(self):

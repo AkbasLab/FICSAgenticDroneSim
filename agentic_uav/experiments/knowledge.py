@@ -64,6 +64,7 @@ from ..simulator.trajectory import Trajectory
 
 BLOCKS = ("self", "mission", "local_map", "team", "communication", "assumptions")
 TOLERANCE = {"position_m": 0.01, "battery": 0.01}          # the snapshot rounds to 3 places
+SNAPSHOT_ROUNDING_S = 0.0005                                # a time written to the millisecond (Phase 9)
 UNKNOWN_WHY = {
     "self.velocity": "not estimable yet: fewer than two readings",
     "self.heading_deg": "no heading: hovering or slower than 0.2 m/s",
@@ -253,6 +254,11 @@ def knowledge_entry(entry: Any, drone: str, truth: Truth,
     # are one; live the stamp can trail by a tick of the monotonic clock
     # (16 ms on Windows: 8 cm at 5 m/s), which the allowance is not for.
     taken = belief.get("self", {}).get("updated_at", t)
+    # The snapshot writes that time to the millisecond, which can land a hair past the flight's
+    # last instant (194.1 against an end of 194.09999999999997): the truth has nothing after it.
+    # Only that rounding is forgiven -- a truth that ends any earlier is still caught.
+    if truth.end < taken <= truth.end + SNAPSHOT_ROUNDING_S + 1e-9:
+        taken = truth.end
     _gap(belief, drone, taken, truth, out)
     _check(belief, drone, taken, truth, out, tolerance)
     return out

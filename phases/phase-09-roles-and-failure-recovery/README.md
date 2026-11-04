@@ -30,7 +30,10 @@ Mirrored from `AUV-22 — Phase Objectives Checklist`.
 > The remaining agents detect the disruption, reassign its task, and continue
 > **without a new human command**.
 
-**Met:** no · **Evidence:** —
+**Met:** on the mock, 2026-11-04 — 20 of 20 seeds passed all eight checks, each seed flown with no stop and with
+each drone stopped in turn at 60 s, each stopped flight twice (180 flights, every message delivered) · **Evidence:**
+[`evidence/exit-criterion-2026-11-04.md`](evidence/exit-criterion-2026-11-04.md).
+The optional live flight (step 5) is not yet flown.
 
 Planned evidence: the four canonical drones on `search_relay_001`, seeds
 1–20, each seed flown with no stop and with each drone stopped in turn
@@ -46,7 +49,7 @@ report. Optionally, two drones in CarlaAir, one stopped.
 | Teammate-failure detection (9.2) | `agentic_uav/coordination/health.py`, `configs/recovery/default.toml`, `agentic_uav/experiments/recovery.py` | **Done** 2026-11-04; goldens unedited; Phases 5–8 reproduce |
 | Roles and their triggers (9.1) | `agentic_uav/coordination/roles.py`, `agentic_uav/core/messages.py` (`ROLE_CHANGE`) | **Done** 2026-11-04; goldens unedited |
 | Recovery behaviour (9.3); stopping an agent | `agentic_uav/agents/recovery_policy.py`, `agentic_uav/agents/team_policy.py` (hooks), `agentic_uav/coordination/` (abandoned, finished), `agentic_uav/experiments/recovery.py` (`fly_recovery_on_mock`) | **Done** 2026-11-04; goldens unedited; Phases 5–8 reproduce |
-| The exit; reprioritization; 9.4 | `agentic_uav/experiments/`, `scripts/`, `results/`, `evidence/` | step 4 |
+| The exit; reprioritization; 9.4 | `agentic_uav/experiments/recovery_exit.py`, `scripts/recovery_exit.py`, `results/`, `evidence/` | **Done** 2026-11-04; exit met on the mock |
 | Optional live flight; close | `results/`, `evidence/` | step 5 |
 
 ## Plan
@@ -290,10 +293,99 @@ closed by a test.
 **Phases 5–8 reproduce**; the goldens did not move. 938 tests pass, 26
 skipped; audit clean.
 
+### 2026-11-04 — step 4: the exit, met on the mock
+
+**`experiments/recovery_exit.py`**: each seed flown with **no stop**, and with
+**each of the four drones stopped in turn at 60 s** (mid-search for every
+drone), each stopped flight **twice**; every message delivered, so a stopped
+drone's silence is the only silence. **Eight checks**, each shown able to fail:
+
+| Check | What it requires |
+|---|---|
+| detected | every survivor's ladder for the stopped drone climbs suspected, unreachable, failed, in order, each at its threshold's silence and within a tick |
+| no false alarm | no survivor's ladder moves for a drone that was not stopped, in any flight |
+| reassigned | the stopped drone's task returns one version on (its lease run out) and a survivor completes it, in every survivor's book |
+| continued | the mission met by the survivors, each ending its part itself |
+| no new human command | every drone told the team mission and nothing else, ever |
+| roles from interactions | every role change follows from the drone's own claim, completion or detector, and was announced |
+| deterministic | each stopped flight flown twice gives the same records |
+| known exactly | Phase 6's knowledge log passes every decision |
+
+**The run of record** (`results/recovery-exit-20261104-115126-exit`, at
+`8e508b7` with the step-4 files uncommitted, `agentic_uav` digest
+`d94baeaba3bf29ed`, 180 flights, 467.8 s): **20 of 20 seeds passed every check.**
+
+* **Detected the same way every time**: every survivor called the stopped
+  drone suspected 3.5 s after its stop, unreachable at 10.5 s, failed at
+  30.5 s (its last message at the stop, the ladder read each tick); nobody
+  else's ladder moved, in any flight.
+* **Reassigned, every seed**: Drone1's S3, Drone2's S4 and Drone3's S1 to
+  Drone4 -- a reserve from 118.5 s, claiming the returned task at 119.6 s --
+  and Drone4's S2 to Drone3 (125.1 s). Each task returned at 69 s, when the
+  stopped drone's lease ran out.
+* **Continued**: the mission met on every flight; no stop 194.1 s, stopped
+  292.2–309.1 s.
+* **No command** after the team mission, to anyone; every role change
+  traced to the drone's own protocol or detector and announced; every
+  decision known exactly; each stopped flight identical when flown again.
+
+**Beside the exit, reprioritization**: Drone1 stopped, the deadline cut to
+250 s -- S3 abandoned in every survivor's book at 69 s, nobody chasing it, the
+team home at 188 s with the partial result (S3 0.387 covered); the mission
+not met, as intended.
+
+**Beside the exit, 9.4**: the five conditions of controlled emergence each
+held on the record -- a team-level objective, no central controller (and the
+flight code calls only `assign_team`, checked), only local beliefs and
+delivered messages, allocation and roles from interactions, deterministic
+constraints (every executed decision passed the validation step). AUV-19's
+proxies, **reported, not claimed**: 4 of 4 drones off the one-drone-per-sector
+assignment; **one division over 20 seeds** -- these agents are deterministic and
+bid on geometry, so that is expected, and is not emergence measured.
+
+**An edge in the knowledge log, found by this exit and fixed.** Several final
+decisions failed "known exactly": believed base link up, truth down, each at
+the flight's very end. Since Phase 7 the log judges a belief at the belief's
+own time, read from the snapshot -- written to the millisecond: 194.1 against a
+flight that ended at 194.09999999999997, a hair past the end, where the truth
+has no link. Recovery flights often end on a drone's last decision. **A
+belief's time a rounding past the end is now judged at the end; anything
+further is still caught.** A first version clamped without the limit, and a
+Phase 6 test caught that it would hide a truth ending early; the limit is the
+snapshot's half millisecond, and that test now asserts both sides. Every run
+of record re-ran identical.
+
+**Evidence:** [`evidence/exit-criterion-2026-11-04.md`](evidence/exit-criterion-2026-11-04.md),
+generated from the record: every seed's checks and reassignments; seed 17
+with Drone1 stopped -- each survivor's ladder, the task returning, the taker's
+roles and claims, every role change as announced; the takers across all
+seeds; the reprioritization; 9.4 and the proxies.
+
+**Tests: 19 in `tests/test_recovery_exit.py`; 1 more in `tests/test_knowledge.py`
+(and its end-of-flight test sharpened).** Every check passes on a real seed;
+the flights are what they say; and each failing on that seed altered to break
+it -- a ladder out of order or early, an alarm about a live drone, a task
+nobody took back, a book that never saw the lease run out, a survivor that
+did not end its part, a drone told a task, a role with no cause or not
+announced, two flights that differ, a wrong belief, one failing check
+failing the seed; the reprioritization judged on a real flight and on it
+altered (a book that kept the task, a task chased); the emergence report,
+divergence counted; the flight code giving no task; the script writing its
+record, a failing seed or a failed reprioritization failing the run.
+
+**Mutations: 23, all caught.** The first pass caught 18; the five survivors
+were test gaps -- the reprioritization's two judgements (now a function of
+their own, `judge_reprioritization`, so they can be tested on an altered
+flight), the divergence count, and the run's verdict and exit code.
+
+**The goldens did not move.** 958 tests pass, 26 skipped; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-11-04 | **Each seed is flown with no stop and with every drone stopped in turn, each stopped flight twice** | Which drone is stopped changes who takes its task; every one is tried, and flying twice is what "deterministic" is held to |
+| 2026-11-04 | **A belief's time a rounding past the flight's end is judged at the end, and no further** | The snapshot's millisecond can land past the last instant; forgiving more would hide a truth that ends too early |
 | 2026-11-04 | **Recovery is a new policy on the team policy, not a change to it** | Phase 8's drones go home when nothing is open; a reserve that stays is new behaviour, and Phase 8's record must stay as it was |
 | 2026-11-04 | **A teammate that reported its part done is not watched** | A landed drone falls silent for good; treating that as a failure is the false alarm AUV-09 warns of |
 | 2026-11-04 | **A drone is stopped from outside; the judge is told, no agent is** | The thesis is that the team notices on its own; only the experiment and the evaluator may know which drone was stopped |
