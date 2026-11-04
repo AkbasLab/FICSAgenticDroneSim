@@ -164,7 +164,7 @@ def conflicts_resolved(run: AllocationRun, contested_flight: bool) -> tuple[list
     return found, problems
 
 
-def leases_renewed(run: AllocationRun) -> list[str]:
+def leases_renewed(run: AllocationRun, slack_s: float = TICK_S) -> list[str]:
     problems = []
     for d, net in run.nets.items():
         problems += [f"{d}'s book: {e['task_id']} {e['why']}" for e in net["book_log"] if "lease ran out" in e["why"]]
@@ -177,7 +177,7 @@ def leases_renewed(run: AllocationRun) -> list[str]:
                      and m.message_type.value in ("task_award", "status_update", "task_complete")
                      and m.timestamp >= (claimed[-1] if claimed else 0.0) - EPS]
             gaps = [b - a for a, b in zip(times, times[1:])]
-            if not times or (gaps and max(gaps) > period + TICK_S + EPS):
+            if not times or (gaps and max(gaps) > period + slack_s + EPS):
                 problems.append(f"{d}'s reports on {task} left a gap of {max(gaps or [0]):.3f} s")
     return problems
 
@@ -193,10 +193,10 @@ def deterministic(a: AllocationRun, b: AllocationRun) -> list[str]:
     return problems
 
 
-def known_exactly(run: AllocationRun, scenario: Scenario) -> dict[str, Any]:
+def known_exactly(run: AllocationRun, scenario: Scenario, tolerance: dict[str, Any] | None = None) -> dict[str, Any]:
     sc = dataclasses.replace(scenario, random_seed=run.team.seed)
     s = knowledge_summary(knowledge_log(run.team.traces, Truth(sc, run.team.trajectories, run.team.start,
-                                                              run.team.report.until)))
+                                                              run.team.report.until), tolerance))
     return {"ok": s["ok"] == s["decisions"] and s["decisions"] > 0, "decisions": s["decisions"], "passed": s["ok"],
             "problems": s["problems"][:20]}
 
@@ -228,6 +228,30 @@ def exit_checks(flights: dict[str, AllocationRun], scenario: Scenario) -> dict[s
                           "problems": [p for k in known.values() for p in k["problems"]][:20]},
     }
     checks["all"] = all(checks[k]["ok"] for k in CHECKS)
+    return checks
+
+
+LIVE_CHECKS = ("met", "no_central_assignment", "one_holder_each", "conflicts_resolved", "leases_renewed",
+               "known_exactly")
+LIVE_SLACK_S = 2 * TICK_S       # live, a tick is the real clock's: a report may come a tick late
+
+
+def live_checks(run: AllocationRun, scenario: Scenario, tolerance: dict[str, Any]) -> dict[str, Any]:
+    """The checks one deliberating flight can be held to on its own (determinism needs a second flight)."""
+    tasks = [f"search {s.id}" for s in scenario.sectors]
+    central = no_central_assignment(run, everyone_heard=True)
+    holders = one_holder_each(run, tasks)
+    found, quiet = conflicts_resolved(run, contested_flight=False)
+    leases = leases_renewed(run, LIVE_SLACK_S)
+    known = known_exactly(run, scenario, tolerance)
+    met = [] if run.met else ["the flight did not meet the mission"]
+    checks = {"met": {"ok": not met, "problems": met},
+              "no_central_assignment": {"ok": not central, "problems": central},
+              "one_holder_each": {"ok": not holders, "problems": holders},
+              "conflicts_resolved": {"ok": not quiet, "conflicts": found, "problems": quiet},
+              "leases_renewed": {"ok": not leases, "problems": leases},
+              "known_exactly": known}
+    checks["all"] = all(checks[k]["ok"] for k in LIVE_CHECKS)
     return checks
 
 

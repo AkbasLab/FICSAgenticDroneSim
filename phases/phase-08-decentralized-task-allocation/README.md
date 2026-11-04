@@ -49,7 +49,8 @@ deterministic. Optionally, two drones dividing two sectors in CarlaAir.
 | The contract-net protocol (8.2, 8.4, 8.5) | `agentic_uav/coordination/contract_net.py`, `agentic_uav/core/messages.py` | **Done** 2026-11-04; goldens unedited; Phase 7 reproduces |
 | Agents that allocate | `agentic_uav/agents/team_policy.py`, `agentic_uav/agents/drone_agent.py` (coordinator), `agentic_uav/experiments/allocation.py` (`fly_team_on_mock`), `agentic_uav/simulator/message_bus.py` (tie order) | **Done** 2026-11-04; goldens unedited; Phases 5–7 reproduce |
 | The exit | `agentic_uav/experiments/allocation_exit.py`, `scripts/allocation_exit.py`, `results/`, `evidence/` | **Done** 2026-11-04; exit met on the mock |
-| Optional live flight; close | `results/`, `evidence/` | step 6 |
+| The live path (6) | `agentic_uav/experiments/allocation.py` (`fly_team_live`), `agentic_uav/experiments/allocation_exit.py` (`live_checks`), `scripts/allocation_exit.py --sim airsim` | **Done** 2026-11-04; real-time dry run on the mock passes |
+| Optional live flight; close | `results/`, `evidence/` | the close; the live flight not flown |
 
 ## Plan
 
@@ -501,6 +502,47 @@ following its seeds -- each closed by a test above.
 
 **The goldens did not move.** `record_golden.py --check` matches all four.
 878 tests pass, 24 skipped; audit clean.
+
+### 2026-11-04 — step 6: the live path
+
+**`fly_team_live`** (`experiments/allocation.py`): Phase 7's live path with the
+team policy -- reset; Drone2 spawned at runtime; both at rest; the poller and
+the separation monitor; one agent per drone on its own thread on the real
+clock, each skill on its own connection, sensors from the poller; **every
+message delivered**, the exit's network. Each drone is told the team mission
+and nothing more. It comes back as a `LiveAllocationFlight`, and `as_run`
+makes it the exit's `AllocationRun`, so the checks apply unchanged.
+
+**`allocation_exit.py --sim airsim`** flies the live variant's pair
+(`search_relay_live_small`, S1 and S2), deliberating, and holds it to **six
+checks** -- met, no central assignment, one holder each, no conflict, leases
+renewed (a report may come a tick later than on the mock: the real clock's
+tick), known exactly within one observed poll of flight -- since determinism
+needs a second flight. The mock twin is flown beside it with all seven. The
+verdict reads **"Live flight"**, never "Exit criterion".
+
+**The real-time dry run** (the mock standing in for AirSim, 38.3 s): Drone2
+spawned at runtime, both finished, each at its own height, **all six checks
+passed**. The pair divided the two sectors themselves, **Drone1 S2, Drone2 S1**
+-- the bids from pads 4 m apart, at 12 and 16 m.
+
+**Tests: 14, in `tests/test_allocation_live.py`** (2 real time, behind
+`AUV_SLOW_TESTS`): the path refusing pads off the spawn layout; a live flight
+as a run the checks apply to, both sectors divided, a claim without every
+bid failing it, its record; the script's
+live record -- six checks for the flight, seven for its twin, the verdict the
+flight's and following the checks, a flight that did not finish not met; live
+options only live; and, in real time on the mock, the live path and the
+script whole.
+
+**Mutations: 16, all caught** -- 11 by the fast tests and 5 (the bus's
+range, both drones at one height, the grounds lost, the live slack, the live
+tolerance dropped) only by the real-time tests, run for them. The first pass
+left one survivor, the live checks ignoring no-central-assignment; the test
+for it is above.
+
+**The goldens did not move.** `record_golden.py --check` matches all four.
+890 tests pass, 26 skipped; audit clean.
 
 ## Decisions
 
