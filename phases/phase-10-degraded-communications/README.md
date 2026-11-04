@@ -45,7 +45,7 @@ reported beside it, as findings.
 | The network model (10.1, 10.3); the four conditions (10.2) | `agentic_uav/simulator/network.py`, `agentic_uav/experiments/conditions.py`, `configs/network/`, `agentic_uav/simulator/message_bus.py` | **Done** 2026-11-04; goldens unedited; Phases 5–9 reproduce |
 | Message lifetimes (10.4) | `agentic_uav/core/messages.py`, `agentic_uav/agents/belief_state.py`, `agentic_uav/experiments/message_log.py` | **Done** 2026-11-04; goldens unedited; Phases 5–9 reproduce |
 | Link-health estimates (10.5) | `agentic_uav/agents/belief_state.py`, `agentic_uav/agents/drone_agent.py` | **Done** 2026-11-04; goldens unedited; Phases 5–9 reproduce |
-| Statistical verification (10.6) | `scripts/network_check.py`, `results/`, `evidence/` | step 4 |
+| Statistical verification (10.6) | `agentic_uav/experiments/network_check.py`, `scripts/network_check.py`, `results/`, `evidence/` | **Done** 2026-11-04; 10.6 verified |
 | The exit | `agentic_uav/experiments/network_exit.py`, `scripts/network_exit.py`, `results/`, `evidence/` | step 5 |
 
 ## Plan
@@ -335,10 +335,86 @@ is now held to at most one a second).
 **Phases 5–9 reproduce; the goldens did not move.** 1032 tests pass, 28
 skipped; audit clean.
 
+### 2026-11-04 — step 4: the network model verified statistically (10.6)
+
+**`experiments/network_check.py`, `scripts/network_check.py`**: heartbeats
+through the real bus, no flight, from the four canonical drones -- STEADY,
+each broadcasting once a second for 1000 s (12,000 deliveries a seed), and
+BURST, four a second for 100 s, which presses severe's two-a-second limit --
+under each condition, seeds 1–20. And two networks built only for the check,
+since the four conditions rarely reach these limits: SLOW (3 ± 1 s, around a
+heartbeat's lifetime), where many expire, and NARROW (500 bytes a second, four
+a second sent), where every drone's send queue grows.
+
+| Check | Held to |
+|---|---|
+| loss | the share lost, among what the network decided by chance, inside a 99 % binomial interval; with p = 0, none |
+| latency | arrival less departure (the queue recomputed from sizes) against the configured distribution -- a normal raised to the floor, a point mass there -- by a KS test at 1 % over distinct values |
+| rate limit | each admission against a bucket recomputed independently; refused to every recipient or none |
+| partitions | each delivery against the partition's rule, pair by pair and instant by instant |
+| expiry | nothing delivered past its lifetime, everything arriving past it expired, nothing left pending |
+| seeds | the same seed the same record; reversed sending order the same record; another seed another |
+
+**The verdict, stated before the run.** Loss and latency are tests at 1 %: a
+true model fails one in a hundred by chance, so each holds for a condition
+when no more than 2 of its 20 seeds reject (3 or more happen by chance about
+once in a thousand). The exact checks must hold on every seed.
+
+**The run of record** (`results/network-check-20261104-170034-check`, 145 s):
+**10.6 verified.** Loss measured 0.1011 against moderate's 0.10 and 0.2991
+against severe's 0.30, no seed rejected; latency 0.300 ± 0.099 s against
+0.3 ± 0.1 and 1.006 ± 0.488 s against 1 ± 0.5 (the floor raises the low tail:
+2.88 % at the floor, the normal's mass below it 2.87 %); **one rejection in
+160 tests** -- moderate seed 6, latency, D 0.0158 against 0.0157, as chance
+allows; 15,920 refusals in the bursts, each where the bucket says; 9,600
+deliveries cut by the partition, each where its rule says; 474 expired under
+severe and 66,678 under slow, none delivered late; every seed reproducing,
+order-free, and another seed differing. Evidence:
+[`evidence/network-check-2026-11-04.md`](evidence/network-check-2026-11-04.md),
+generated from the record.
+
+**Two traps in the checking itself, found and fixed before the run of
+record:**
+
+* **A latency is two clock readings apart.** Drawn at the 0.05 s floor, it
+  came back as 0.04999999999999716; drawn at nominal's fixed 0.1 s, as values
+  a hair either side. The reference CDF called the first impossible, and the
+  KS test read a tie as a spread: D sat at the critical value on **every**
+  severe seed, and at 55 times it on nominal -- a check failing a correct
+  model. Measured latencies are now taken to the nanosecond, so a tie is a
+  tie, and the reference allows a nanosecond at its steps.
+* **A broadcast is one admission, three deliveries.** The rate check kept the
+  last recipient's status only, so a message refused to one recipient and not
+  the others passed. A test built to fail it did not; it now looks at all of a
+  message's deliveries, and flags any that disagree. The first run made with
+  the flawed check was discarded and run again.
+
+**Tests: 23, in `tests/test_network_check.py`.** Each check passing on a real
+stream and failing on it altered to break it; the loss interval held at its
+edge (half an interval off holds, one and a half does not); rate-limited
+messages kept out of the loss count; the bucket never holding more than a
+second's worth after an idle spell; a clock not starting at zero; KS on known
+cases, from the left, and with ties; the CDF's floor and step; a latency drawn
+at the floor coming back at it; the stress networks, and one where nothing
+expires failing; the verdict's rule; the script writing its record, a failing
+check or stress network failing the run.
+
+**Mutations: 26 -- 25 caught, 1 equivalent** (the loss check with p = 0:
+with a zero-width interval, "none lost" and "within the interval" are the same
+test). The first pass caught 17; the eight gaps were all cases the streams
+never produce -- an interval's edge, rate-limited deliveries in the count, a
+bucket after idling, a clock not at zero, a sample below its place, a hair
+under the floor, a stress network that tests nothing, a run that ignores one --
+each now a test.
+
+**The goldens did not move.** 1048 tests pass, 28 skipped; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-11-04 | **A statistical check holds when no more than 2 of 20 seeds reject at 1 %; an exact one on every seed** | A true model fails a 1 % test one time in a hundred; demanding none would fail correct models, allowing many would pass wrong ones |
+| 2026-11-04 | **Measured latencies are taken to the nanosecond** | Two clock readings apart, a drawn value comes back a hair off it; without this the check fails a correct model |
 | 2026-11-04 | **Each link is estimated from what arrived, per teammate, over 10 s; shown, not acted on** | 10.5 asks for estimates the agent infers; acting on them is the experiment's factor, not this phase's |
 | 2026-11-04 | **Latency is estimated on the shared clock, and said so** | One-way latency needs synchronized clocks; the simulation has one clock, a real fleet would not |
 | 2026-11-04 | **Lifetimes stay in the protocol, not a network manifest** | A lifetime is the sender's and travels in the message; the network enforces it. A manifest copy would be read by nothing |
