@@ -343,6 +343,7 @@ FORBIDDEN_MODULES = ("agentic_uav.simulator", "agentic_uav.experiments",
                      # the ways round an import ban (Phase 6, 6.2)
                      "gc", "inspect", "ctypes", "sys", "importlib", "builtins")
 FORBIDDEN_NAMES = {"Scenario", "TargetSpec", "place_targets", "MockWorld", "random_seed",
+                   "NetworkModel", "load_network", "loss_probability",            # Phase 10 (AUV-10, 10.5)
                    "getattr", "setattr", "delattr", "vars", "globals", "locals", "eval", "exec",
                    "compile", "__import__", "breakpoint"}
 
@@ -352,7 +353,9 @@ def is_dunder(name):
 
 
 GROUND_TRUTH_TYPES = ("MockWorld", "Scenario", "MockVehicleAdapter", "AirSimAdapter", "Target",
-                      "PollingObserver", "SeparationMonitor", "SkillRunner", "MessageBus", "Delivery")
+                      "PollingObserver", "SeparationMonitor", "SkillRunner", "MessageBus", "Delivery",
+                      # Phase 10: the network condition an agent flies in is never its to read (AUV-10, 10.5)
+                      "NetworkModel", "Partition", "Transmitter")
 
 
 def ground_truth_reached(root):

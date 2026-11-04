@@ -320,6 +320,17 @@ class ChecksCanFailTests(unittest.TestCase):
         self.assertIn("leak: it knew where Drone1 really was",
                       self.problems(lambda b: b["mission"]["progress"].update(hint=[round(x, 3), round(y, 3)])))
 
+    def test_a_teammate_at_another_height_is_another_place(self):
+        # Phase 10: a record of one teammate at the x, y another teammate truly has, but at its own height,
+        # is not a leak of the second; that x, y written alone, or with the second's own height, is.
+        x, y, z = self.truth.position("Drone1", self.row["at"])
+        xy = [round(x, 3), round(y, 3)]
+        self.assertNotIn("leak", self.problems(lambda b: b["mission"]["progress"].update(hint=xy + [round(z + 12.0, 3)])))
+        self.assertIn("leak: it knew where Drone1 really was",
+                      self.problems(lambda b: b["mission"]["progress"].update(hint=xy + [round(z, 3)])))
+        self.assertIn("leak: it knew where Drone1 really was",
+                      self.problems(lambda b: b["mission"]["progress"].update(hint=xy)))
+
     def test_flying_directly_over_a_teammate_is_not_a_leak(self):
         # Phase 9: drones fly at different heights, and one passes directly over a stopped teammate hovering.
         # Its own position is its own -- judged as its position (here wrong, so incorrect), never as a leak.

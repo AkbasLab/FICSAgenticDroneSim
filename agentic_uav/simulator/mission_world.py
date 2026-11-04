@@ -286,7 +286,7 @@ class Connectivity:
     """
 
     def __init__(self, trajectories: list[Trajectory], base_xy: tuple[float, float],
-                 range_m: float, start: float, end: float) -> None:
+                 range_m: float, start: float, end: float, network: Any = None) -> None:
         if range_m <= 0:
             raise ValueError("communication range must be positive")
         self.range_m = range_m
@@ -303,6 +303,8 @@ class Connectivity:
                     if span:
                         spans.append(span)
                 merged = _merge(spans)
+                if network is not None:          # Phase 10: a partition cuts the link while it lasts
+                    merged = _cut(merged, [(start + w0, start + w1) for w0, w1 in network.windows(a.drone, b.drone)])
                 self.links[(a.drone, b.drone)] = merged
                 for s0, s1 in merged:
                     cuts.update((s0, s1))
@@ -333,6 +335,23 @@ class Connectivity:
             if s1 >= at:
                 return max(s0, at)
         return None
+
+
+def _cut(spans: list[tuple[float, float]], windows: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """Closed spans less the OPEN windows: a link is up at a window's very edges, down strictly inside."""
+    out = list(spans)
+    for a, b in windows:
+        kept = []
+        for s0, s1 in out:
+            if s1 <= a or s0 >= b:
+                kept.append((s0, s1))
+                continue
+            if s0 <= a:
+                kept.append((s0, a))
+            if s1 >= b:
+                kept.append((b, s1))
+        out = kept
+    return out
 
 
 def _static_knot(t: float, xy: tuple[float, float]) -> Knot:
@@ -446,7 +465,8 @@ class MissionFacts:
 
 
 def observe(scenario: Scenario, trajectories: dict[str, Trajectory] | list[Trajectory],
-            start: float, end: float, targets: tuple[Target, ...] | None = None) -> MissionFacts:
+            start: float, end: float, targets: tuple[Target, ...] | None = None,
+            network: Any = None) -> MissionFacts:
     """Measure one flight, over [start, end], against `scenario`.
 
     `trajectories` must be the scenario's own drones (any of them: AUV-05
@@ -465,7 +485,7 @@ def observe(scenario: Scenario, trajectories: dict[str, Trajectory] | list[Traje
 
     found = detections(trajs, targets, scenario.detection, start, end)
     radio = Connectivity(trajs, (scenario.base.x, scenario.base.y),
-                         scenario.network.communication_range_m, start, end)
+                         scenario.network.communication_range_m, start, end, network)
     reports = tuple(Report(d.target, d.drone, d.detected_at, radio.first_connection(d.drone, d.detected_at))
                     for d in found)
     return MissionFacts(

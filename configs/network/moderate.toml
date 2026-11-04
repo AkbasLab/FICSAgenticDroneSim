@@ -1,0 +1,14 @@
+# Phase 10's network factor, level 2 of 4: MODERATELY DEGRADED.
+#
+# Fixed on 2026-11-04, before any run (AUV-10, 10.2). Levels of an experimental
+# factor, not claims about any radio; calibrated later by pilots (AUV-16).
+# Range unlimited between drones, as in every level.
+about = "Moderate latency and jitter, about 10 % independent loss"
+
+[latency]
+mean_s = 0.3
+jitter_s = 0.1
+floor_s = 0.05
+
+[loss]
+probability = 0.10

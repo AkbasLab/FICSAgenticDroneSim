@@ -1,0 +1,18 @@
+# Phase 10's network factor, level 4 of 4: PARTITIONED.
+#
+# Fixed on 2026-11-04, before any run (AUV-10, 10.2). Levels of an experimental
+# factor, not claims about any radio; calibrated later by pilots (AUV-16).
+# Nominal links, and for one interval two groups that cannot reach each other;
+# the base is on one side, so the other group cannot reach it either -- even
+# through the first. Range unlimited between drones, as in every level.
+about = "Two groups cannot communicate for an interval; the base unreachable from one"
+
+[latency]
+mean_s = 0.1
+jitter_s = 0.0
+floor_s = 0.05
+
+[[partition]]
+groups = [["Drone1", "Drone2", "base"], ["Drone3", "Drone4"]]
+start_s = 60.0
+end_s = 120.0

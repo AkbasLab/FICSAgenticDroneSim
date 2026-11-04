@@ -1,0 +1,18 @@
+# Phase 10's network factor, level 3 of 4: SEVERELY DEGRADED.
+#
+# Fixed on 2026-11-04, before any run (AUV-10, 10.2). Levels of an experimental
+# factor, not claims about any radio; calibrated later by pilots (AUV-16).
+# Range unlimited between drones, as in every level.
+about = "High latency, about 30 % loss, a limited message rate"
+
+[latency]
+mean_s = 1.0
+jitter_s = 0.5
+floor_s = 0.05
+
+[loss]
+probability = 0.30
+
+[limits]
+rate_per_s = 2.0                 # messages a drone may send per second; a broadcast is one
+bandwidth_bytes_per_s = 4000.0   # a drone's send rate: a message waits for those before it

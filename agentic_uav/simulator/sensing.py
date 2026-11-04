@@ -28,16 +28,18 @@ from __future__ import annotations
 import math
 from collections import deque
 
+from typing import Any, Callable
+
 from ..core.scenario import Scenario
 from ..core.sensing import OwnState, Sensors, Sighting
-from .mission_world import battery, detections, place_targets
+from .mission_world import BASE_NODE, battery, detections, place_targets
 from .mock_adapter import MockWorld
 from .observer import PollingObserver, mock_trajectories, trajectories_from_samples
 
 
 def mock_sensors(world: MockWorld, scenario: Scenario, drone: str,
-                 start: float | None = None) -> Sensors:
-    """`drone`'s readings in `world`, counted from `start` (default: now)."""
+                 start: float | None = None, network: Any = None) -> Sensors:
+    """`drone`'s readings in `world`, counted from `start` (default: now); `network`, Phase 10's model, if any."""
     names = [v.id for v in scenario.vehicles]
     if drone not in names:
         raise ValueError(f"{drone} is not one of {scenario.scenario_id}'s drones")
@@ -74,13 +76,13 @@ def mock_sensors(world: MockWorld, scenario: Scenario, drone: str,
         paths = mock_trajectories(world, names, until_now=True)
         now = world.clock.now()
         points = {n: paths[n].position_at(now) for n in names}
-        return drone in _reach_base(points, base, range_m)
+        return drone in _reach_base(points, base, range_m, _blocked(network, now - t0))
 
     return Sensors(drone, now, own_state, battery_now, sightings_now, base_link_now)
 
 
 def polled_sensors(observer: PollingObserver, scenario: Scenario, drone: str, grounds: dict[str, float],
-                   start: float | None = None) -> Sensors:
+                   start: float | None = None, network: Any = None) -> Sensors:
     """`drone`'s readings in a LIVE flight, built from the poller's samples so far.
 
     The same rules as `mock_sensors`, on the poller's trajectory: straight
@@ -126,20 +128,28 @@ def polled_sensors(observer: PollingObserver, scenario: Scenario, drone: str, gr
 
     def base_link_now() -> bool:
         latest = {n: path.knots[-1].point for n, path in paths().items()}
-        return drone in _reach_base(latest, base, range_m)
+        return drone in _reach_base(latest, base, range_m, _blocked(network, clock.now() - t0))
 
     return Sensors(drone, now, own_state, battery_now, sightings_now, base_link_now)
 
 
+def _blocked(network: Any, since: float) -> Callable[[str, str], bool] | None:
+    """Phase 10: whether a partition keeps two nodes apart now (`since` the flight's start)."""
+    if network is None or not network.partitions:
+        return None
+    return lambda a, b: network.partitioned(a, b, since)
+
+
 def _reach_base(points: dict[str, tuple[float, float, float]], base: tuple[float, float, float],
-                range_m: float) -> set[str]:
-    """The drones a chain of links no longer than `range_m` joins to the base."""
+                range_m: float, blocked: Callable[[str, str], bool] | None = None) -> set[str]:
+    """The drones a chain of links no longer than `range_m` joins to the base -- none across a partition."""
     reached: set[str] = set()
-    frontier = deque([base])
+    frontier = deque([(BASE_NODE, base)])
     while frontier:
-        here = frontier.popleft()
+        here_name, here = frontier.popleft()
         for name, p in points.items():
-            if name not in reached and math.dist(here, p) <= range_m:
+            if name not in reached and math.dist(here, p) <= range_m \
+                    and (blocked is None or not blocked(here_name, name)):
                 reached.add(name)
-                frontier.append(p)
+                frontier.append((name, p))
     return reached

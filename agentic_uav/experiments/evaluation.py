@@ -155,15 +155,19 @@ def as_contacts(raw: Iterable[Any]) -> list[Contact]:
 def evaluate(scenario: Scenario, trajectories: dict[str, Trajectory] | list[Trajectory],
              start: float, end: float, contacts: Iterable[Any] = (), failed: Iterable[str] = (),
              observer: str = "mock-exact", targets: tuple[Target, ...] | None = None,
-             cell_m: float = DEFAULT_CELL_M) -> MissionReport:
-    """Judge one flight against `scenario`. See the module docstring for every definition."""
+             cell_m: float = DEFAULT_CELL_M, network: Any = None) -> MissionReport:
+    """Judge one flight against `scenario`. See the module docstring for every definition.
+
+    `network`, Phase 10's model, if the flight flew one: its partitions cut the
+    base link (a report waits until its drone can reach the base again).
+    """
     trajs = list(trajectories.values()) if isinstance(trajectories, dict) else list(trajectories)
     failed = set(failed)
     unknown = failed - {t.drone for t in trajs}
     if unknown:
         raise ValueError(f"failed drones with no trajectory: {sorted(unknown)}")
     until = min(end, start + scenario.mission.deadline_s)
-    facts = observe(scenario, trajs, start, until, targets)
+    facts = observe(scenario, trajs, start, until, targets, network)
     cov = coverage(scenario, trajs, start, until, cell_m)
     need = scenario.mission.targets_to_find
 

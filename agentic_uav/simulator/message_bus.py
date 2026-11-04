@@ -20,8 +20,15 @@ hard edge, the rule the evaluator uses for the base link -- judged at the
 instant the message is sent. A message sent in range is waiting for its
 recipient at once, so it is read at the recipient's next tick; one sent out
 of range is never delivered, and the record says why. `range_m=None` is
-unlimited range, for protocol tests. Relaying a message through other drones,
-latency, loss and partitions are Phase 10's network model.
+unlimited range, for protocol tests. Relaying a message through other drones
+is not modelled.
+
+A NETWORK MODEL (Phase 10, `simulator/network.py`) replaces all of that when
+one is given: latency with jitter, loss, a rate limit, bandwidth, range and
+partitions, each message's fate drawn from the model's seed and the message
+itself. Every message that does not arrive is recorded with why -- `lost`,
+`rate_limited`, `partitioned`, `out_of_range` or `expired`. Without a model the
+bus is exactly Phase 7's, so every earlier record reproduces.
 
 A FIXED DELAY, `delay_s`, below an agent's tick. With none, a message sent
 at the instant a teammate's thread reads its inbox would arrive or not by
@@ -63,10 +70,12 @@ from typing import Callable
 
 from ..core.clock import Clock
 from ..core.messages import BROADCAST, AgentMessage, Comms
+from .network import NetworkModel, Transmitter
 
 Point = tuple[float, float, float]           # x, y, altitude, in the mission frame
 
 DELIVERED, PENDING, OUT_OF_RANGE, EXPIRED = "delivered", "pending", "out_of_range", "expired"
+LOST, RATE_LIMITED, PARTITIONED = "lost", "rate_limited", "partitioned"          # Phase 10's network model
 
 
 @dataclass
@@ -84,9 +93,16 @@ class Delivery:
 
 class MessageBus:
     def __init__(self, drones: list[str] | tuple[str, ...], clock: Clock, positions: Callable[[str], Point],
-                 range_m: float | None, mission_id: str | None = None, delay_s: float = 0.0) -> None:
+                 range_m: float | None, mission_id: str | None = None, delay_s: float = 0.0,
+                 network: NetworkModel | None = None, start: float | None = None) -> None:
         if len(set(drones)) != len(drones) or not drones:
             raise ValueError(f"the roster must name each drone once: {drones}")
+        if network is not None:
+            if range_m is not None or delay_s:
+                raise ValueError("with a network model, range and latency are the model's: pass range_m=None, no delay_s")
+            if network.seed is None:
+                raise ValueError(f"network model {network.name!r} has no seed: use .seeded(seed)")
+            network.check_roster(drones)
         if range_m is not None and not (range_m > 0 and math.isfinite(range_m)):
             raise ValueError(f"range_m must be positive, or None for unlimited: {range_m}")
         if not (delay_s >= 0 and math.isfinite(delay_s)):
@@ -97,6 +113,9 @@ class MessageBus:
         self.positions = positions
         self.range_m = range_m
         self.mission_id = mission_id
+        self.network = network
+        self.start = clock.now() if start is None else start          # a partition's interval counts from here
+        self._tx = {d: Transmitter(network, self.start) for d in self.drones} if network is not None else {}
         self._lock = threading.Lock()
         self._inbox: dict[str, list[Delivery]] = {d: [] for d in self.drones}
         self._record: list[Delivery] = []
@@ -133,6 +152,9 @@ class MessageBus:
         now = self.clock.now()
         here = self.positions(drone)
         with self._lock:
+            if self.network is not None:
+                self._send_through(drone, message, recipients, here, now)
+                return
             for r in recipients:
                 d = math.dist(here, self.positions(r))
                 if self.range_m is None or d <= self.range_m:
@@ -141,6 +163,31 @@ class MessageBus:
                 else:
                     delivery = Delivery(message, r, now, None, OUT_OF_RANGE, distance_m=d)
                 self._record.append(delivery)
+
+    def _send_through(self, drone: str, message: AgentMessage, recipients: list[str], here: tuple, now: float) -> None:
+        """Phase 10: the network model decides each recipient's delivery. Called holding the lock."""
+        net, tx = self.network, self._tx[drone]
+        distances = {r: math.dist(here, self.positions(r)) for r in recipients}
+        if not tx.admit(now):                     # over the rate limit: not sent at all
+            for r in recipients:
+                self._record.append(Delivery(message, r, now, None, RATE_LIMITED, distance_m=distances[r]))
+            return
+        left = tx.sent_by(now, len(json.dumps(message.as_json()).encode("utf-8")))
+        since = now - self.start
+        for r in recipients:
+            d = distances[r]
+            if net.range_m is not None and d > net.range_m:
+                delivery = Delivery(message, r, now, None, OUT_OF_RANGE, distance_m=d)
+            elif net.partitioned(drone, r, since):
+                delivery = Delivery(message, r, now, None, PARTITIONED, distance_m=d)
+            else:
+                lost, latency = net.draw(drone, r, message.sequence_number)
+                if lost:
+                    delivery = Delivery(message, r, now, None, LOST, distance_m=d)
+                else:
+                    delivery = Delivery(self._copy(message), r, now, left + latency, PENDING, distance_m=d)
+                    self._inbox[r].append(delivery)
+            self._record.append(delivery)
 
     def receive_available(self, drone: str) -> tuple[AgentMessage, ...]:
         now = self.clock.now()

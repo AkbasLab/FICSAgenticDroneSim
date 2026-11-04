@@ -122,7 +122,8 @@ def source_of(path: str) -> str | None:
 class Truth:
     """A flight's ground truth, asked at any instant. Never handed to an agent."""
 
-    def __init__(self, scenario: Scenario, trajectories: dict[str, Trajectory], start: float, end: float) -> None:
+    def __init__(self, scenario: Scenario, trajectories: dict[str, Trajectory], start: float, end: float,
+                 network: Any = None) -> None:
         # `end` is the flight's end by the clock, as the evaluator takes it: a trajectory's last
         # knot can fall a rounding short of it (187.49999999999963 against 187.5).
         self.scenario = scenario
@@ -131,7 +132,7 @@ class Truth:
         self.targets = place_targets(scenario)
         self.end = end
         self.links = Connectivity(list(trajectories.values()), (scenario.base.x, scenario.base.y),
-                                  scenario.network.communication_range_m, start, end)
+                                  scenario.network.communication_range_m, start, end, network)
         self._first_seen = {d: {x.target: x.detected_at for x in detections([t], self.targets, scenario.detection,
                                                                              start, end)}
                             for d, t in trajectories.items()}
@@ -390,15 +391,24 @@ def _check(belief: dict[str, Any], drone: str, t: float, truth: Truth, out: Know
             # Its own record, which came in a delivered message, may say where it is; nothing else may.
             # Nor is its own position a leak: drones fly at different heights, and one directly over a
             # hovering teammate shares its x, y (Phase 9) -- what it senses of itself says nothing of another.
+            # And a teammate's place is where it is in 3D: another drone's position at the same x, y but its
+            # own height is another place (Phase 10: under latency, Drone2's record of Drone1 on a lane at
+            # 12 m matched Drone4 crossing it at 24 m). Written as x, y alone, or in full, it is a leak.
             elsewhere = json.dumps([k for k in known
                                     if not k["what"].startswith(f"team.{name}.") and k["what"] != "self.position"])
-            if _mentions(elsewhere, truth_pos[:2]):
+            if _mentions_place(elsewhere, truth_pos):
                 out.problems.append(f"leak: it knew where {name} really was, beyond what it heard from it")
 
 
 def _mentions(text: str, xy: list[float]) -> bool:
     """Whether the point appears as an x, y pair, as the snapshot would round and write it."""
     return f"[{json.dumps(round(xy[0], 3))}, {json.dumps(round(xy[1], 3))}" in text
+
+
+def _mentions_place(text: str, xyz: list[float]) -> bool:
+    """Whether a drone's place appears: as x, y alone, or as x, y and its own height -- not at another height."""
+    x, y, z = (json.dumps(round(v, 3)) for v in xyz[:3])
+    return f"[{x}, {y}]" in text or f"[{x}, {y}, {z}]" in text
 
 
 # --------------------------------------------------------------- a whole run

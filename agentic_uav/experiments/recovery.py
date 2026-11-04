@@ -78,6 +78,7 @@ class RecoveryRun:
     stopped: dict[str, float] = field(default_factory=dict)             # drone -> when it was stopped
     policies: dict[str, dict[str, Any]] = field(default_factory=dict)    # each drone's policy record
     searched: dict[str, list[str]] = field(default_factory=dict)
+    network: Any = None              # Phase 10: the seeded network model it flew, if any -- the judge's, never an agent's
 
     @property
     def survivors(self) -> list[str]:
@@ -91,7 +92,7 @@ class RecoveryRun:
 
 def fly_recovery_on_mock(scenario: Scenario, config: AllocationConfig, health: HealthConfig,
                          label: str = "no stop", stop: dict[str, float] | None = None,
-                         range_m: float | None | str = None) -> RecoveryRun:
+                         range_m: float | None | str = None, network: Any = None) -> RecoveryRun:
     """The team told the team mission, with the recovery policy; each drone in `stop` stopped at its time.
 
     A stop is made FROM OUTSIDE, at a set time from the flight's start: the
@@ -99,8 +100,15 @@ def fly_recovery_on_mock(scenario: Scenario, config: AllocationConfig, health: H
     and the drone holds where it is -- a companion computer dying while the
     autopilot holds. No agent code knows about it. The judge is told which
     drones were stopped (AUV-05: "all functioning drones return safely").
+
+    `network` (Phase 10): a network condition, seeded here with the flight's own
+    seed, carried by the bus and cutting the base link in a partition; the
+    sensing, the judge and the knowledge log's truth see it, no agent does.
     """
     stop = dict(stop or {})
+    if network is not None and range_m is not None:
+        raise ValueError("with a network model, range is the model's: pass range_m=None")
+    model = None if network is None else network.seeded(scenario.random_seed)
     roster = [v.id for v in scenario.vehicles]
     unknown = sorted(set(stop) - set(roster))
     if unknown:
@@ -111,14 +119,17 @@ def fly_recovery_on_mock(scenario: Scenario, config: AllocationConfig, health: H
         adapter.place_vehicle(v.id, Position(v.start_x, v.start_y, world.ground_z))
     heights = {d: BASE_ALTITUDE_M + i * ALTITUDE_STEP_M for i, d in enumerate(roster)}
     executors = {d: ActionExecutor(SkillRunner(MockVehicleAdapter(world), d, world.clock)) for d in roster}
-    sensors = {d: mock_sensors(world, scenario, d) for d in roster}
+    sensors = {d: mock_sensors(world, scenario, d, network=model) for d in roster}
 
     def where(drone: str) -> tuple[float, float, float]:
         p = world.position(drone)
         return (p.x, p.y, world.ground_z - p.z)
 
     reach = scenario.network.communication_range_m if range_m == "scenario" else range_m
-    bus = MessageBus(roster, world.clock, where, reach, mission_id=scenario.scenario_id, delay_s=MESSAGE_DELAY_S)
+    if model is None:
+        bus = MessageBus(roster, world.clock, where, reach, mission_id=scenario.scenario_id, delay_s=MESSAGE_DELAY_S)
+    else:
+        bus = MessageBus(roster, world.clock, where, None, mission_id=scenario.scenario_id, network=model)
     brief = scenario.brief()
     policies = {d: RecoveryPolicy(ContractNet(d, tasks_from_brief(brief), config), health, altitude_m=heights[d])
                 for d in roster}
@@ -157,7 +168,8 @@ def fly_recovery_on_mock(scenario: Scenario, config: AllocationConfig, health: H
         drone, exc = sorted(errors.items())[0]
         raise RuntimeError(f"{drone}'s agent raised: {type(exc).__name__}: {exc}") from exc
     trajectories = mock_trajectories(world, roster)
-    report = evaluate(scenario, trajectories, start, world.clock.now(), contacts=world.contacts(), failed=list(stopped))
+    report = evaluate(scenario, trajectories, start, world.clock.now(), contacts=world.contacts(), failed=list(stopped),
+                      network=model)
     skills = {d: tuple((e.command.skill.value, "running" if e.running else
                         (e.result.status.value if e.result is not None else "error"))
                        for e in executors[d].history()) for d in roster}
@@ -167,7 +179,7 @@ def fly_recovery_on_mock(scenario: Scenario, config: AllocationConfig, health: H
                         {d: tuple(agents[d].trace) for d in roster if d in agents},
                         {d: agents[d].finished for d in roster if d in agents},
                         skills, start, trajectories, bus.deliveries())
-    return RecoveryRun(team, config, health, stopped, {d: policies[d].as_json() for d in roster}, searched)
+    return RecoveryRun(team, config, health, stopped, {d: policies[d].as_json() for d in roster}, searched, model)
 
 
 # ------------------------------------------------------------------- live

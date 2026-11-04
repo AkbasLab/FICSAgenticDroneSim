@@ -182,7 +182,7 @@ def deterministic(a: RecoveryRun, b: RecoveryRun) -> list[str]:
 def known_exactly(run: RecoveryRun, scenario: Scenario, tolerance: dict[str, Any] | None = None) -> dict[str, Any]:
     sc = dataclasses.replace(scenario, random_seed=run.team.seed)
     s = knowledge_summary(knowledge_log(run.team.traces, Truth(sc, run.team.trajectories, run.team.start,
-                                                              run.team.report.until), tolerance))
+                                                              run.team.report.until, run.network), tolerance))
     return {"ok": s["decisions"] > 0 and s["ok"] == s["decisions"], "decisions": s["decisions"], "passed": s["ok"],
             "problems": s["problems"][:20]}
 
