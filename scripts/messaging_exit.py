@@ -3,6 +3,7 @@
 
     python scripts/messaging_exit.py                       # seeds 1-20, each flown talking, blocked, silent
     python scripts/messaging_exit.py --seeds 17 --block t
+    python scripts/messaging_exit.py --scenario search_relay_live_small    # the live variant's pair, on the mock
 
 AUV-07's exit criterion: "Four deterministic agents exchange heartbeats and
 status messages while flying. Their local team beliefs update only when
@@ -11,6 +12,10 @@ shown: every seed is flown TALKING (Phase 7's perfect network, 100 m),
 BLOCKED (range cut to 1 m: sent, never delivered) and SILENT (no messaging),
 and checked -- met, exchanged, only on delivery, known exactly, blocked
 moves nothing, steers nothing.
+
+`--scenario search_relay_live_small` flies the live variant's two agents
+(S1, S2; a 20 m radio) the same three ways: the mock gate for the live flight
+of step 6. The exit itself is the canonical four.
 
 Outputs, under phases/phase-07-inter-agent-messaging/results/ by default:
 
@@ -44,10 +49,12 @@ from agentic_uav.experiments.messaging import (  # noqa: E402
 from agentic_uav.experiments.provenance import provenance  # noqa: E402
 from agentic_uav.experiments.scenarios import load_scenario, scenario_path  # noqa: E402
 from agentic_uav.experiments.search_relay import EXIT_SEEDS  # noqa: E402
-from agentic_uav.experiments.single_agent import MESSAGE_DELAY_S, TEAM_TASKS  # noqa: E402
+from agentic_uav.experiments.single_agent import MESSAGE_DELAY_S, PAIR_TASKS, TEAM_TASKS  # noqa: E402
 
 DEFAULT_OUT = os.path.join(REPO, "phases", "phase-07-inter-agent-messaging", "results")
 SCENARIO = "search_relay_001"
+LIVE_SCENARIO = "search_relay_live_small"
+TASKS = {SCENARIO: TEAM_TASKS, LIVE_SCENARIO: PAIR_TASKS}      # who flies, per scenario
 CHECKS = ("met", "exchanged", "only_on_delivery", "known_exactly", "blocked_moves_nothing", "steers_nothing")
 
 
@@ -67,6 +74,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seeds", type=seeds_arg, default=EXIT_SEEDS)
     parser.add_argument("--out", default=DEFAULT_OUT)
     parser.add_argument("--block", metavar="LABEL")
+    parser.add_argument("--scenario", choices=sorted(TASKS), default=SCENARIO)
     args = parser.parse_args(argv)
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -74,12 +82,14 @@ def main(argv: list[str] | None = None) -> int:
         pass
 
     started = time.strftime("%Y-%m-%dT%H:%M:%S")
-    scenario = load_scenario(SCENARIO)
+    scenario = load_scenario(args.scenario)
+    tasks = TASKS[args.scenario]
+    is_exit = args.scenario == SCENARIO
     wall = time.perf_counter()
     rows: list[dict] = []
     table = []
     for seed in args.seeds:
-        flights = messaging_flights(scenario, seed)
+        flights = messaging_flights(scenario, seed, tasks)
         checks = exit_checks(flights, scenario)
         talk = flights["talking"]
         rows.append({"kind": "seed", "seed": seed, "checks": checks,
@@ -92,14 +102,16 @@ def main(argv: list[str] | None = None) -> int:
 
     ok = all(c["all"] for _, c in table)
     header = {"kind": "header", "t": started, "scenario": scenario.scenario_id,
-              "scenario_file": os.path.relpath(scenario_path(SCENARIO), REPO).replace(os.sep, "/"),
-              "tasks": TEAM_TASKS, "seeds": list(args.seeds), "range_m": scenario.network.communication_range_m,
+              "scenario_file": os.path.relpath(scenario_path(args.scenario), REPO).replace(os.sep, "/"),
+              "tasks": tasks, "seeds": list(args.seeds), "range_m": scenario.network.communication_range_m,
               "blocked_range_m": BLOCKED_RANGE_M, "delay_s": MESSAGE_DELAY_S,
-              "seeds_passed": sum(c["all"] for _, c in table), "exit_criterion_met": ok,
+              "seeds_passed": sum(c["all"] for _, c in table),
+              ("exit_criterion_met" if is_exit else "live_variant_gate_passed"): ok,
               "wall_s": round(wall, 2), "code": provenance()}
 
     lines = [f"# Messaging exit — {scenario.scenario_id}, mock", "",
-             f"Run {started}, `scripts/messaging_exit.py`, {wall:.1f} s wall. Four rule agents, S1–S4, each flown "
+             f"Run {started}, `scripts/messaging_exit.py`, {wall:.1f} s wall. {len(tasks)} rule agents, "
+             f"{', '.join(t.split()[-1] for t in tasks.values())}, each flown "
              f"talking (range {scenario.network.communication_range_m:g} m, read at the next tick), blocked "
              f"(range {BLOCKED_RANGE_M:g} m) and silent.", "",
              "| Seed | " + " | ".join(CHECKS) + " | Records checked | Delivered / out of range / pending |",
@@ -110,7 +122,8 @@ def main(argv: list[str] | None = None) -> int:
                      + f" | {c['only_on_delivery']['records_checked']} | "
                        f"{st.get('delivered', 0)} / {st.get('out_of_range', 0)} / {st.get('pending', 0)} |")
     problems = [f"seed {s}, {k}: {p}" for s, c in table for k in CHECKS for p in c[k]["problems"]]
-    lines += ["", f"**Exit criterion: {'MET' if ok else 'NOT MET'}** — {header['seeds_passed']} of {len(table)} seeds "
+    verdict = f"Exit criterion: {'MET' if ok else 'NOT MET'}" if is_exit else         f"Live-variant gate: {'PASSED' if ok else 'NOT PASSED'} (the gate for the live flight, not the exit)"
+    lines += ["", f"**{verdict}** — {header['seeds_passed']} of {len(table)} seeds "
                   f"passed every check.", ""]
     if problems:
         lines += ["Problems:", ""] + [f"* {p}" for p in problems[:50]] + [""]

@@ -48,7 +48,8 @@ beliefs do not move. Optionally, two drones talking in CarlaAir.
 | Agents that talk | `agentic_uav/agents/drone_agent.py`, `agentic_uav/agents/belief_state.py`, `agentic_uav/experiments/single_agent.py` (`messaging=True`) | **Done** 2026-11-02; goldens unedited; Phases 5–6 reproduce |
 | The exit | `agentic_uav/experiments/messaging.py`, `agentic_uav/experiments/knowledge.py` (heard teammates), `scripts/messaging_exit.py`, `results/`, `evidence/` | **Done** 2026-11-02; exit met on the mock |
 | The clock's same-instant order (6a) | `agentic_uav/core/clock.py` (`sleep_after_others`), `agentic_uav/agents/drone_agent.py` | **Done** 2026-11-04; goldens unedited; Phases 5–7 reproduce |
-| Optional live flight; close | `results/`, `evidence/` | step 6b–6e |
+| The live variant's mock gate (6b) | `scripts/messaging_exit.py --scenario search_relay_live_small`, `results/` | **Done** 2026-11-04; 20 of 20 seeds; the exit reproduces |
+| Optional live flight; close | `results/`, `evidence/` | step 6c–6e |
 
 ## Plan
 
@@ -531,6 +532,50 @@ skipping itself), so that every line left is tested.
 **The goldens did not move.** `record_golden.py --check` matches all four.
 739 tests pass, 22 skipped; audit clean.
 
+### 2026-11-04 — step 6b: the live variant's mock gate
+
+**What flies live, flown first on the mock.** `scripts/messaging_exit.py`
+takes `--scenario search_relay_live_small`: the live variant's two agents,
+Drone1 on S1 and Drone2 on S2 (Phase 6's pair), on the variant's 20 m radio,
+each seed flown talking, blocked and silent and held to the same six checks.
+The default is unchanged, the canonical four, and only it is the exit: the
+variant's verdict reads **"Live-variant gate"**, and its record carries
+`live_variant_gate_passed`, never `exit_criterion_met`, so the gate cannot be
+read as the exit.
+
+**The run of record** (`results/messaging-exit-20261104-005602-live-variant-mock`,
+at `13517cf` with the step-6b files uncommitted, `agentic_uav` digest
+`c2a0d0ab5b3fc079`, 60 flights, 4.6 s): **20 of 20 seeds passed every check.**
+
+* **296 teammate records, in 336 decisions,** each traced to a message
+  delivered to that drone before the decision.
+* **1,020 messages delivered, 516 out of range, 60 pending** at the end for an
+  agent that had landed; in the blocked flights 1,596 sent, none delivered.
+* **They talk near the pads and fall silent searching,** as the plan meant: in
+  seed 17 every delivered message crossed at most 19.9 m, and the 26 out of
+  range were sent from 11.0 to 20.0 s, at 22.2–36.2 m, the lanes being 36 m
+  apart; back over the pads they were heard again.
+* **A record expires by its kind.** At 16 s Drone1's record of Drone2 was
+  expired at 6 s old, while at 17–18 s Drone2's of Drone1, 7–8 s old, was
+  current: Drone1 last heard a heartbeat (current for 3 s), Drone2 a status
+  update (10 s), each sent at 10.0 s just inside range. By design (step 1's
+  lifetimes), and each record shown as what it was.
+* **What mattered:** in seed 17, 11 messages were in a belief when a decision
+  was made, and 9 were read by the policy deciding.
+
+**Tests: 5 new, in `tests/test_messaging_exit.py`:** the pair passes every
+check; they talk within 20 m and fall silent beyond it, in range at the start
+and again at the end; the 1 m blocked radio still blocks on these pads, 4 m
+apart; the script flies the variant and labels it a gate, not the exit; an
+unknown scenario is refused.
+
+**Mutations: 9, all caught** (the tasks, scenario, file and label each wired
+wrong; the refusal removed).
+
+**The exit did not move:** re-run at this code, the canonical run of record
+(`messaging-exit-20261102-213008-exit`) is identical, 2,415 rows. **The
+goldens did not move.** 744 tests pass, 22 skipped; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -547,6 +592,7 @@ skipping itself), so that every line left is tested.
 | 2026-11-02 | **Each seed is flown talking, blocked and silent** | "Only when delivered" needs a case where messages are sent and not delivered; the blocked flight is that case, and the silent one is the reference the others' decisions are held to |
 | 2026-11-02 | **A heard teammate's position may stand only in its own record, and must be true to when it spoke** | The leak check now has messages to allow for; allowing them only in the record that came in one, and checking that record against the truth, keeps the check as strict as before |
 | 2026-11-04 | **Fix the same-instant race in the clock: an agent's tick wakes after everything else due then** | It is a defect of the shared timeline, so it is fixed there; moving the agents' ticks off the skills' instants would have moved every decision time, and the runs of record would no longer reproduce |
+| 2026-11-04 | **The live variant's mock run is a gate, labelled so** | Two agents on a 20 m radio are what will fly live, so they are proved on the mock first; but the criterion names four agents, so the variant's record must never read as the exit |
 
 ## Open questions
 

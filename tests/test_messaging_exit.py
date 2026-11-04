@@ -17,6 +17,7 @@ teammates that are heard: a teammate's position may stand in its own record,
 true to where it was when it spoke, and nowhere else.
 """
 
+import contextlib
 import copy
 import dataclasses
 import io
@@ -45,6 +46,7 @@ from agentic_uav.experiments.messaging import (  # noqa: E402
 )
 
 TEAM = scenarios.load_scenario("search_relay_001")
+LIVE = scenarios.load_scenario("search_relay_live_small")
 
 
 def retrace(run, drone, index, change):
@@ -234,6 +236,74 @@ class ScriptTests(unittest.TestCase):
             self.assertIn("**Exit criterion: MET**", buffer.getvalue())
         finally:
             shutil.rmtree(out, ignore_errors=True)
+
+
+class LiveVariantTests(unittest.TestCase):
+    """The live variant's pair, on the mock: the gate before it is flown live (step 6b)."""
+
+    @classmethod
+    def setUpClass(cls):
+        from agentic_uav.experiments.single_agent import PAIR_TASKS
+        cls.tasks = PAIR_TASKS
+        cls.flights = messaging_flights(LIVE, 17, PAIR_TASKS)
+        cls.talk = cls.flights["talking"]
+        cls.rows = message_log(cls.talk.deliveries, cls.talk.traces, cls.talk.start)
+        cls.checks = exit_checks(cls.flights, LIVE)
+
+    def test_every_check_passes(self):
+        self.assertEqual(sorted(self.talk.tasks), ["Drone1", "Drone2"])
+        for name in ("met", "exchanged", "only_on_delivery", "known_exactly", "blocked_moves_nothing", "steers_nothing"):
+            with self.subTest(check=name):
+                self.assertTrue(self.checks[name]["ok"], self.checks[name]["problems"][:5])
+        self.assertTrue(self.checks["all"])
+        self.assertGreater(self.checks["only_on_delivery"]["records_checked"], 0)
+
+    def test_they_talk_near_the_pads_and_fall_silent_searching(self):
+        self.assertEqual(LIVE.network.communication_range_m, 20.0)
+        delivered = [r for r in self.rows if r["status"] == "delivered"]
+        far = [r for r in self.rows if r["status"] == "out_of_range"]
+        self.assertTrue(delivered and far)
+        self.assertLessEqual(max(r["distance_m"] for r in delivered), 20.0)
+        self.assertGreater(min(r["distance_m"] for r in far), 20.0)
+        self.assertGreater(max(r["distance_m"] for r in far), 30.0)          # the lanes are 36 m apart
+        # In range at the start, out of it while searching, in range again before the end.
+        first_far = min(r["sent_s"] for r in far)
+        last_far = max(r["sent_s"] for r in far)
+        self.assertTrue(any(r["sent_s"] < first_far for r in delivered))
+        self.assertTrue(any(r["sent_s"] > last_far for r in delivered))
+
+    def test_the_blocked_radio_still_blocks_on_these_pads(self):
+        # The pads are 4 m apart here too: nothing is within 1 m.
+        self.assertEqual(self.checks["blocked_moves_nothing"]["delivered"], 0)
+        self.assertGreater(self.checks["blocked_moves_nothing"]["sent"], 0)
+
+    def test_the_script_flies_it(self):
+        import messaging_exit
+        out = tempfile.mkdtemp()
+        try:
+            buffer = io.StringIO()
+            with redirect_stdout(buffer):
+                code = messaging_exit.main(["--seeds", "17", "--out", out, "--scenario", "search_relay_live_small"])
+            self.assertEqual(code, 0)
+            jsonl = next(f for f in os.listdir(out) if f.endswith(".jsonl"))
+            with open(os.path.join(out, jsonl), encoding="utf-8") as h:
+                header = json.loads(h.readline())
+            self.assertEqual((header["scenario"], header["tasks"], header["range_m"]),
+                             ("search_relay_live_small", self.tasks, 20.0))
+            self.assertEqual(header["scenario_file"], "configs/scenarios/search_relay_live_small.toml")
+            # A gate, not the exit: it must not be read as the exit criterion.
+            self.assertTrue(header["live_variant_gate_passed"])
+            self.assertNotIn("exit_criterion_met", header)
+            self.assertIn("**Live-variant gate: PASSED", buffer.getvalue())
+            self.assertNotIn("Exit criterion", buffer.getvalue())
+        finally:
+            shutil.rmtree(out, ignore_errors=True)
+
+    def test_an_unknown_scenario_is_refused(self):
+        import messaging_exit
+        with redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                messaging_exit.main(["--scenario", "search_single_001"])
 
 
 if __name__ == "__main__":
