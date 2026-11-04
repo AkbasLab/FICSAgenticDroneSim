@@ -29,7 +29,11 @@ Mirrored from `AUV-22 — Phase Objectives Checklist`.
 > The same mission can be replayed under nominal, degraded, severe and
 > partitioned conditions with **reproducible message delivery**.
 
-**Met:** no · **Evidence:** —
+**Met:** on the mock, 2026-11-04 — 20 of 20 seeds passed all four checks: the canonical mission under each
+condition, with no stop and with Drone1 stopped at 60 s, every flight twice, and on Phase 9's network once
+(360 flights) · **Evidence:**
+[`evidence/exit-criterion-2026-11-04.md`](evidence/exit-criterion-2026-11-04.md), and for 10.6
+[`evidence/network-check-2026-11-04.md`](evidence/network-check-2026-11-04.md).
 
 Planned evidence: the canonical four-drone mission with Phase 9's agents,
 seeds 1–20, under each of the four conditions, with no stop and with Drone1
@@ -46,7 +50,7 @@ reported beside it, as findings.
 | Message lifetimes (10.4) | `agentic_uav/core/messages.py`, `agentic_uav/agents/belief_state.py`, `agentic_uav/experiments/message_log.py` | **Done** 2026-11-04; goldens unedited; Phases 5–9 reproduce |
 | Link-health estimates (10.5) | `agentic_uav/agents/belief_state.py`, `agentic_uav/agents/drone_agent.py` | **Done** 2026-11-04; goldens unedited; Phases 5–9 reproduce |
 | Statistical verification (10.6) | `agentic_uav/experiments/network_check.py`, `scripts/network_check.py`, `results/`, `evidence/` | **Done** 2026-11-04; 10.6 verified |
-| The exit | `agentic_uav/experiments/network_exit.py`, `scripts/network_exit.py`, `results/`, `evidence/` | step 5 |
+| The exit | `agentic_uav/experiments/network_exit.py`, `scripts/network_exit.py`, `results/`, `evidence/` | **Done** 2026-11-04; exit met on the mock |
 
 ## Plan
 
@@ -409,10 +413,79 @@ each now a test.
 
 **The goldens did not move.** 1048 tests pass, 28 skipped; audit clean.
 
+### 2026-11-04 — step 5: the exit, met on the mock
+
+**`experiments/network_exit.py`**: the canonical four-drone mission with
+Phase 9's agents, each seed under each condition with no stop and with
+Drone1 stopped at 60 s -- the same failure at the same time (10.3) -- every
+flight twice, and on Phase 9's own network once, both ways. **Four checks**,
+each shown able to fail:
+
+| Check | What it requires |
+|---|---|
+| reproducible | every message's fate and time identical between the two flights, in a canonical order; and every record and decision |
+| as configured | message by message, the network did what its condition says: each loss and latency the model's own draw after its sender's queue, each refusal where the bucket says, each cut where the partition says, nothing out of range, nothing delivered past its lifetime |
+| nominal is Phase 9 | nominal's flights, both ways, are Phase 9's: every delivery, record and decision |
+| known exactly | Phase 6's knowledge log passes every decision, under every condition |
+
+"Known exactly" was not in the plan's list; it was added because the
+agents' knowledge staying within what they sensed and what arrived is a
+correctness property, and must hold under any network.
+
+**The run of record** (`results/network-exit-20261104-174326-exit`, at
+`e0efe8b` with the step-5 files uncommitted, `agentic_uav` digest
+`ed301de89476f791`, 360 flights, 1453 s): **20 of 20 seeds passed every
+check**; 28,921 decisions known exactly.
+
+**Beside the exit, how the team fared** -- findings, not pass conditions,
+over the 20 seeds:
+
+| Condition / flight | Met | Completion s (median) | Searched twice | Leases run out | Alarms about live drones (suspected / failed) | Loss estimated |
+|---|---|---|---|---|---|---|
+| nominal / no stop | 20/20 | 194.1 | 0 | 0 | 0 / 0 | 0 |
+| moderate / no stop | 20/20 | 307.7 | 20 | 18 | 30 / 4 | 0.088 |
+| severe / no stop | 20/20 | 510.9 | 54 | 161 | 1,129 / 22 | 0.290 |
+| partitioned / no stop | 20/20 | 313.3 | 20 | 80 | 160 / 160 | 0 |
+
+* **The mission was met under every condition, both ways, on every seed.**
+* **Paid for in repeated work and time**: a holder's progress lost on the way
+  lets its lease run out while it works, and the sector is searched again.
+* **The ladder raises false alarms**: 1,129 suspicions of live drones under
+  severe, 22 carried to failed. Under the partition, **each side called the
+  other failed** at 29.5 s into it -- exactly as for a stopped drone -- and
+  took them back when it healed: from silence alone, a partition longer than
+  the failure threshold is a failure. The open question Phase 9 left is now
+  measurable.
+* **A stop under loss is no longer detected at Phase 9's thresholds** (1 of 20
+  under severe): the last message heard from the stopped drone comes earlier,
+  so the rungs do too. The team still finished.
+* **No stale-message decision**, under any condition.
+
+**Evidence:** [`evidence/exit-criterion-2026-11-04.md`](evidence/exit-criterion-2026-11-04.md),
+generated from the record: every seed's checks, the findings by condition,
+every message's fate, and seed 17's partition taken for a failure, drone by
+drone.
+
+**Tests: 21, in `tests/test_network_exit.py`.** Every check passing on a real
+seed's flights (nominal and partitioned) and failing on them altered: another
+fate, record or decision on the second flight; the comparison blind to the
+order threads sent in; a loss the model did not draw, an arrival off its draw,
+a delivery across the partition, a refusal no bucket made, out of range
+without a range, a delivery past its lifetime; nominal drifting from Phase 9;
+a decision knowing too much; the findings' counts; the script's record and
+verdict, nominal required among the conditions.
+
+**Mutations: 21, all caught. The first pass caught 17; the four gaps were the exit's own wiring -- "known exactly" and the seed's verdict never driven to fail through `exit_checks` itself, a lease counted twice when a second book noticed it later, and an undetected stop never shown in the findings -- each now a test.**
+
+**The goldens did not move; Phases 5–9 reproduce.** 1076 tests pass, 28
+skipped; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-11-04 | **The exit also holds every decision to "known exactly"** | What an agent knows staying within what it sensed and what arrived is a correctness property, under any network |
+| 2026-11-04 | **How the team fared is recorded, not passed or failed** | The network is the independent variable; Phase 10 makes it reproducible, the experiment measures its effect |
 | 2026-11-04 | **A statistical check holds when no more than 2 of 20 seeds reject at 1 %; an exact one on every seed** | A true model fails a 1 % test one time in a hundred; demanding none would fail correct models, allowing many would pass wrong ones |
 | 2026-11-04 | **Measured latencies are taken to the nanosecond** | Two clock readings apart, a drawn value comes back a hair off it; without this the check fails a correct model |
 | 2026-11-04 | **Each link is estimated from what arrived, per teammate, over 10 s; shown, not acted on** | 10.5 asks for estimates the agent infers; acting on them is the experiment's factor, not this phase's |

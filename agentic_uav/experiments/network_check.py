@@ -137,13 +137,12 @@ def latency_cdf(x: float, mean: float, jitter: float, floor: float) -> float:
     return 0.5 * (1.0 + math.erf((x - mean) / (jitter * math.sqrt(2.0))))
 
 
-def latencies(stream: dict[str, Any]) -> list[float]:
-    """Each message's latency, per recipient: scheduled arrival less when it finished leaving its sender."""
-    bw = stream["model"].bandwidth_bytes_per_s
+def departures(deliveries: Any, model: NetworkModel) -> dict[tuple[str, int], float]:
+    """When each message finished leaving its sender: its sender's queue, recomputed from the sizes."""
+    bw = model.bandwidth_bytes_per_s
     left: dict[tuple[str, int], float] = {}
     busy: dict[str, float] = {}
-    out = []
-    for d in sorted(stream["deliveries"], key=lambda d: (d.sent_at, d.message.sender_id, d.message.sequence_number)):
+    for d in sorted(deliveries, key=lambda d: (d.sent_at, d.message.sender_id, d.message.sequence_number)):
         if d.status == RATE_LIMITED:              # never sent: never queued
             continue
         key = (d.message.sender_id, d.message.sequence_number)
@@ -151,7 +150,16 @@ def latencies(stream: dict[str, Any]) -> list[float]:
             begin = max(d.sent_at, busy.get(key[0], d.sent_at))
             left[key] = begin + size_of(d.message) / bw if bw else d.sent_at
             busy[key[0]] = left[key]
-        if d.scheduled_at is not None:
+    return left
+
+
+def latencies(stream: dict[str, Any]) -> list[float]:
+    """Each message's latency, per recipient: scheduled arrival less when it finished leaving its sender."""
+    left = departures(stream["deliveries"], stream["model"])
+    out = []
+    for d in sorted(stream["deliveries"], key=lambda d: (d.sent_at, d.message.sender_id, d.message.sequence_number)):
+        key = (d.message.sender_id, d.message.sequence_number)
+        if d.status != RATE_LIMITED and d.scheduled_at is not None:
             # to the nanosecond: two clock readings apart, a latency drawn at the floor comes back a hair either
             # side of it, and the same draw must come back as the same value, or a tie looks like a spread
             out.append(round(d.scheduled_at - left[key], 9))
