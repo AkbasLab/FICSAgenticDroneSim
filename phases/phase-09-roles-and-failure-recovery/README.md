@@ -44,7 +44,7 @@ report. Optionally, two drones in CarlaAir, one stopped.
 | Artifact | Location | State |
 |---|---|---|
 | Teammate-failure detection (9.2) | `agentic_uav/coordination/health.py`, `configs/recovery/default.toml`, `agentic_uav/experiments/recovery.py` | **Done** 2026-11-04; goldens unedited; Phases 5–8 reproduce |
-| Roles and their triggers (9.1) | `agentic_uav/coordination/roles.py`, `agentic_uav/core/messages.py` | step 2 |
+| Roles and their triggers (9.1) | `agentic_uav/coordination/roles.py`, `agentic_uav/core/messages.py` (`ROLE_CHANGE`) | **Done** 2026-11-04; goldens unedited |
 | Recovery behaviour (9.3); stopping an agent | `agentic_uav/agents/team_policy.py`, `agentic_uav/coordination/`, `agentic_uav/experiments/` | step 3 |
 | The exit; reprioritization; 9.4 | `agentic_uav/experiments/`, `scripts/`, `results/`, `evidence/` | step 4 |
 | Optional live flight; close | `results/`, `evidence/` | step 5 |
@@ -165,10 +165,60 @@ log's source; the detector inside the boundary.
 exit and gate, Phase 8's exit, all identical. **The goldens did not move.**
 904 tests pass, 26 skipped; audit clean.
 
+### 2026-11-04 — step 2: roles, and what changes them (9.1)
+
+**`coordination/roles.py`**: the three roles, each a pure function of the
+drone's own belief -- what its contract-net says it holds, what its failure
+detector says of its teammates:
+
+| Role | When | Does |
+|---|---|---|
+| SCOUT | it holds a task | searches it |
+| RELAY | it is free, and a teammate is UNREACHABLE but not FAILED | bridges toward it: holds half way from the base to the teammate's last known position (`relay_point`) |
+| RESERVE | it is free, and nothing calls for a relay | stays available for a returned task |
+
+**A task in hand outranks a relay, a relay outranks waiting**: a scout does
+not drop its task to relay; free, it may (9.3: "a scout may become a relay if
+connectivity is lost"). A drone starts a RESERVE -- told the mission, holding
+nothing yet. `RoleKeeper` logs only changes, each with why, and each is
+announced in a **`ROLE_CHANGE`** message (a new schema: role, previous, why).
+
+**AUV-09's six triggers, and how each is taken:** remaining tasks (a claim
+makes a scout; finished, a reserve); loss of a teammate (its task comes back
+through the lease, a reserve bids, a scout again); communication topology (an
+unreachable, not failed, teammate makes a free drone a relay; RECOVERED or
+FAILED ends it); battery (a drone that can bid for nothing goes home, the
+policy's own checks); number of active drones (through the above); a
+high-priority target -- **not yet**.
+
+**One part of the plan narrowed, said here.** The plan gave RELAY a second
+trigger, "the base out of reach with sightings unreported". Building it showed
+it needs a teammate's sightings, and no message carries one yet
+(`TARGET_FOUND` has no schema) -- the same reason the high-priority-target
+trigger waits. Both are left for the phase that gives sightings a message.
+And under Phase 9's network an UNREACHABLE teammate is a stopped one on its
+way to FAILED, so a free drone may start to bridge toward it for those twenty
+seconds; whether that happens in flight is counted in the exit, not assumed
+away.
+
+**Tests: 10, in `tests/test_roles.py`:** the three roles; a task makes a
+scout; a task outranks a relay; free with a teammate unreachable, a relay
+(the names sorted); free and nothing calling, a reserve; where a relay holds;
+the keeper starting a reserve and logging only changes; its JSON; the
+`ROLE_CHANGE` message, refused without why, with an empty or no role; roles
+inside the boundary.
+
+**Mutations: 10, all caught.** The first pass caught 9; the survivor was a
+role allowed to be none, closed by a test.
+
+**The goldens did not move.** 914 tests pass, 26 skipped; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-11-04 | **A role is a pure function of what the drone holds and hears** | Roles then result from the agents' interactions and nothing else, which is 9.4's fourth condition |
+| 2026-11-04 | **RELAY triggers on an unreachable teammate only, for now** | Its second trigger, and a high-priority target, need a teammate's sightings in a message, which none carries yet |
 | 2026-11-04 | **Health is read from silence alone, at 3, 10 and 30 s** | A drone cannot see a teammate stop, only stop hearing it; three missed heartbeats, a lease, and three leases keep one missed message from ever counting as a failure |
 | 2026-11-04 | **The ladder shows in the belief only for a drone with a detector** | Every earlier agent's snapshot, and every run of record built on it, stays exactly as it was |
 

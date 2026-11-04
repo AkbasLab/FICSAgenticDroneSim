@@ -59,9 +59,10 @@ class TypeTests(unittest.TestCase):
         # Phase 7's two, and from Phase 8 the six of the contract-net; nothing else yet.
         task = {MessageType.TASK_ANNOUNCEMENT, MessageType.TASK_BID, MessageType.TASK_AWARD, MessageType.TASK_ACCEPT,
                 MessageType.TASK_RELEASE, MessageType.TASK_COMPLETE}
-        self.assertEqual(set(SCHEMAS), {MessageType.HEARTBEAT, MessageType.STATUS_UPDATE} | task)
+        later = task | {MessageType.ROLE_CHANGE}                         # Phase 9's
+        self.assertEqual(set(SCHEMAS), {MessageType.HEARTBEAT, MessageType.STATUS_UPDATE} | later)
         self.assertEqual(DEFAULT_TTL_S, {MessageType.HEARTBEAT: 3.0, MessageType.STATUS_UPDATE: 10.0,
-                                         **{t: 10.0 for t in task}})
+                                         **{t: 10.0 for t in later}})
         # Phase 7's two schemas are as they were.
         self.assertEqual(SCHEMAS[MessageType.HEARTBEAT], {"position": "point", "airborne": "flag", "battery": "number",
                                                           "task": "text_or_none", "stage": "text_or_none"})

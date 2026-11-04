@@ -12,8 +12,8 @@ filled with an invented type. Six are the contract-net protocol of Phase 8
 `INTENT_UPDATE` is the shared-intent half of controlled emergence.
 
 PAYLOAD SCHEMAS ONLY FOR THE TYPES IN USE. Phase 7 sends `HEARTBEAT` and
-`STATUS_UPDATE`; Phase 8 adds the six `TASK_*` of its contract-net. The other
-five exist as names; a message of a type with no schema yet is refused, so no
+`STATUS_UPDATE`; Phase 8 adds the six `TASK_*` of its contract-net, Phase 9
+`ROLE_CHANGE`. The other four exist as names; a message of a type with no schema yet is refused, so no
 phase can start sending one without first saying what it carries. Every
 payload field is checked: none missing, none unknown, each of its kind.
 
@@ -119,6 +119,8 @@ SCHEMAS: dict[MessageType, dict[str, str]] = {
     MessageType.TASK_ACCEPT: {"task_id": "text", "version": "version", "holder": "text"},
     MessageType.TASK_RELEASE: {"task_id": "text", "version": "version", "why": "text"},
     MessageType.TASK_COMPLETE: {"task_id": "text", "version": "version"},
+    # Phase 9: a drone announcing its new role, and why (AUV-09, 9.1).
+    MessageType.ROLE_CHANGE: {"role": "text", "previous": "text", "why": "text"},
 }
 
 # Fields that come all together or not at all (Phase 8: a holder's progress).
@@ -139,6 +141,7 @@ DEFAULT_TTL_S: dict[MessageType, float] = {
     MessageType.TASK_ACCEPT: 10.0,
     MessageType.TASK_RELEASE: 10.0,
     MessageType.TASK_COMPLETE: 10.0,
+    MessageType.ROLE_CHANGE: 10.0,
 }
 
 
