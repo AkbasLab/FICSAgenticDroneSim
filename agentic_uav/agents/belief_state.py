@@ -71,6 +71,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..core.geometry import Region
+from ..core.messages import EXPIRY_TOL_S
 from ..core.scenario import MissionBrief
 from ..core.sensing import Sighting
 from ..core.team import TeamReport
@@ -164,7 +165,8 @@ class TeamRecord:
         return now - self.report.at
 
     def current(self, now: float) -> bool:
-        return now < self.expires_at
+        # Past its lifetime at the very instant it ends, as a message is (`core.messages.EXPIRY_TOL_S`).
+        return now < self.expires_at - EXPIRY_TOL_S
 
     def confidence(self, now: float) -> float:
         """The source's confidence, falling linearly with age to zero at expiry."""

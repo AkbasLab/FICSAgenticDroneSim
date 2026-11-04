@@ -19,7 +19,20 @@ INFLUENCE, AT TWO LEVELS (Phase 7 plan, recommendation 5):
   policy can show.
 
 A message that was never delivered can do neither, and the log says why it
-was not: out of range, expired, or still pending when the flight ended.
+was not: out of range, expired, or still pending when the flight ended -- and,
+on Phase 10's network, lost, rate-limited or partitioned.
+
+LIFETIMES (Phase 10, AUV-10 10.4). Two things the log checks, and one it counts:
+
+* NEVER DELIVERED LATE (`late`, on the bus's own times): no message reaches its recipient at or after
+  its lifetime's end. The bus guarantees it; the log shows it, flight by flight.
+* NEVER CURRENT LATE (`current_late`): no team record past its lifetime is
+  ever held as current in a decision's belief.
+* STALE-MESSAGE DECISIONS (`stale_decisions`), AUV-10's diagnostic: decisions
+  whose policy read a teammate's record already past its lifetime. Not an
+  error in itself -- a relay flies toward a silent teammate's last known
+  place on purpose -- but "a stale intent acted upon is worse than no intent
+  at all", so each is counted and named.
 Times are counted from `start`, the flight's beginning. Rows come in a fixed
 order -- sent time, sender, sequence number, recipient -- since agents on
 their own threads may send at the same instant in either order.
@@ -65,6 +78,38 @@ def message_log(deliveries: Iterable[Any], traces: dict[str, Iterable[Any]], sta
             "in_belief_at_s": _rel(in_belief.get(key), start), "read_by_policy_at_s": _rel(read.get(key), start),
         })
     return rows
+
+
+def late(deliveries: Iterable[Any]) -> list[Any]:
+    """Deliveries made at or after the message's lifetime ended -- on the bus's own times, not the log's
+    rounded ones: there must be none."""
+    return [d for d in deliveries if d.status == "delivered" and d.message.expired(d.delivered_at)]
+
+
+def current_late(traces: dict[str, Iterable[Any]], start: float = 0.0) -> list[dict[str, Any]]:
+    """Team records held as current in a decision's belief although past their lifetime: there must be none."""
+    out = []
+    for drone, trace in traces.items():
+        for entry in map(_json, trace):
+            for mate, record in entry["belief"].get("team", {}).items():
+                if isinstance(record, dict) and record.get("current") and record.get("expires_in_s", 1.0) <= 0:
+                    out.append({"drone": drone, "at_s": _rel(entry["at"], start), "teammate": mate,
+                                "message_id": record.get("message_id")})
+    return out
+
+
+def stale_decisions(traces: dict[str, Iterable[Any]], start: float = 0.0) -> list[dict[str, Any]]:
+    """Decisions whose policy read a teammate's record past its lifetime (AUV-10's diagnostic), in time order."""
+    out = []
+    for drone, trace in traces.items():
+        for entry in map(_json, trace):
+            read = set(entry.get("read", []))
+            for mate, record in entry["belief"].get("team", {}).items():
+                if isinstance(record, dict) and not record.get("current") and record.get("message_id") in read:
+                    out.append({"drone": drone, "at_s": _rel(entry["at"], start), "teammate": mate,
+                                "message_id": record["message_id"], "past_lifetime_s": -record["expires_in_s"],
+                                "action": entry.get("action")})
+    return sorted(out, key=lambda r: (r["at_s"], r["drone"], r["teammate"]))
 
 
 def summary(rows: list[dict[str, Any]]) -> dict[str, Any]:

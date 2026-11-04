@@ -43,7 +43,7 @@ reported beside it, as findings.
 | Artifact | Location | State |
 |---|---|---|
 | The network model (10.1, 10.3); the four conditions (10.2) | `agentic_uav/simulator/network.py`, `agentic_uav/experiments/conditions.py`, `configs/network/`, `agentic_uav/simulator/message_bus.py` | **Done** 2026-11-04; goldens unedited; Phases 5–9 reproduce |
-| Message lifetimes (10.4) | `configs/network/lifetimes.toml`, `agentic_uav/core/messages.py` | step 2 |
+| Message lifetimes (10.4) | `agentic_uav/core/messages.py`, `agentic_uav/agents/belief_state.py`, `agentic_uav/experiments/message_log.py` | **Done** 2026-11-04; goldens unedited; Phases 5–9 reproduce |
 | Link-health estimates (10.5) | `agentic_uav/agents/belief_state.py` | step 3 |
 | Statistical verification (10.6) | `scripts/network_check.py`, `results/`, `evidence/` | step 4 |
 | The exit | `agentic_uav/experiments/network_exit.py`, `scripts/network_exit.py`, `results/`, `evidence/` | step 5 |
@@ -68,7 +68,8 @@ reproduce.
 2. **Message lifetimes (10.4).** The lifetime table into a manifest, the same
    values; expired messages counted per condition; a "stale-message decisions"
    diagnostic -- decisions that read a teammate's record past its lifetime --
-   which must be zero by construction, and is checked.
+   which must be zero by construction, and is checked. *(Both changed in
+   building it: see step 2's record.)*
 3. **Agents estimate their own links (10.5).** Per teammate, over a recent
    window: heartbeat arrival rate, loss from missing sequence numbers,
    latency, round-trip time on acknowledged contract-net claims -- in the
@@ -218,10 +219,72 @@ the boundary's lists extended in `tests/test_sensing.py`.
 exit and gate, Phase 8's exit, Phase 9's exit, all identical. **The goldens
 did not move.** 1010 tests pass, 28 skipped; audit clean.
 
+### 2026-11-04 — step 2: message lifetimes (10.4)
+
+**One part of the plan changed, said here.** The plan moved the lifetime table
+into a network manifest. Building it showed it does not belong there: a
+lifetime is set by the SENDER and travels in the message (`time_to_live_s`);
+the network only enforces it. A manifest copy would hold the same numbers,
+read by nothing -- an agent may not read an experiment's manifest -- so **the
+table stays in the protocol** (`core/messages.py`), mapped to AUV-10's classes,
+and every run can record it (`lifetimes()`). It moves to a manifest when a
+phase varies it. AUV-10's classes:
+
+| Class | Lifetime | Types |
+|---|---|---|
+| heartbeat | short: 3 s, three missed at 1 Hz | HEARTBEAT |
+| current intent | short: 10 s, a decision's worth and a lease | STATUS_UPDATE, the six TASK_* types, ROLE_CHANGE |
+| target report | longer | none sent: TARGET_FOUND has no schema |
+| mission constraints | mission-long | none sent: the team mission comes in the brief |
+
+A type with no schema has no lifetime and cannot be sent at all, so nothing
+travels unbounded.
+
+**The instant a lifetime ends, settled.** Under severe latency two heartbeats
+were delivered at the very tick their 3 s lifetime ended: lifetimes and ticks
+are both whole half seconds, and whether 302.7 + 3.0 fell a hair above or below
+the clock's 305.7 decided it -- float rounding, not the rule. **A message read
+at the instant its lifetime ends is now expired, and a team record is no
+longer current, give or take a nanosecond** (`EXPIRY_TOL_S`). Every run of
+record re-ran identical, Phases 5–9 included: no earlier flight had a message
+or a record on that instant.
+
+**What the message log checks and counts** (`experiments/message_log.py`):
+
+* **Never delivered late** (`late`, on the bus's own times, not the log's
+  rounded ones): none, in any flight.
+* **Never current late** (`current_late`): no record past its lifetime held as
+  current in any decision's belief.
+* **Stale-message decisions** (`stale_decisions`), AUV-10's diagnostic:
+  decisions whose policy read a teammate's record already past its lifetime.
+  **Not zero by construction, as the plan said** -- a relay flies toward a
+  silent teammate's last known place on purpose -- so they are counted and
+  named, each with how far past its lifetime the record was.
+
+**The canonical mission under every condition, with and without Drone1
+stopped at 60 s:** nothing delivered late, nothing held current late, **no
+stale-message decision** -- these policies read only current records, and
+none relays here. Messages expired on the way only under severe (9 with no
+stop, 3 with Drone1 stopped), and all of them heartbeats, the shortest-lived.
+
+**Tests: 11, in `tests/test_lifetimes.py`.** The table as fixed, a type
+without a schema refused; the instant a lifetime ends, for a message and a
+record, a hair either side; the three log functions on entries built to pass
+and to fail; and the eight flights -- nothing late, every message carrying its
+type's lifetime, only severe expiring, and only heartbeats, no stale decision.
+
+**Mutations: 11, all caught on the first pass.**
+
+**Phases 5–9 reproduce; the goldens did not move.** 1021 tests pass, 28
+skipped; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-11-04 | **Lifetimes stay in the protocol, not a network manifest** | A lifetime is the sender's and travels in the message; the network enforces it. A manifest copy would be read by nothing |
+| 2026-11-04 | **At the instant a lifetime ends, a message is expired and a record not current** | Lifetimes and ticks share the half-second grid; without a rule, float rounding decided |
+| 2026-11-04 | **Stale-message decisions are counted, not forbidden** | A relay reads a silent teammate's last known place on purpose; AUV-10 asks for the diagnostic |
 | 2026-11-04 | **A message's fate is keyed by the message, not drawn from a shared stream** | Threads send in no fixed order at one instant; a shared stream would make the lost messages depend on it |
 | 2026-11-04 | **A partition is judged the same way by the bus, the sensing and the judge, with a microsecond's allowance** | A decision "at" the partition's start is that instant give or take the clock's rounding; three different answers would be three different truths |
 | 2026-11-04 | **Deliveries are compared in a canonical order** | The record lists them in the order threads sent them, which no flight controls |

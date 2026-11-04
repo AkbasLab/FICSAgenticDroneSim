@@ -128,9 +128,24 @@ OPTIONAL_GROUPS: dict[MessageType, dict[str, str]] = {
     MessageType.STATUS_UPDATE: {"task_id": "text", "task_version": "version", "task_progress": "fraction"},
 }
 
-# How long a message is current after its timestamp (AUV-10, 10.4: a
-# heartbeat short-lived, longer for what changes less often). Phase 10 will
-# put these under the network model; until then they are fixed here.
+# How long a message is current after its timestamp (AUV-10, 10.4): a lifetime
+# per message class, set by the SENDER and carried in the message; the network
+# only enforces it (the bus never delivers a message past it, and a team record
+# past it is never current). So it belongs to the protocol, not to the network
+# model, and stays here (Phase 10, step 2). AUV-10's classes:
+#
+#   heartbeat            short          HEARTBEAT, 3 s: three missed at 1 Hz
+#   current intent       short          STATUS_UPDATE and the TASK_* messages, ROLE_CHANGE: 10 s,
+#                                       a decision's worth (the periodic check) and a lease
+#                                       (INTENT_UPDATE itself has no schema yet, so none is sent)
+#   target report        longer         none sent yet: TARGET_FOUND has no schema
+#   mission constraints  mission-long   none sent: the team mission comes in the brief, and
+#                                       MISSION_UPDATE has no schema
+#
+# A type with no schema has no lifetime: `new_message` refuses it, so none can be sent unbounded.
+#
+# Every run records the table it flew (`lifetimes()`).
+EXPIRY_TOL_S = 1e-9           # a message read at its lifetime's end, give or take float rounding, is expired
 DEFAULT_TTL_S: dict[MessageType, float] = {
     MessageType.HEARTBEAT: 3.0,          # three heartbeats at 1 Hz
     MessageType.STATUS_UPDATE: 10.0,     # a decision's worth: the periodic check is 10 s
@@ -143,6 +158,11 @@ DEFAULT_TTL_S: dict[MessageType, float] = {
     MessageType.TASK_COMPLETE: 10.0,
     MessageType.ROLE_CHANGE: 10.0,
 }
+
+
+def lifetimes() -> dict[str, float]:
+    """The lifetime of each message type, as a run records it."""
+    return {t.value: s for t, s in DEFAULT_TTL_S.items()}
 
 
 def payload_problems(message_type: MessageType, payload: Any) -> list[str]:
@@ -222,7 +242,10 @@ class AgentMessage:
         return self.timestamp + self.time_to_live_s
 
     def expired(self, now: float) -> bool:
-        return now >= self.expires_at
+        # At the very instant its lifetime ends it is expired. Lifetimes and ticks are both whole half
+        # seconds, so that instant is often a tick, and 302.7 + 3.0 lands a hair above 305.7: without
+        # the allowance, float rounding -- not the rule -- would decide (Phase 10, step 2).
+        return now >= self.expires_at - EXPIRY_TOL_S
 
     def is_for(self, drone: str) -> bool:
         return drone != self.sender_id and (self.recipient_ids == BROADCAST or drone in self.recipient_ids)
