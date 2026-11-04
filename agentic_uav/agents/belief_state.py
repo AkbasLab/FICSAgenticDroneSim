@@ -211,6 +211,8 @@ class BeliefState:
     read_ids: set[str] = field(default_factory=set, repr=False)    # message ids read during this decision
     listening: bool = False                                        # does the agent take in messages
     links: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)   # per sender: what was heard
+    # Phase 9: each teammate's rung on its own failure detector's ladder, when it has one.
+    teammate_health: dict[str, str] | None = field(default=None, repr=False)
 
     @classmethod
     def start(cls, brief: MissionBrief, vehicle_id: str, first: Observation) -> "BeliefState":
@@ -352,7 +354,7 @@ class BeliefState:
         me, m, lm, c = self.self_, self.mission, self.local_map, self.communication
         now = me.updated_at
         h = me.health
-        return {
+        snap = {
             "schema": SCHEMA_VERSION,
             "self": {"vehicle_id": me.vehicle_id, "position": [round(me.x, 3), round(me.y, 3), round(me.altitude_m, 3)],
                      "velocity": _known([round(v, 3) for v in me.velocity] if me.velocity else None),
@@ -385,6 +387,10 @@ class BeliefState:
                              "age_s": round(now - a.at, 3), "confidence": a.confidence}
                             for a in sorted(self.assumptions.values(), key=lambda a: a.key)],
         }
+        if self.teammate_health is not None:
+            # Only a drone with a failure detector (Phase 9) has it: every earlier snapshot is as it was.
+            snap["communication"]["teammate_health"] = dict(sorted(self.teammate_health.items()))
+        return snap
 
     # ------------------------------------------------------------ internal
 

@@ -104,6 +104,7 @@ SOURCES = (
     ("communication.estimated_latency_s", "a measurement of the link, from Phase 7"),
     ("communication.recent_loss_rate", "a measurement of the link, from Phase 7"),
     ("communication.connected_peers", "a measurement of the link, from Phase 7"),
+    ("communication.teammate_health", "its own failure detector, from what it heard (Phase 9)"),
     ("team", "the brief's roster"),
     ("team.", "a teammate report"),
     ("assumptions.", "assumed"),

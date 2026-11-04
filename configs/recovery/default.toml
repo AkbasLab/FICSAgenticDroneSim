@@ -1,0 +1,11 @@
+# Phase 9's recovery manifest: when a teammate is suspected, unreachable, failed.
+#
+# Fixed on 2026-11-04, before any run, from the 1 s heartbeat (AUV-09, 9.2:
+# "do not declare failure after one missed message"). Every run records the
+# manifest it used. Silence is how long a drone has heard nothing at all from
+# a teammate (agentic_uav/coordination/health.py).
+
+[health]
+suspected_s = 3.0       # three heartbeats missed: the heartbeat's own lifetime
+unreachable_s = 10.0    # a lease: the moment a silent holder's task returns to the pool
+failed_s = 30.0
