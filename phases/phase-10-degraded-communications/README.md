@@ -44,7 +44,7 @@ reported beside it, as findings.
 |---|---|---|
 | The network model (10.1, 10.3); the four conditions (10.2) | `agentic_uav/simulator/network.py`, `agentic_uav/experiments/conditions.py`, `configs/network/`, `agentic_uav/simulator/message_bus.py` | **Done** 2026-11-04; goldens unedited; Phases 5–9 reproduce |
 | Message lifetimes (10.4) | `agentic_uav/core/messages.py`, `agentic_uav/agents/belief_state.py`, `agentic_uav/experiments/message_log.py` | **Done** 2026-11-04; goldens unedited; Phases 5–9 reproduce |
-| Link-health estimates (10.5) | `agentic_uav/agents/belief_state.py` | step 3 |
+| Link-health estimates (10.5) | `agentic_uav/agents/belief_state.py`, `agentic_uav/agents/drone_agent.py` | **Done** 2026-11-04; goldens unedited; Phases 5–9 reproduce |
 | Statistical verification (10.6) | `scripts/network_check.py`, `results/`, `evidence/` | step 4 |
 | The exit | `agentic_uav/experiments/network_exit.py`, `scripts/network_exit.py`, `results/`, `evidence/` | step 5 |
 
@@ -278,10 +278,69 @@ type's lifetime, only severe expiring, and only heartbeats, no stale decision.
 **Phases 5–9 reproduce; the goldens did not move.** 1021 tests pass, 28
 skipped; audit clean.
 
+### 2026-11-04 — step 3: each drone estimates its own links (10.5)
+
+**`agents/belief_state.py`**: an agent on Phase 10's network keeps, for each
+teammate, over the last 10 s of what arrived (`communication.links`):
+
+| Estimate | From |
+|---|---|
+| heartbeat rate | heartbeats heard per second |
+| loss | sequence numbers missing between the lowest and highest heard, over that span -- lost, rate-limited or cut off alike |
+| latency | arrival less the message's timestamp, on the shared clock (a real fleet would need synchronized clocks; this estimate assumes them) |
+| round trip | its claim (TASK_AWARD) to that teammate's acknowledgement (TASK_ACCEPT naming it): `drone_agent` notes each claim it makes |
+| heard ago | since anything at all arrived from it |
+
+**Never from the network's settings**, which no agent can import or reach (the
+boundary, step 1). **Only an agent on Phase 10's network keeps them**, so every
+earlier snapshot -- and every run of record built on one -- is exactly as it
+was; and they are shown, not acted on (recommendation 1): nominal decides
+exactly as Phase 9 did.
+
+**What the drones estimated, never told** (the canonical mission, seed 17, no
+stop, every decision after 15 s, every teammate):
+
+| Condition | Loss estimated (configured) | Heartbeats heard | Latency estimated | Claim round trip |
+|---|---|---|---|---|
+| nominal | 0.000 (0) | 0.98 Hz | 0.50 s | 1.0 s |
+| moderate | 0.091 (0.10) | 0.87 Hz | 0.52 s | 1.0 s |
+| severe | 0.295 (0.30, plus the rate limit) | 0.65 Hz | 1.39 s | 2.6 s |
+| partitioned | 0.000 (0) | 0.86 Hz | 0.50 s | 1.1 s |
+
+Two things to read right:
+
+* **Latency as a drone lives it.** A message is read at the drone's next
+  0.5 s tick, so nominal's 0.1 s is experienced as 0.5 s: the estimate is the
+  network's latency rounded up to the tick, plus, under severe, the time a
+  message waits behind its sender's earlier ones.
+* **A partition is silence, not loss.** Nothing arrives across it, so there
+  are no gaps to count: what grows is "heard ago" -- for Drone1, Drone3 and
+  Drone4 unheard for 9 s and more inside the partition, Drone2 heard as ever.
+  This is the signal Phase 9's ladder reads; telling a partition from a
+  failure is still open.
+
+**Tests: 11, in `tests/test_link_health.py`:** each estimate from arrivals
+built for it -- a gap of two in ten, a window that drops what is older, one not
+yet full, only heartbeats in the rate, a round trip -- and nothing kept or shown
+without a window; flown, the estimates tracking the conditions, a partition as
+silence, nominal's round trips two ticks every one, no decision changed, no
+estimate in an earlier flight.
+
+**Mutations: 16, all caught.** The first pass caught 14; the two gaps were a
+round trip measured as a time of day, which passed a loose bound because every
+claim on nominal is acknowledged at 2 s (every nominal round trip is now held
+to exactly 1.0 s), and every message counted as a heartbeat (the nominal rate
+is now held to at most one a second).
+
+**Phases 5–9 reproduce; the goldens did not move.** 1032 tests pass, 28
+skipped; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-11-04 | **Each link is estimated from what arrived, per teammate, over 10 s; shown, not acted on** | 10.5 asks for estimates the agent infers; acting on them is the experiment's factor, not this phase's |
+| 2026-11-04 | **Latency is estimated on the shared clock, and said so** | One-way latency needs synchronized clocks; the simulation has one clock, a real fleet would not |
 | 2026-11-04 | **Lifetimes stay in the protocol, not a network manifest** | A lifetime is the sender's and travels in the message; the network enforces it. A manifest copy would be read by nothing |
 | 2026-11-04 | **At the instant a lifetime ends, a message is expired and a record not current** | Lifetimes and ticks share the half-second grid; without a rule, float rounding decided |
 | 2026-11-04 | **Stale-message decisions are counted, not forbidden** | A relay reads a silent teammate's last known place on purpose; AUV-10 asks for the diagnostic |

@@ -90,6 +90,9 @@ class RecoveryRun:
         return self.team.report.success and all(self.team.finished.get(d, False) for d in self.survivors)
 
 
+LINK_WINDOW_S = 10.0       # Phase 10: an agent on a network estimates each link over this (AUV-10, 10.5)
+
+
 def fly_recovery_on_mock(scenario: Scenario, config: AllocationConfig, health: HealthConfig,
                          label: str = "no stop", stop: dict[str, float] | None = None,
                          range_m: float | None | str = None, network: Any = None) -> RecoveryRun:
@@ -144,7 +147,8 @@ def fly_recovery_on_mock(scenario: Scenario, config: AllocationConfig, health: H
             try:
                 barrier.wait()
                 agent = DroneAgent(brief, sensors[drone], executors[drone], policies[drone],
-                                   comms=bus.comms(drone), coordinator=policies[drone])
+                                   comms=bus.comms(drone), coordinator=policies[drone],
+                                   link_window_s=None if model is None else LINK_WINDOW_S)
                 agents[drone] = agent
                 agent.assign_team()
                 if drone in stop:

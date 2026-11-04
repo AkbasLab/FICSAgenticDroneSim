@@ -125,7 +125,8 @@ class DroneAgent:
                  validator: Callable[[Decision, BeliefState], Verdict] = validate,
                  tick_s: float = DEFAULT_TICK_S, periodic_s: float = DEFAULT_PERIODIC_S,
                  battery_levels: tuple[float, ...] = DEFAULT_BATTERY_LEVELS, comms: Comms | None = None,
-                 heartbeat_s: float = DEFAULT_HEARTBEAT_S, coordinator: Coordinator | None = None) -> None:
+                 heartbeat_s: float = DEFAULT_HEARTBEAT_S, coordinator: Coordinator | None = None,
+                 link_window_s: float | None = None) -> None:
         if tick_s <= 0 or periodic_s <= 0 or heartbeat_s <= 0:
             raise ValueError("tick, periodic check and heartbeat must be positive")
         if comms is not None and comms.drone != sensors.drone:
@@ -157,6 +158,12 @@ class DroneAgent:
         self.comms = comms
         self.heartbeat_s = heartbeat_s
         self.belief.listening = comms is not None
+        if link_window_s is not None:                 # Phase 10: estimate each link (AUV-10, 10.5)
+            if link_window_s <= 0:
+                raise ValueError("the link window must be positive")
+            self.belief.link_window_s = link_window_s
+            self.belief.link_since = self.belief.self_.updated_at
+        self._claims_sent: dict[tuple[str, int], float] = {}     # (task, version) -> when it claimed it
         self._sequence = 0
         self._last_heartbeat_at: float | None = None
 
@@ -280,8 +287,13 @@ class DroneAgent:
             return []
         task_messages = []
         for m in self.comms.receive_available():
-            self.belief.heard(m.sender_id, m.sequence_number, m.timestamp, now)
+            self.belief.heard(m.sender_id, m.sequence_number, m.timestamp, now,
+                              heartbeat=m.message_type is MessageType.HEARTBEAT)
             p = m.payload
+            if m.message_type is MessageType.TASK_ACCEPT and p.get("holder") == self.belief.self_.vehicle_id:
+                claimed = self._claims_sent.get((p["task_id"], p["version"]))
+                if claimed is not None:              # its claim, acknowledged: a round trip on that link
+                    self.belief.acknowledged(m.sender_id, now - claimed)
             if m.message_type in _TEAM_TALK:
                 report = TeamReport(m.sender_id, m.timestamp, "message", position=tuple(p["position"]),
                                     task=p.get("task"), status=p.get("stage"),
@@ -307,6 +319,8 @@ class DroneAgent:
         self._send(kind, payload, now)
 
     def _send(self, kind: MessageType, payload: dict[str, Any], now: float) -> None:
+        if kind is MessageType.TASK_AWARD:
+            self._claims_sent[(payload["task_id"], payload["version"])] = now
         self._sequence += 1
         self.comms.send(new_message(kind, self.belief.self_.vehicle_id, BROADCAST, self.belief.mission.mission_id,
                                     now, self._sequence, payload))

@@ -45,6 +45,20 @@ gap; the agent cannot tell which, and does not pretend to. Until it has
 heard something, loss and latency stay unknown; an agent that is not
 listening keeps all three unknown, as in Phases 5 and 6.
 
+EACH LINK, ESTIMATED (Phase 10; AUV-10, 10.5). An agent flying on Phase 10's
+network (`link_window_s` set) also keeps, for each teammate, over the last
+`link_window_s` seconds of arrivals: the heartbeat arrival rate (heartbeats
+heard per second), the loss (sequence numbers missing between the lowest and
+highest heard, over that span -- a message lost, rate-limited or cut off by a
+partition is a gap alike), the one-way latency (arrival less the message's
+timestamp, on the shared clock: a real fleet would need synchronized clocks,
+and this estimate assumes them), the last round trip (its claim to that
+teammate's acknowledgement, `acknowledged`), and how long since it heard
+anything. All from what arrived, never from the network's settings, which no
+agent can reach. Shown as `communication.links`, only for such an agent:
+every earlier snapshot, and every run of record built on one, is exactly as it
+was.
+
 WHAT THE POLICY READ (Phase 7, 7.4). A record keeps the message it came from,
 and while a decision is being made the belief notes which teammate records
 the policy looked at through `teammate()` and `current_teammates()`
@@ -215,6 +229,9 @@ class BeliefState:
     links: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)   # per sender: what was heard
     # Phase 9: each teammate's rung on its own failure detector's ladder, when it has one.
     teammate_health: dict[str, str] | None = field(default=None, repr=False)
+    # Phase 10: each link estimated over this window, when set; and since when it has been listening.
+    link_window_s: float | None = field(default=None, repr=False)
+    link_since: float = field(default=0.0, repr=False)
 
     @classmethod
     def start(cls, brief: MissionBrief, vehicle_id: str, first: Observation) -> "BeliefState":
@@ -298,10 +315,12 @@ class BeliefState:
             self._noted(r)
         return current
 
-    def heard(self, sender: str, sequence_number: int, sent_at: float, now: float) -> None:
+    def heard(self, sender: str, sequence_number: int, sent_at: float, now: float, heartbeat: bool = False) -> None:
         """Note one message taken in, for the link estimates. Called for every arrival, kept or not."""
         link = self.links.setdefault(sender, {"last_seq": 0, "received": 0, "missed": 0, "last_heard": None,
                                               "latencies": []})
+        if self.link_window_s is not None:            # Phase 10: each arrival, for the windowed estimates
+            link.setdefault("arrivals", []).append((now, sequence_number, sent_at, heartbeat))
         if sequence_number > link["last_seq"]:
             if link["last_seq"]:
                 link["missed"] += sequence_number - link["last_seq"] - 1
@@ -310,6 +329,35 @@ class BeliefState:
         link["last_heard"] = now
         link["latencies"] = (link["latencies"] + [now - sent_at])[-LATENCY_SAMPLES:]
         self._estimate_link(now)
+
+    def acknowledged(self, sender: str, round_trip_s: float) -> None:
+        """Phase 10: `sender` acknowledged this drone's claim `round_trip_s` after it was made."""
+        if self.link_window_s is not None:
+            self.links.setdefault(sender, {"last_seq": 0, "received": 0, "missed": 0, "last_heard": None,
+                                           "latencies": []})["round_trip_s"] = round_trip_s
+
+    def link_estimates(self, now: float) -> dict[str, Any]:
+        """Phase 10: each teammate's link, over the last `link_window_s` seconds of what arrived."""
+        window = self.link_window_s
+        span = max(min(window, now - self.link_since), 1e-9)       # a window not yet full counts what it has
+        out: dict[str, Any] = {}
+        for mate in sorted(self.team.members):
+            link = self.links.get(mate)
+            if link is None or link["last_heard"] is None:
+                out[mate] = "never heard"
+                continue
+            recent = [a for a in link.get("arrivals", []) if a[0] > now - window]
+            link["arrivals"] = recent                               # older ones will never count again
+            seqs = {a[1] for a in recent}
+            expected = max(seqs) - min(seqs) + 1 if seqs else 0
+            out[mate] = {
+                "heartbeat_rate_hz": round(sum(1 for a in recent if a[3]) / span, 3),
+                "loss_rate": _known(None if expected < 2 else round(1.0 - len(seqs) / expected, 4)),
+                "latency_s": _known(None if not recent else round(sum(a[0] - a[2] for a in recent) / len(recent), 3)),
+                "round_trip_s": _known(None if link.get("round_trip_s") is None else round(link["round_trip_s"], 3)),
+                "heard_s_ago": round(now - link["last_heard"], 3),
+            }
+        return out
 
     def _estimate_link(self, now: float) -> None:
         if not self.listening:
@@ -392,6 +440,9 @@ class BeliefState:
         if self.teammate_health is not None:
             # Only a drone with a failure detector (Phase 9) has it: every earlier snapshot is as it was.
             snap["communication"]["teammate_health"] = dict(sorted(self.teammate_health.items()))
+        if self.link_window_s is not None:
+            # Only a drone on Phase 10's network keeps them: every earlier snapshot is as it was.
+            snap["communication"]["links"] = self.link_estimates(now)
         return snap
 
     # ------------------------------------------------------------ internal
