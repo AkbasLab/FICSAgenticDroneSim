@@ -43,3 +43,128 @@ def parse_recovery(data: dict[str, Any], source: str = "") -> HealthConfig:
 def load_recovery(name: str = "default") -> HealthConfig:
     path = recovery_path(name)
     return parse_recovery(load_toml(path), path)
+
+
+# ------------------------------------------------------------ the team, on the mock, with a stop
+
+import threading  # noqa: E402
+from dataclasses import dataclass, field  # noqa: E402
+
+from ..agents.drone_agent import DroneAgent  # noqa: E402
+from ..agents.recovery_policy import RecoveryPolicy  # noqa: E402
+from ..control.action_executor import ActionExecutor  # noqa: E402
+from ..control.scripted import ALTITUDE_STEP_M, BASE_ALTITUDE_M  # noqa: E402
+from ..control.skills import SkillRunner  # noqa: E402
+from ..coordination.bids import AllocationConfig  # noqa: E402
+from ..coordination.contract_net import ContractNet  # noqa: E402
+from ..coordination.tasks import tasks_from_brief  # noqa: E402
+from ..core.models import Position  # noqa: E402
+from ..core.scenario import Scenario  # noqa: E402
+from ..simulator.message_bus import MessageBus  # noqa: E402
+from ..simulator.mock_adapter import MockVehicleAdapter, MockWorld  # noqa: E402
+from ..simulator.observer import mock_trajectories  # noqa: E402
+from ..simulator.sensing import mock_sensors  # noqa: E402
+from .evaluation import evaluate  # noqa: E402
+from .single_agent import MAX_FLIGHT_S, MESSAGE_DELAY_S, TeamAgentRun  # noqa: E402
+
+
+@dataclass(frozen=True)
+class RecoveryRun:
+    """A team flown with the recovery policy, perhaps with drones stopped: the flight and each drone's record."""
+
+    team: TeamAgentRun
+    config: AllocationConfig
+    health: HealthConfig
+    stopped: dict[str, float] = field(default_factory=dict)             # drone -> when it was stopped
+    policies: dict[str, dict[str, Any]] = field(default_factory=dict)    # each drone's policy record
+    searched: dict[str, list[str]] = field(default_factory=dict)
+
+    @property
+    def survivors(self) -> list[str]:
+        return sorted(d for d in self.team.traces if d not in self.stopped)
+
+    @property
+    def met(self) -> bool:
+        """The mission met by the drones still flying, each ending its part itself."""
+        return self.team.report.success and all(self.team.finished.get(d, False) for d in self.survivors)
+
+
+def fly_recovery_on_mock(scenario: Scenario, config: AllocationConfig, health: HealthConfig,
+                         label: str = "no stop", stop: dict[str, float] | None = None,
+                         range_m: float | None | str = None) -> RecoveryRun:
+    """The team told the team mission, with the recovery policy; each drone in `stop` stopped at its time.
+
+    A stop is made FROM OUTSIDE, at a set time from the flight's start: the
+    drone's agent stops deciding and talking, its running skill is aborted,
+    and the drone holds where it is -- a companion computer dying while the
+    autopilot holds. No agent code knows about it. The judge is told which
+    drones were stopped (AUV-05: "all functioning drones return safely").
+    """
+    stop = dict(stop or {})
+    roster = [v.id for v in scenario.vehicles]
+    unknown = sorted(set(stop) - set(roster))
+    if unknown:
+        raise ValueError(f"not on {scenario.scenario_id}'s roster: {unknown}")
+    world = MockWorld(declared=roster)
+    adapter = MockVehicleAdapter(world)
+    for v in scenario.vehicles:
+        adapter.place_vehicle(v.id, Position(v.start_x, v.start_y, world.ground_z))
+    heights = {d: BASE_ALTITUDE_M + i * ALTITUDE_STEP_M for i, d in enumerate(roster)}
+    executors = {d: ActionExecutor(SkillRunner(MockVehicleAdapter(world), d, world.clock)) for d in roster}
+    sensors = {d: mock_sensors(world, scenario, d) for d in roster}
+
+    def where(drone: str) -> tuple[float, float, float]:
+        p = world.position(drone)
+        return (p.x, p.y, world.ground_z - p.z)
+
+    reach = scenario.network.communication_range_m if range_m == "scenario" else range_m
+    bus = MessageBus(roster, world.clock, where, reach, mission_id=scenario.scenario_id, delay_s=MESSAGE_DELAY_S)
+    brief = scenario.brief()
+    policies = {d: RecoveryPolicy(ContractNet(d, tasks_from_brief(brief), config), health, altitude_m=heights[d])
+                for d in roster}
+    agents: dict[str, DroneAgent] = {}
+    stopped: dict[str, float] = {}
+    errors: dict[str, BaseException] = {}
+    barrier = threading.Barrier(len(roster))
+    start = world.clock.now()
+
+    def body(drone: str) -> None:
+        with world.clock.participate():
+            try:
+                barrier.wait()
+                agent = DroneAgent(brief, sensors[drone], executors[drone], policies[drone],
+                                   comms=bus.comms(drone), coordinator=policies[drone])
+                agents[drone] = agent
+                agent.assign_team()
+                if drone in stop:
+                    agent.run(max_s=stop[drone])
+                    if not agent.finished:
+                        executors[drone].abort()              # the drone holds where it is
+                        stopped[drone] = world.clock.now() - start
+                else:
+                    agent.run(max_s=MAX_FLIGHT_S)
+            except BaseException as exc:          # recorded, never silent
+                errors[drone] = exc
+
+    threads = [threading.Thread(target=body, args=(d,), name=f"{d}-agent") for d in roster]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    for e in executors.values():
+        e.close()
+    if errors:
+        drone, exc = sorted(errors.items())[0]
+        raise RuntimeError(f"{drone}'s agent raised: {type(exc).__name__}: {exc}") from exc
+    trajectories = mock_trajectories(world, roster)
+    report = evaluate(scenario, trajectories, start, world.clock.now(), contacts=world.contacts(), failed=list(stopped))
+    skills = {d: tuple((e.command.skill.value, "running" if e.running else
+                        (e.result.status.value if e.result is not None else "error"))
+                       for e in executors[d].history()) for d in roster}
+    searched = {d: list(policies[d].completed) for d in roster}
+    team = TeamAgentRun(label, scenario.random_seed, {d: ", ".join(searched[d]) or None for d in roster}, report,
+                        # In roster order, not the order the threads happened to run in.
+                        {d: tuple(agents[d].trace) for d in roster if d in agents},
+                        {d: agents[d].finished for d in roster if d in agents},
+                        skills, start, trajectories, bus.deliveries())
+    return RecoveryRun(team, config, health, stopped, {d: policies[d].as_json() for d in roster}, searched)

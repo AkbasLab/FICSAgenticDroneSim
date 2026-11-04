@@ -45,7 +45,7 @@ report. Optionally, two drones in CarlaAir, one stopped.
 |---|---|---|
 | Teammate-failure detection (9.2) | `agentic_uav/coordination/health.py`, `configs/recovery/default.toml`, `agentic_uav/experiments/recovery.py` | **Done** 2026-11-04; goldens unedited; Phases 5–8 reproduce |
 | Roles and their triggers (9.1) | `agentic_uav/coordination/roles.py`, `agentic_uav/core/messages.py` (`ROLE_CHANGE`) | **Done** 2026-11-04; goldens unedited |
-| Recovery behaviour (9.3); stopping an agent | `agentic_uav/agents/team_policy.py`, `agentic_uav/coordination/`, `agentic_uav/experiments/` | step 3 |
+| Recovery behaviour (9.3); stopping an agent | `agentic_uav/agents/recovery_policy.py`, `agentic_uav/agents/team_policy.py` (hooks), `agentic_uav/coordination/` (abandoned, finished), `agentic_uav/experiments/recovery.py` (`fly_recovery_on_mock`) | **Done** 2026-11-04; goldens unedited; Phases 5–8 reproduce |
 | The exit; reprioritization; 9.4 | `agentic_uav/experiments/`, `scripts/`, `results/`, `evidence/` | step 4 |
 | Optional live flight; close | `results/`, `evidence/` | step 5 |
 
@@ -213,10 +213,90 @@ role allowed to be none, closed by a test.
 
 **The goldens did not move.** 914 tests pass, 26 skipped; audit clean.
 
+### 2026-11-04 — step 3: recovery, and stopping a drone (9.3)
+
+**`agents/recovery_policy.py`**: Phase 8's team policy with a failure
+detector, a role and the recovery behaviour -- a new policy, so Phase 8's
+flights are untouched (the team policy gained two hooks, `_team_setup` and
+`_nothing_open`, its behaviour unchanged and its run of record identical):
+
+* **Its own failure detector and role**, updated every tick; the ladder in its
+  belief; every role change announced (`ROLE_CHANGE`) and every one heard
+  recorded.
+* **RESERVE**: with nothing open but teammates still at work, it holds where
+  it is instead of going home -- as long as it could still do one of their
+  tasks (its own bid would be eligible) -- and bids for anything returned.
+  Phase 8 went home.
+* **RELAY**: free, with a teammate unreachable, it flies half way from the
+  base to where that teammate was last heard and holds.
+* **REPRIORITIZING** (9.3, step 6): an open task that no drone could still
+  finish before the deadline -- not it, not a teammate that is not FAILED, from
+  where each was last known (a teammate's battery is not on the record, so
+  for it only the deadline counts: an optimistic estimate) -- is **ABANDONED**
+  in its book (a new task status; `ContractNet.abandon`), and the drones go
+  home with the partial result rather than chase it. A later claim may take
+  an abandoned task back.
+
+**The recovery itself is Phase 8's**: the stopped drone's lease runs out, its
+task returns to the pool one version on, a reserve claims it and becomes a
+scout again. **No command is given to anyone after the team mission.**
+
+**Stopping a drone** (`experiments/recovery.fly_recovery_on_mock`, `stop`):
+from outside, at a set time -- its agent stops deciding and talking, its
+running skill is aborted, the drone holds where it is. No agent code knows
+about it. The judge is told which drones were stopped (AUV-05's C6: "all
+functioning drones return safely").
+
+**Two flaws found by flying it, fixed:**
+
+* **A false alarm at every landing.** A drone that had landed and ended its
+  part fell silent for good, and its teammates climbed it up the ladder --
+  and free drones set off to "relay" toward it. A drone that finishes says so
+  (its last status: stage "done"); **the detector no longer watches a
+  teammate that has reported its part done**, and shows it "finished".
+* **The flight's records in thread order.** Drones were listed in the order
+  their threads happened to run; they follow the roster now.
+
+**On the mock, every message delivered:**
+
+| Flight | Detected (every survivor) | Reassigned | Result |
+|---|---|---|---|
+| no stop | no ladder moved | -- | met, 194.1 s (reserves wait for the team; Phase 8 188.0) |
+| Drone1 stopped at 60 s | suspected 63.5, unreachable 70.5, failed 90.5 | S3 to Drone4, a reserve since 118.5 s, claimed at 119.6 | met, 309.1 s |
+| Drone3 stopped at 60 s | the same | S1 to Drone4 | met, 309.1 s |
+| Drone1 stopped, deadline 250 s | the same | S3 abandoned in every survivor's book at 69.0 s, nobody chasing it | not met: S3 0.387 covered -- the partial result, as intended |
+
+**Tests: 21 in `tests/test_recovery_policy.py`; 1 more each in
+`tests/test_health.py`, `tests/test_tasks.py`, `tests/test_contract_net.py`.**
+No stop: met, the work divided as in Phase 8, no false alarm, finished drones
+shown finished, each a scout then a reserve and no relay, reserves at a cost.
+A stop: the mission continuing and met, every survivor detecting it at the
+thresholds, its task returning to a reserve, no new command, role changes
+announced, `met` needing every survivor to end its part, and a stop being only
+a stop (no decision after it, its skill aborted, the drone holding). The
+deadline cut: the task abandoned in every book, nobody chasing it, every
+survivor ending its part before the deadline, the result partial and said so.
+The policy's reasoning: nobody can (and a teammate that could keeping the
+task, unless it has failed); a reserve staying while teammates work and it
+could help, going home when it could not; a relay flying half way and then
+holding; the ladder in the belief; a plain task still Phase 5's. And a
+finished teammate unwatched; abandoned only from open, a claim taking it back;
+the protocol's `abandon`.
+
+**Mutations: 28, all caught.** The first pass caught 27 of 29; one survivor was
+a dead guard (removed), the other `met` not needing every survivor to finish,
+closed by a test.
+
+**Phases 5–8 reproduce**; the goldens did not move. 938 tests pass, 26
+skipped; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-11-04 | **Recovery is a new policy on the team policy, not a change to it** | Phase 8's drones go home when nothing is open; a reserve that stays is new behaviour, and Phase 8's record must stay as it was |
+| 2026-11-04 | **A teammate that reported its part done is not watched** | A landed drone falls silent for good; treating that as a failure is the false alarm AUV-09 warns of |
+| 2026-11-04 | **A drone is stopped from outside; the judge is told, no agent is** | The thesis is that the team notices on its own; only the experiment and the evaluator may know which drone was stopped |
 | 2026-11-04 | **A role is a pure function of what the drone holds and hears** | Roles then result from the agents' interactions and nothing else, which is 9.4's fourth condition |
 | 2026-11-04 | **RELAY triggers on an unreachable teammate only, for now** | Its second trigger, and a high-priority target, need a teammate's sightings in a message, which none carries yet |
 | 2026-11-04 | **Health is read from silence alone, at 3, 10 and 30 s** | A drone cannot see a teammate stop, only stop hearing it; three missed heartbeats, a lease, and three leases keep one missed message from ever counting as a failure |

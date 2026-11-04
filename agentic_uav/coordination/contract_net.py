@@ -137,6 +137,7 @@ class ContractNet:
         self.corrections: list[Correction] = []
         self.claims_made: list[ClaimMade] = []
         self.news: list[dict[str, Any]] = []                          # for the agent: what changed for it
+        self.abandoned: list[dict[str, Any]] = []                     # Phase 9: tasks given up, and why
 
     # ------------------------------------------------------------ state
 
@@ -373,12 +374,25 @@ class ContractNet:
         self.last_progress_at = None
         return [Out(MessageType.TASK_RELEASE, {"task_id": t.task_id, "version": t.version, "why": why})]
 
+    def abandon(self, task_id: str, now: float, why: str) -> bool:
+        """Give an open task up: no drone can still do it (Phase 9, 9.3). True if it was open."""
+        t = self.book.get(task_id)
+        if t.status is not TaskStatus.OPEN:
+            return False
+        self.book.update(t.abandoned(), now, f"abandoned: {why}")
+        self.abandoned.append({"at": round(now, 3), "task_id": task_id, "version": t.version, "why": why})
+        self.news.append({"what": "abandoned", "task": task_id, "why": why})
+        return True
+
     def stop(self) -> None:
         """Bid for nothing more (it is going home)."""
         self.done = True
 
     def as_json(self) -> dict[str, Any]:
-        return {"owner": self.owner, "holding": self.holding, "book": self.book.as_json(),
-                "corrections": [c.as_json() for c in self.corrections],
-                "claims_made": [c.as_json() for c in self.claims_made],
-                "book_log": [e.as_json() for e in self.book.log]}
+        row = {"owner": self.owner, "holding": self.holding, "book": self.book.as_json(),
+               "corrections": [c.as_json() for c in self.corrections],
+               "claims_made": [c.as_json() for c in self.claims_made],
+               "book_log": [e.as_json() for e in self.book.log]}
+        if self.abandoned:                       # only when it happened: every earlier record is as it was
+            row["abandoned"] = list(self.abandoned)
+        return row

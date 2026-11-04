@@ -54,7 +54,7 @@ class TaskTests(unittest.TestCase):
     def test_the_types_auv_08_names(self):
         self.assertEqual({t.value for t in TaskType},
                          {"search_sector", "maintain_relay_point", "inspect_target", "return_to_base"})
-        self.assertEqual({s.value for s in TaskStatus}, {"open", "claimed", "complete"})
+        self.assertEqual({s.value for s in TaskStatus}, {"open", "claimed", "complete", "abandoned"})   # abandoned: Phase 9
 
     def test_a_claim_a_renewal_and_completion(self):
         t = task().claimed("Drone2", at=3.0, lease_s=10.0)
@@ -72,6 +72,18 @@ class TaskTests(unittest.TestCase):
         t = task().claimed("Drone2", at=3.0, lease_s=10.0).reopened()
         self.assertEqual((t.status, t.assigned_agent, t.lease_expires_at, t.version), (TaskStatus.OPEN, None, None, 2))
         self.assertEqual(t.reopened().version, 3)
+
+    def test_abandoned_only_from_open_and_a_claim_takes_it_back(self):
+        gone = task().abandoned()
+        self.assertEqual((gone.status, gone.assigned_agent, gone.lease_expires_at, gone.version),
+                         (TaskStatus.ABANDONED, None, None, 1))
+        self.assertEqual(gone.claimed("Drone3", 5.0, 10.0).status, TaskStatus.CLAIMED)      # someone could, after all
+        for not_open in (task().claimed("Drone2", 0.0, 10.0), task().claimed("Drone2", 0.0, 10.0).completed(), gone):
+            with self.assertRaisesRegex(ValueError, "only an open task is abandoned"):
+                not_open.abandoned()
+        with self.assertRaises(ValueError):
+            task(status=TaskStatus.ABANDONED, assigned_agent="Drone1")
+        self.assertNotIn(gone, TaskBook("Drone1", [gone]).open())
 
     def test_what_a_task_cannot_become(self):
         done = task().claimed("Drone2", at=0.0, lease_s=10.0).completed()

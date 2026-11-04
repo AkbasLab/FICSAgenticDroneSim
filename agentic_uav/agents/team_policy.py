@@ -55,6 +55,11 @@ HOLD_S = 5.0                 # a wait for a task is held in slices this long
 class TeamPolicy(RulePolicy):
     def __init__(self, net: ContractNet, altitude_m: float = DEFAULT_ALTITUDE_M,
                  speed_mps: float = DEFAULT_SPEED_MPS) -> None:
+        self._team_setup(net, altitude_m, speed_mps)
+
+    def _team_setup(self, net: ContractNet, altitude_m: float, speed_mps: float) -> None:
+        # Its own method, so a policy built on this one (Phase 9's) sets up the same
+        # state without `super().__init__`, a dunder the agents' boundary refuses.
         self._setup(altitude_m, speed_mps)
         self.net = net
         self.task_id: str | None = None              # the task it is flying, as the policy knows it
@@ -171,9 +176,7 @@ class TeamPolicy(RulePolicy):
                 return self._giving_back(belief, lambda: self._home(belief, short))
             return self._to_sector(belief, reason)
         if self.net.idle:
-            self.net.stop()
-            self.waiting = False
-            return self._home(belief, f"{reason}; nothing left for it")
+            return self._nothing_open(belief, f"{reason}; nothing left for it")
         self.waiting = True
         return Decision.start(HoldPositionCommand(duration_s=HOLD_S), "wait for a task", f"{reason}; no task yet")
 
@@ -194,12 +197,17 @@ class TeamPolicy(RulePolicy):
             self.task_id = None
             belief.self_.current_task = None
             if not self.net.book.open():
-                self.net.stop()
-                return self._home(belief, f"{self.sector.id} searched; nothing left")
+                return self._nothing_open(belief, f"{self.sector.id} searched; nothing left")
             self.waiting = True
             return Decision.start(HoldPositionCommand(duration_s=HOLD_S), "wait for a task",
                                   f"{self.sector.id} searched; bidding for what is left")
         return super()._succeeded(belief)
+
+    def _nothing_open(self, belief: BeliefState, reason: str) -> Decision:
+        """Nothing open for it: Phase 8 goes home. (Phase 9's reserve may stay.)"""
+        self.net.stop()
+        self.waiting = False
+        return self._home(belief, reason)
 
     def _follow(self, belief: BeliefState, news: list[Event]) -> Decision:
         """Act on the net's state after its news: one decision, whatever order the news came in."""

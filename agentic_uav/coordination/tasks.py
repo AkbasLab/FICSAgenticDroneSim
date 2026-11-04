@@ -49,6 +49,7 @@ class TaskStatus(str, Enum):
     OPEN = "open"
     CLAIMED = "claimed"
     COMPLETE = "complete"
+    ABANDONED = "abandoned"            # Phase 9: no drone can still do it; the team goes home without it
 
 
 SEARCH = "search"                         # the capability a sector search needs
@@ -98,6 +99,8 @@ class MissionTask:
             p.append("a claimed task has an assignee and a lease")
         if self.status is TaskStatus.COMPLETE and (not self.assigned_agent or self.lease_expires_at is not None):
             p.append("a complete task keeps who did it, and has no lease")
+        if self.status is TaskStatus.ABANDONED and (self.assigned_agent is not None or self.lease_expires_at is not None):
+            p.append("an abandoned task has no assignee and no lease")
         return p
 
     # ------------------------------------------------------- what can happen
@@ -123,6 +126,12 @@ class MissionTask:
         if self.status is not TaskStatus.CLAIMED:
             raise ValueError(f"{self.task_id} is {self.status.value}: only a claimed task is completed")
         return replace(self, status=TaskStatus.COMPLETE, lease_expires_at=None)
+
+    def abandoned(self) -> "MissionTask":
+        """Given up by the team: nobody can still do it (Phase 9, 9.3). A later claim may take it back."""
+        if self.status is not TaskStatus.OPEN:
+            raise ValueError(f"{self.task_id} is {self.status.value}: only an open task is abandoned")
+        return replace(self, status=TaskStatus.ABANDONED)
 
     def lease_expired(self, now: float) -> bool:
         return self.status is TaskStatus.CLAIMED and now >= self.lease_expires_at

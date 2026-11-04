@@ -33,6 +33,11 @@ treated as a stranger -- and HEALTHY again once it has been heard steadily for
 the SUSPECTED interval. Silence from the start of the flight counts too: a
 teammate never heard at all climbs the same ladder.
 
+A TEAMMATE THAT HAS FINISHED is not watched. A drone that has landed and
+ended its part says so (its last report's stage is "done") and then falls
+silent for good; that silence is not a failure. From the moment its report
+of "done" is held, it is shown as "finished" and climbs no rung.
+
 Every transition is logged, with when and how long the silence had been,
 crossing each rung in order even if a tick skipped one.
 """
@@ -103,21 +108,30 @@ class FailureDetector:
         self._state = {m: Health.HEALTHY for m in sorted(teammates) if m != owner}
         self._last: dict[str, float] = {m: start for m in self._state}
         self._recovered_at: dict[str, float] = {}
+        self.finished: dict[str, float] = {}               # teammates that reported their part done: unwatched
         self.log: list[Transition] = []
 
     def state(self, teammate: str) -> Health:
         return self._state[teammate]
 
     def states(self) -> dict[str, str]:
-        return {m: s.value for m, s in self._state.items()}
+        return {m: "finished" if m in self.finished else s.value for m, s in self._state.items()}
 
     def in_state(self, *states: Health) -> tuple[str, ...]:
-        return tuple(m for m, s in self._state.items() if s in states)
+        return tuple(m for m, s in self._state.items() if s in states and m not in self.finished)
 
-    def update(self, links: dict[str, dict[str, Any]], now: float) -> list[Transition]:
-        """Bring every teammate's rung up to date from when it was last heard. Returns the transitions."""
+    def update(self, links: dict[str, dict[str, Any]], now: float, finished: Iterable[str] = ()) -> list[Transition]:
+        """Bring every teammate's rung up to date from when it was last heard. Returns the transitions.
+
+        `finished`: the teammates whose latest report says their part is done -- no longer watched.
+        """
+        for m in finished:
+            if m in self._state and m not in self.finished:
+                self.finished[m] = now
         out: list[Transition] = []
         for m in self._state:
+            if m in self.finished:
+                continue
             heard = links.get(m, {}).get("last_heard")
             if heard is not None and heard > self._last[m]:
                 self._last[m] = heard
@@ -146,4 +160,5 @@ class FailureDetector:
 
     def as_json(self) -> dict[str, Any]:
         return {"owner": self.owner, "config": self.config.as_json(), "states": self.states(),
+                "finished": {m: round(t, 3) for m, t in sorted(self.finished.items())},
                 "log": [t.as_json() for t in self.log]}

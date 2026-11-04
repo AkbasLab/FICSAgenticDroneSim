@@ -102,6 +102,15 @@ class LadderTests(unittest.TestCase):
         self.assertEqual(d.update({}, 102.9), [])
         self.assertEqual([t.after.value for t in d.update({}, 103.0)], ["suspected"])
 
+    def test_a_teammate_that_finished_is_not_watched(self):
+        d = FailureDetector("Drone1", ["Drone1"] + MATES, HealthConfig(), start=0.0)
+        d.update(links(Drone2=10.0, Drone3=10.0, Drone4=10.0), 10.0, finished=["Drone2"])
+        self.assertEqual(d.update(links(Drone2=10.0, Drone3=60.0, Drone4=60.0), 60.0, finished=["Drone2"]), [])
+        self.assertEqual(d.states()["Drone2"], "finished")
+        self.assertEqual(d.finished, {"Drone2": 10.0})
+        self.assertEqual(d.in_state(Health.HEALTHY), ("Drone3", "Drone4"))
+        self.assertEqual(d.as_json()["finished"], {"Drone2": 10.0})
+
     def test_the_owner_is_not_on_its_own_ladder(self):
         d = FailureDetector("Drone1", ["Drone1"] + MATES, HealthConfig(), start=0.0)
         self.assertEqual(sorted(d.states()), MATES)

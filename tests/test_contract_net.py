@@ -355,6 +355,20 @@ class EndingsTests(unittest.TestCase):
         self.assertEqual([n["what"] for n in net.take_news()], ["lost"])
         self.assertEqual(net.tick(w.now, w.bid_fn("Drone1")), [])          # no progress on a finished task
 
+    def test_an_open_task_abandoned(self):
+        net = ContractNet("Drone1", tasks_from_brief(BRIEF), DELIBERATING)
+        self.assertTrue(net.abandon("search S3", 70.0, "nobody can by the deadline"))
+        self.assertFalse(net.abandon("search S3", 71.0, "again"))                     # once
+        self.assertEqual(net.book.get("search S3").status, TaskStatus.ABANDONED)
+        self.assertEqual(net.abandoned, [{"at": 70.0, "task_id": "search S3", "version": 1,
+                                          "why": "nobody can by the deadline"}])
+        self.assertEqual(net.take_news(), [{"what": "abandoned", "task": "search S3", "why": "nobody can by the deadline"}])
+        self.assertEqual(net.as_json()["abandoned"][0]["task_id"], "search S3")
+        self.assertNotIn("abandoned", ContractNet("Drone1", tasks_from_brief(BRIEF), DELIBERATING).as_json())
+        held = ContractNet("Drone1", tasks_from_brief(BRIEF), CONTESTED)
+        held.tick(0.0, Wire(CONTESTED).bid_fn("Drone1"))
+        self.assertFalse(held.abandon(held.holding, 1.0, "not open"))
+
     def test_a_holder_that_gives_up_returns_its_task(self):
         w = self.wire
         w.send("Drone1", w.nets["Drone1"].release(w.now, "low battery"))
