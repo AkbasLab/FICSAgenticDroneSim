@@ -137,6 +137,15 @@ class RealSeedTests(unittest.TestCase):
         self.assertIn("Drone2 became a relay at 40.0 s with nothing of its own",
                       " ".join(roles_from_interactions(with_policies(self.stopped, stray))))
 
+    def test_a_relay_that_begins_as_a_reserve_comes_free(self):
+        # The live variant: the survivor finishes while the stopped drone is unreachable, not yet failed.
+        from agentic_uav.experiments.recovery import fly_recovery_on_mock
+        live = scenarios.load_scenario("search_relay_live_small")
+        run = fly_recovery_on_mock(live, CONFIG, HEALTH, "Drone2 stopped", {"Drone2": 17.0})
+        self.assertIn("relay", [c["after"] for c in run.policies["Drone1"]["roles"]["log"]])
+        self.assertEqual(roles_from_interactions(run), [])
+        self.assertTrue(run.met)
+
     def test_a_role_change_not_announced(self):
         kept = tuple(d for d in self.stopped.team.deliveries
                      if not (d.message.message_type.value == "role_change" and d.message.sender_id == "Drone4"))

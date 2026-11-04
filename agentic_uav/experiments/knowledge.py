@@ -388,7 +388,10 @@ def _check(belief: dict[str, Any], drone: str, t: float, truth: Truth, out: Know
             out.problems.append(f"leak: it knew something of {item['what']}, which it had not seen")
         if item["what"].startswith("teammate"):
             # Its own record, which came in a delivered message, may say where it is; nothing else may.
-            elsewhere = json.dumps([k for k in known if not k["what"].startswith(f"team.{name}.")])
+            # Nor is its own position a leak: drones fly at different heights, and one directly over a
+            # hovering teammate shares its x, y (Phase 9) -- what it senses of itself says nothing of another.
+            elsewhere = json.dumps([k for k in known
+                                    if not k["what"].startswith(f"team.{name}.") and k["what"] != "self.position"])
             if _mentions(elsewhere, truth_pos[:2]):
                 out.problems.append(f"leak: it knew where {name} really was, beyond what it heard from it")
 

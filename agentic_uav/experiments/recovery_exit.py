@@ -24,9 +24,10 @@ THE CHECKS, each of which can fail (tests/test_recovery_exit.py):
 * NO NEW HUMAN COMMAND: every drone told the team mission and nothing else,
   ever.
 * ROLES FROM INTERACTIONS: every role change a survivor made follows from its
-  own protocol and detector -- a scout from a claim it made, a reserve from a
-  task it finished or lost, a relay from a teammate it found unreachable --
-  and was announced.
+  own protocol and detector -- a scout from a claim it made; a reserve from a
+  task it finished or lost, or a relay's teammate failed or heard again; a
+  relay from a teammate found unreachable while free, or coming free while
+  one is -- and was announced.
 * DETERMINISTIC: each stopped flight flown twice gives the same records.
 * KNOWN EXACTLY: Phase 6's knowledge log passes every decision.
 
@@ -78,8 +79,10 @@ def _sent(run: RecoveryRun) -> list[Any]:
     return sorted(out, key=lambda m: (m.timestamp, m.sender_id, m.sequence_number))
 
 
-def detected(run: RecoveryRun) -> list[str]:
-    problems = []
+def detected(run: RecoveryRun, slack_s: float = TICK_S) -> list[str]:
+    # A flight meant to stop a drone in which none was stopped -- the stop came after the mission ended --
+    # shows nothing detected; it must not pass for one that does.
+    problems = [] if run.stopped else [f"{run.team.label}: nobody was stopped, so nothing was there to detect"]
     h = run.health
     thresholds = {"suspected": h.suspected_s, "unreachable": h.unreachable_s, "failed": h.failed_s}
     for victim in run.stopped:
@@ -90,7 +93,7 @@ def detected(run: RecoveryRun) -> list[str]:
                 continue
             for t in climbs:
                 need = thresholds[t["after"]]
-                if not need - EPS <= t["silence_s"] <= need + TICK_S + EPS:
+                if not need - EPS <= t["silence_s"] <= need + slack_s + EPS:
                     problems.append(f"{d} called {victim} {t['after']} after {t['silence_s']} s of silence, not {need:g}")
     return problems
 
@@ -140,7 +143,7 @@ def no_new_command(run: RecoveryRun) -> list[str]:
     return problems
 
 
-def roles_from_interactions(run: RecoveryRun) -> list[str]:
+def roles_from_interactions(run: RecoveryRun, slack_s: float = TICK_S) -> list[str]:
     problems = []
     announced = {(m.sender_id, round(m.timestamp, 3), m.payload["role"]) for m in _sent(run)
                  if m.message_type.value == "role_change"}
@@ -152,9 +155,13 @@ def roles_from_interactions(run: RecoveryRun) -> list[str]:
                     if e["before"].get("assigned_agent") == d and e["before"].get("status") == "claimed"
                     and (e["after"].get("status") != "claimed" or e["after"].get("assigned_agent") != d)]
         unreachable = [t["at"] for t in p["health"]["log"] if t["after"] == "unreachable"]
+        settled = [t["at"] for t in p["health"]["log"] if t["after"] in ("failed", "recovered")]
+        # A relay begins when a teammate becomes unreachable while it is free, or when it comes
+        # free while one is; it ends -- back to reserve -- when that teammate fails or is heard again.
+        causes = {"scout": claims, "reserve": own_ends + settled, "relay": unreachable + own_ends}
         for c in p["roles"]["log"]:
-            near = {"scout": claims, "reserve": own_ends, "relay": unreachable}[c["after"]]
-            if not any(abs(c["at"] - t) <= TICK_S + EPS for t in near):
+            near = causes[c["after"]]
+            if not any(abs(c["at"] - t) <= slack_s + EPS for t in near):
                 problems.append(f"{d} became a {c['after']} at {c['at']} s with nothing of its own to cause it")
             if (d, c["at"], c["after"]) not in announced:
                 problems.append(f"{d}'s change to {c['after']} at {c['at']} s was not announced")
@@ -172,10 +179,10 @@ def deterministic(a: RecoveryRun, b: RecoveryRun) -> list[str]:
     return problems
 
 
-def known_exactly(run: RecoveryRun, scenario: Scenario) -> dict[str, Any]:
+def known_exactly(run: RecoveryRun, scenario: Scenario, tolerance: dict[str, Any] | None = None) -> dict[str, Any]:
     sc = dataclasses.replace(scenario, random_seed=run.team.seed)
     s = knowledge_summary(knowledge_log(run.team.traces, Truth(sc, run.team.trajectories, run.team.start,
-                                                              run.team.report.until)))
+                                                              run.team.report.until), tolerance))
     return {"ok": s["decisions"] > 0 and s["ok"] == s["decisions"], "decisions": s["decisions"], "passed": s["ok"],
             "problems": s["problems"][:20]}
 
@@ -208,6 +215,25 @@ def exit_checks(flights: dict[str, RecoveryRun], scenario: Scenario) -> dict[str
                           "problems": [p for k in known for p in k["problems"]][:20]},
     }
     checks["all"] = all(checks[k]["ok"] for k in CHECKS)
+    return checks
+
+
+LIVE_CHECKS = ("detected", "no_false_alarm", "reassigned", "continued", "no_new_command", "roles_from_interactions",
+               "known_exactly")
+LIVE_STOP_AT_S = 17.0           # mid-search on the live variant, on the mock and in CarlaAir
+LIVE_SLACK_S = 2 * TICK_S       # live, a tick is the real clock's
+
+
+def live_checks(run: RecoveryRun, scenario: Scenario, tolerance: dict[str, Any]) -> dict[str, Any]:
+    """The checks one stopped flight can be held to on its own (determinism needs a second flight)."""
+    taken, re_problems = reassigned(run)
+    parts = {"detected": detected(run, LIVE_SLACK_S), "no_false_alarm": no_false_alarm(run),
+             "reassigned": re_problems, "continued": continued(run), "no_new_command": no_new_command(run),
+             "roles_from_interactions": roles_from_interactions(run, LIVE_SLACK_S)}
+    checks = {k: {"ok": not v, "problems": v} for k, v in parts.items()}
+    checks["reassigned"]["reassignments"] = taken
+    checks["known_exactly"] = known_exactly(run, scenario, tolerance)
+    checks["all"] = all(checks[k]["ok"] for k in LIVE_CHECKS)
     return checks
 
 

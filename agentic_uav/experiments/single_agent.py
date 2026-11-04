@@ -492,15 +492,17 @@ class LiveTeamFlight:
     def trajectories(self) -> dict[str, Trajectory]:
         return trajectories_from_samples(self.samples, self.grounds)
 
-    def judge(self, seed: int | None = None) -> MissionReport:
-        """The flight against `seed`'s targets (default: the scenario's own); see LiveAgentFlight.judge."""
+    def judge(self, seed: int | None = None, failed: tuple[str, ...] = ()) -> MissionReport:
+        """The flight against `seed`'s targets (default: the scenario's own); see LiveAgentFlight.judge.
+        `failed`: drones stopped on purpose (Phase 9), left out of "all functioning drones return"."""
         scenario = self.scenario if seed is None else dataclasses.replace(self.scenario, random_seed=seed)
         return evaluate(scenario, self.trajectories(), self.start, self.end,
-                        contacts=self.contacts, observer=self.observer)
+                        contacts=self.contacts, failed=failed, observer=self.observer)
 
-    def as_run(self, label: str) -> TeamAgentRun:
+    def as_run(self, label: str, failed: tuple[str, ...] = ()) -> TeamAgentRun:
         """The flight as a TeamAgentRun, so the mock's checks apply to it as they stand."""
-        return TeamAgentRun(label, self.scenario.random_seed, dict(self.tasks), self.judge(), dict(self.traces),
+        return TeamAgentRun(label, self.scenario.random_seed, dict(self.tasks), self.judge(failed=failed),
+                            dict(self.traces),
                             dict(self.finished), dict(self.skills), self.start, self.trajectories(), self.deliveries)
 
     def as_json(self) -> dict[str, Any]:

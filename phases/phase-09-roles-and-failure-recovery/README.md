@@ -50,7 +50,7 @@ report. Optionally, two drones in CarlaAir, one stopped.
 | Roles and their triggers (9.1) | `agentic_uav/coordination/roles.py`, `agentic_uav/core/messages.py` (`ROLE_CHANGE`) | **Done** 2026-11-04; goldens unedited |
 | Recovery behaviour (9.3); stopping an agent | `agentic_uav/agents/recovery_policy.py`, `agentic_uav/agents/team_policy.py` (hooks), `agentic_uav/coordination/` (abandoned, finished), `agentic_uav/experiments/recovery.py` (`fly_recovery_on_mock`) | **Done** 2026-11-04; goldens unedited; Phases 5–8 reproduce |
 | The exit; reprioritization; 9.4 | `agentic_uav/experiments/recovery_exit.py`, `scripts/recovery_exit.py`, `results/`, `evidence/` | **Done** 2026-11-04; exit met on the mock |
-| Optional live flight; close | `results/`, `evidence/` | step 5 |
+| Optional live flight; close | `agentic_uav/experiments/recovery.py` (`fly_recovery_live`), `agentic_uav/experiments/recovery_exit.py` (`live_checks`), `scripts/recovery_exit.py --sim airsim` | **Live path done** 2026-11-04 and dry-run in real time on the mock; the live flight not flown |
 
 ## Plan
 
@@ -380,10 +380,91 @@ flight), the divergence count, and the run's verdict and exit code.
 
 **The goldens did not move.** 958 tests pass, 26 skipped; audit clean.
 
+### 2026-11-04 — step 5: the live path
+
+**`fly_recovery_live`** (`experiments/recovery.py`) is Phase 8's live team
+flight with the recovery policy and a stop: the live variant's pair, told only
+the team mission, every message delivered, and the drones in `stop` stopped
+from outside at their times -- the agent stops, its skill is aborted, the drone
+holds where it is, and the judge is told. It refuses pads that are not the
+spawn layout and a stop for a drone it does not fly. **The stopped drone is
+left hovering when the flight ends: reset the simulator before the next
+one.**
+
+**`live_checks`** (`experiments/recovery_exit.py`) holds one flight to the
+**seven** checks it can meet -- all but "deterministic", which needs a second
+flight. Live, a tick is the real clock's, so a ladder may read its silence, and
+a role change may follow its cause, up to **two ticks** (1 s) late, not one;
+"known exactly" takes the poll tolerance, as in Phases 6–8.
+
+**`scripts/recovery_exit.py --sim airsim`** flies the pair once with
+**Drone2 stopped at 17 s** -- mid-search -- and flies its mock twin beside it
+(the seed with no stop and with each drone stopped at 17 s, each stopped
+flight twice) with all eight checks. The record says the flight's verdict, never
+the exit's.
+
+**The real-time dry run on the mock** (the mock standing in for AirSim, 62 s):
+Drone2 stopped at 17.45 s; Drone1 called it suspected at 3.1 s of silence,
+unreachable at 10.3 s, failed at 30.1 s; Drone1 searched its own S2, then
+claimed and searched Drone2's S1; **all seven checks passed.**
+
+**The relay triggers in flight here.** Recommendation 4 said that under
+Phase 9's network the relay role "never triggers in flight". On the
+four-drone exit that held; on the pair it does not: Drone1 comes free while
+Drone2 is unreachable but not yet failed, so it becomes a **relay**, holds at
+the midpoint between the base and Drone2's last known position, and becomes a
+reserve again when Drone2 is called failed. Its roles: scout, reserve, relay,
+scout, relay, reserve. The roles check was widened in this step to say so --
+a relay may also begin when the drone comes free while a teammate is
+unreachable, and a reserve may begin when the teammate it was relaying for
+fails or is heard again -- and a test flies it.
+
+**A false alarm in the knowledge log, found by the twin and fixed.** With
+Drone1 stopped on the pair, Drone2 at 16 m flies a lane directly over Drone1
+hovering at 12 m, and at 43.1 s its own position, [20.0, 18.0], was Drone1's
+true x, y exactly: "leak: it knew where Drone1 really was". It did not -- it
+sensed where it was itself. Drones fly at different heights and may share an
+x, y; **a drone's own position is no longer searched for a teammate's**, and
+it is still held to its own truth by "correct". A test in
+`tests/test_knowledge.py` puts a drone directly over its teammate: incorrect,
+never a leak. Every run of record re-ran identical, Phase 9's exit included.
+
+**Tests: `tests/test_recovery_live.py`, and one more in
+`tests/test_knowledge.py`.** A mock flight stands in for a live one: it comes
+back as a run the checks apply to, the stopped drone told to the judge (told
+nothing, the judge fails the mission); a survivor that never noticed fails
+"detected"; the slack pinned from both sides -- a ladder late by 0.9 s passes
+and by 1.1 s fails, a role's cause moved by 0.9 s passes and by 1.1 s fails;
+the survivor takes Drone2's S1; the script's record, its verdict following the
+seven checks, a survivor that did not finish not met; the command line. In real
+time (`AUV_SLOW_TESTS=1`), the live path whole on the mock -- the stop at 17 s,
+the ladder in order, the stopped drone holding still, each drone at its own
+height, every check -- and the script, MET.
+
+**A hole in "detected", found by mutation and closed.** The twin flown with
+its stops at 60 s instead of 17 s -- after the pair's 35 s mission had ended
+-- stopped nobody, and every "stopped" flight passed every check: nothing was
+there to fail. **A flight meant to stop a drone in which none was stopped now
+fails "detected"**, on the exit and live; the twin's stops are in the record
+and tested. Phase 9's exit is unchanged by it -- every one of its stopped
+flights stopped a drone -- and re-ran identical.
+
+**Mutations: 23, all caught** -- 18 fast, 5 in real time.
+The first pass caught 20 of 22: the hole above, and a stop without its
+abort, which the real-time test missed because Drone2's skill at 17 s ended
+on its own soon after -- the test now requires the stopped drone's skill
+aborted, as step 3's does on the mock.
+
+**The goldens did not move.** 977 tests pass, 28 skipped; audit clean;
+Phases 5–9's runs of record reproduce.
+
 ## Decisions
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-11-04 | **A flight meant to stop a drone that stopped none fails "detected"** | A stop set after the mission ends stops nobody, and a check with nothing to look at must not pass |
+| 2026-11-04 | **Live, a ladder and a role change may be two ticks late, not one** | A tick on the real clock is not exactly half a second; one tick of slack would fail a flight for its scheduler |
+| 2026-11-04 | **A drone's own position is never read as a teammate's** | Drones fly at different heights and may share an x, y; what a drone senses of itself says nothing of another |
 | 2026-11-04 | **Each seed is flown with no stop and with every drone stopped in turn, each stopped flight twice** | Which drone is stopped changes who takes its task; every one is tried, and flying twice is what "deterministic" is held to |
 | 2026-11-04 | **A belief's time a rounding past the flight's end is judged at the end, and no further** | The snapshot's millisecond can land past the last instant; forgiving more would hide a truth that ends too early |
 | 2026-11-04 | **Recovery is a new policy on the team policy, not a change to it** | Phase 8's drones go home when nothing is open; a reserve that stays is new behaviour, and Phase 8's record must stay as it was |

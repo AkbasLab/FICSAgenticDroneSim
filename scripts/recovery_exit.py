@@ -3,6 +3,7 @@
 
     python scripts/recovery_exit.py                       # seeds 1-20: no stop, and each drone stopped (twice)
     python scripts/recovery_exit.py --seeds 17 --block t
+    python scripts/recovery_exit.py --sim airsim --block live1     # the pair in CarlaAir, Drone2 stopped at 17 s
 
 AUV-09's exit criterion: "During a four-drone mission, one agent can be
 intentionally stopped. The remaining agents detect the disruption, reassign
@@ -15,6 +16,13 @@ human command, roles from interactions, deterministic, known exactly.
 Beside the exit: a reprioritization flight (a drone stopped, the deadline cut
 so its task cannot be redone) and the 9.4 report -- the five conditions of
 controlled emergence, and two of AUV-19's proxies, reported, not claimed.
+
+`--sim airsim` flies the live variant's pair once (`fly_recovery_live`), told
+only the team mission, every message delivered, with Drone2 stopped from
+outside at 17 s -- mid-search -- and holds it to the seven checks one flight
+can meet (determinism needs a second flight); the mock twin of the same
+scenario is flown beside it with all eight. The stopped drone is left
+hovering: reset the simulator before the next flight.
 
 Outputs, under phases/phase-09-roles-and-failure-recovery/results/ by default:
 
@@ -57,6 +65,12 @@ from agentic_uav.experiments.search_relay import EXIT_SEEDS  # noqa: E402
 
 DEFAULT_OUT = os.path.join(REPO, "phases", "phase-09-roles-and-failure-recovery", "results")
 SCENARIO = "search_relay_001"
+LIVE_SCENARIO = "search_relay_live_small"
+LIVE_VICTIM = "Drone2"
+
+
+def secs(v) -> str:
+    return "-" if v is None else f"{v:.1f}"
 
 
 def seeds_arg(text: str) -> tuple[int, ...]:
@@ -79,13 +93,23 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seeds", type=seeds_arg, default=EXIT_SEEDS)
     parser.add_argument("--out", default=DEFAULT_OUT)
     parser.add_argument("--block", metavar="LABEL")
+    parser.add_argument("--sim", choices=("mock", "airsim"), default="mock")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=None)
+    parser.add_argument("--poll-hz", type=float, default=None)
     args = parser.parse_args(argv)
+    if args.sim == "mock":
+        for name, flag in (("port", "--port"), ("poll_hz", "--poll-hz")):
+            if getattr(args, name) is not None:
+                parser.error(f"{flag} is for --sim airsim")
     try:
         sys.stdout.reconfigure(encoding="utf-8")
     except (AttributeError, OSError):
         pass
 
     started = time.strftime("%Y-%m-%dT%H:%M:%S")
+    if args.sim == "airsim":
+        return live(args, started)
     scenario = load_scenario(SCENARIO)
     config, health = load_allocation(), load_recovery()
     wall = time.perf_counter()
@@ -160,6 +184,109 @@ def main(argv: list[str] | None = None) -> int:
     print("\n".join(lines))
     print(f"raw     : {os.path.join(args.out, stem + '.jsonl')}")
     return 0 if ok and trouble["ok"] else 1
+
+
+def live(args, started: str) -> int:
+    """One live flight in CarlaAir: the pair, Drone2 stopped mid-search."""
+    from agentic_uav.core.clock import RealClock
+    from agentic_uav.simulator.airsim_adapter import AIRSIM_PORT, AirSimAdapter
+    port = args.port or AIRSIM_PORT
+    return report_live(args, started, lambda: AirSimAdapter.connect(args.host, port), RealClock())
+
+
+def report_live(args, started: str, connect, clock) -> int:
+    """Fly the live variant's pair with Drone2 stopped at LIVE_STOP_AT_S; hold it to the seven checks one flight
+    can meet, and fly its mock twin beside it -- no stop, each drone stopped, twice -- with all eight. The twin is
+    not a pass condition."""
+    from agentic_uav.agents.rule_policy import RulePolicy
+    from agentic_uav.experiments.knowledge import observed_poll_hz, poll_tolerance
+    from agentic_uav.experiments.recovery import fly_recovery_live
+    from agentic_uav.experiments.recovery_exit import LIVE_CHECKS, LIVE_STOP_AT_S, live_checks
+    from agentic_uav.simulator.observer import DEFAULT_POLL_HZ
+
+    scenario = load_scenario(LIVE_SCENARIO)
+    config, health = load_allocation(), load_recovery()
+    hz = DEFAULT_POLL_HZ if args.poll_hz is None else args.poll_hz
+    stop = {LIVE_VICTIM: LIVE_STOP_AT_S}
+    wall = time.perf_counter()
+    live_flight = fly_recovery_live(scenario, config, health, connect(), connect, clock, stop, poll_hz=hz)
+    wall = time.perf_counter() - wall
+    polled = observed_poll_hz(live_flight.flight.samples, live_flight.flight.poll_hz)
+    tol = poll_tolerance(scenario, polled["hz"], RulePolicy().speed_mps)
+    run = live_flight.as_run("live")
+    checks = live_checks(run, scenario, tol)
+    ok = checks["all"]
+    twin_flights = recovery_flights(scenario, scenario.random_seed, config, health, stop_at=LIVE_STOP_AT_S)
+    twin = exit_checks(twin_flights, scenario)
+    twin_run = twin_flights[f"{LIVE_VICTIM} stopped"]
+
+    header = {"kind": "header", "t": started, "sim": "airsim", "scenario": scenario.scenario_id,
+              "scenario_file": rel(scenario_path(LIVE_SCENARIO)), "allocation_manifest": rel(allocation_path()),
+              "recovery_manifest": rel(recovery_path()), "allocation": config.as_json(), "health": health.as_json(),
+              "network": "every message delivered (range unlimited)", "stop": stop,
+              "stopped_at": live_flight.stopped, "observer": live_flight.flight.observer, "poll": polled,
+              "tolerance": tol, "checks": {k: checks[k]["ok"] for k in LIVE_CHECKS}, "live_flight_met": ok,
+              "mock_twin_all": twin["all"], "wall_s": round(wall, 2), "code": provenance()}
+    out_rows = [header,
+                {**live_flight.as_json(), "set": "live", "checks": checks,
+                 "completion_s": run.team.report.completion_s},
+                *({"kind": "message", "set": "live", **r}
+                  for r in message_log(run.team.deliveries, run.team.traces, run.team.start)),
+                {"kind": "twin", "set": "mock_twin", "checks": twin,
+                 "searched": {k: f.searched for k, f in twin_flights.items() if not k.endswith("again")},
+                 "stopped": {k: f.stopped for k, f in twin_flights.items() if not k.endswith("again")},
+                 "completion_s": {k: f.team.report.completion_s for k, f in twin_flights.items()
+                                  if not k.endswith("again")},
+                 "policies": twin_run.policies}]
+
+    def cell(c):
+        return "-" if c is None else ("yes" if c["ok"] else "**no**")
+
+    def roles(policies):
+        return "; ".join(f"{d}: " + " → ".join(c["after"] for c in p["roles"]["log"])
+                         for d, p in sorted(policies.items()) if d not in stop)
+
+    def ladder(policies):
+        return "; ".join(f"{d}: " + ", ".join(f"{t['after']} {t['silence_s']:g} s" for t in p["health"]["log"])
+                         for d, p in sorted(policies.items()) if d not in stop)
+
+    def division(searched):
+        return "; ".join(f"{d} {', '.join(t) or '-'}" for d, t in sorted(searched.items()))
+
+    skills = "; ".join(f"{d}: " + ", ".join(f"{k} {v}" for k, v in sk) for d, sk in live_flight.flight.skills.items())
+    lines = [f"# Recovery live — {scenario.scenario_id}", "",
+             f"Run {started}, `scripts/recovery_exit.py --sim airsim`, {wall:.1f} s of flight. Two rule agents told "
+             f"only the team mission, every message delivered; {LIVE_VICTIM} stopped from outside at "
+             f"{LIVE_STOP_AT_S:g} s (at {', '.join(f'{v:g}' for v in live_flight.stopped.values()) or '-'} s, "
+             f"as it happened); observer {live_flight.flight.observer}.", "",
+             f"Correct here means within **{tol['position_m']:g} m** and **{tol['battery']:g} %** of battery: {tol['why']}.",
+             "", "| Check | Live | Mock twin |", "|---|---|---|"]
+    lines += [f"| {k} | {cell(checks.get(k))} | {cell(twin.get(k))} |" for k in CHECKS]
+    lines += [f"| Division | {division(live_flight.searched)} | {division(twin_run.searched)} |",
+              f"| Survivor's ladder | {ladder(live_flight.policies)} | {ladder(twin_run.policies)} |",
+              f"| Survivor's roles | {roles(live_flight.policies)} | {roles(twin_run.policies)} |",
+              f"| Completion s | {secs(run.team.report.completion_s)} | {secs(twin_run.team.report.completion_s)} |",
+              f"| Skills | {skills} | - |",
+              f"| Contacts | {', '.join(f'{c.drone}-{c.object}' for c in live_flight.flight.contacts) or 'none'} | - |",
+              "", "Determinism needs a second flight: that row is the mock twin's alone. The twin is the seed flown "
+                  "with no stop and with each drone stopped, each stopped flight twice.", "",
+              f"**Live flight: {'MET' if ok else 'NOT MET'}** — the seven checks one flight can be held to"
+              + ("" if ok else "; failed: " + ", ".join(k for k in LIVE_CHECKS if not checks[k]["ok"]))
+              + ". A live flight of the variant, not the exit. The stopped drone is left hovering: reset the "
+                "simulator before the next flight.", ""]
+    problems = [f"{k}: {p}" for k in LIVE_CHECKS for p in checks[k]["problems"]]
+    if problems:
+        lines += ["Problems:", ""] + [f"* {p}" for p in problems[:50]] + [""]
+    os.makedirs(args.out, exist_ok=True)
+    stem = f"recovery-live-{time.strftime('%Y%m%d-%H%M%S')}" + (f"-{args.block}" if args.block else "")
+    with io.open(os.path.join(args.out, stem + ".jsonl"), "w", encoding="utf-8", newline="\n") as h:
+        for row in out_rows:
+            h.write(json.dumps(row, default=str) + "\n")
+    with io.open(os.path.join(args.out, stem + ".md"), "w", encoding="utf-8", newline="\n") as h:
+        h.write("\n".join(lines))
+    print("\n".join(lines))
+    print(f"raw     : {os.path.join(args.out, stem + '.jsonl')}")
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

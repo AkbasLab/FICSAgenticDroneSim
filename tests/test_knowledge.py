@@ -320,6 +320,17 @@ class ChecksCanFailTests(unittest.TestCase):
         self.assertIn("leak: it knew where Drone1 really was",
                       self.problems(lambda b: b["mission"]["progress"].update(hint=[round(x, 3), round(y, 3)])))
 
+    def test_flying_directly_over_a_teammate_is_not_a_leak(self):
+        # Phase 9: drones fly at different heights, and one passes directly over a stopped teammate hovering.
+        # Its own position is its own -- judged as its position (here wrong, so incorrect), never as a leak.
+        x, y, _ = self.truth.position("Drone1", self.row["at"])
+
+        def overhead(b):
+            b["self"]["position"][:2] = [round(x, 3), round(y, 3)]
+        found = self.problems(overhead)
+        self.assertIn("incorrect: believed position", found)
+        self.assertNotIn("leak", found)
+
 
 class ScriptTests(unittest.TestCase):
 
