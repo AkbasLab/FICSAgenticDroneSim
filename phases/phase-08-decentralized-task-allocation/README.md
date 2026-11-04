@@ -29,7 +29,10 @@ Mirrored from `AUV-22 — Phase Objectives Checklist`.
 > central assignment**, complete the work, and resolve simultaneous claims
 > deterministically.
 
-**Met:** no · **Evidence:** —
+**Met:** on the mock, 2026-11-04 — 20 of 20 seeds passed all seven checks, each seed flown deliberating and
+contested and each way twice (80 flights, every message delivered) · **Evidence:**
+[`evidence/exit-criterion-2026-11-04.md`](evidence/exit-criterion-2026-11-04.md).
+The optional live flight (step 6) is not yet flown.
 
 Planned evidence: the four canonical agents on `search_relay_001`, seeds
 1–20, each seed flown deliberating and contested (simultaneous claims made to
@@ -45,7 +48,7 @@ deterministic. Optionally, two drones dividing two sectors in CarlaAir.
 | Deterministic bids and their manifest (8.3) | `agentic_uav/coordination/bids.py`, `configs/allocation/default.toml`, `agentic_uav/experiments/allocation.py` | **Done** 2026-11-04; goldens unedited |
 | The contract-net protocol (8.2, 8.4, 8.5) | `agentic_uav/coordination/contract_net.py`, `agentic_uav/core/messages.py` | **Done** 2026-11-04; goldens unedited; Phase 7 reproduces |
 | Agents that allocate | `agentic_uav/agents/team_policy.py`, `agentic_uav/agents/drone_agent.py` (coordinator), `agentic_uav/experiments/allocation.py` (`fly_team_on_mock`), `agentic_uav/simulator/message_bus.py` (tie order) | **Done** 2026-11-04; goldens unedited; Phases 5–7 reproduce |
-| The exit | `agentic_uav/experiments/`, `scripts/`, `results/`, `evidence/` | step 5 |
+| The exit | `agentic_uav/experiments/allocation_exit.py`, `scripts/allocation_exit.py`, `results/`, `evidence/` | **Done** 2026-11-04; exit met on the mock |
 | Optional live flight; close | `results/`, `evidence/` | step 6 |
 
 ## Plan
@@ -429,10 +432,81 @@ teammate fix -- each closed by a test above.
 **The goldens did not move.** `record_golden.py --check` matches all four.
 857 tests pass, 24 skipped; audit clean.
 
+### 2026-11-04 — step 5: the exit, met on the mock
+
+**`experiments/allocation_exit.py`**: each seed flown **deliberating** (the
+manifest's 1 s bid window) and **contested** (no window: every drone claims
+at once on its own bids, before any other can arrive), **each twice**, every
+message delivered. **Seven checks**, each shown able to fail:
+
+| Check | What it requires |
+|---|---|
+| met | both flights complete the mission, every drone ending its part itself |
+| no central assignment | every drone told the team mission and nothing more; every claim resting on its own bid and the bids it had heard (deliberating: every drone's); the task flown the last it claimed |
+| one holder each | every sector searched, each by exactly one drone; every book agreeing at the end |
+| conflicts resolved by the rules | contested: at least one simultaneous claim, each settled for the lowest bid (the lower id on a tie), every book logging the same corrections, every loser releasing; deliberating: none |
+| leases renewed | no lease run out; every holder reporting from claim to completion with no gap over a period and a tick |
+| deterministic | each way flown twice: the same books, division and decisions |
+| known exactly | Phase 6's knowledge log passes every decision |
+
+**The run of record** (`results/allocation-exit-20261104-085636-exit`, at
+`60496ea` with the step-5 files uncommitted, `agentic_uav` digest
+`f85f583549e02b62`, 80 flights, 198.7 s): **20 of 20 seeds passed every
+check.**
+
+* **The same division on every seed** -- Drone1 S3, Drone2 S4, Drone3 S1,
+  Drone4 S2 -- the greedy reading of step 2's bids: the targets move with the
+  seed, the bids do not. Every claim in seed 17 traced to the bids heard,
+  each of the 16 matching the bids recomputed from the pads.
+* **Every contested flight: four simultaneous claims for S2 at 0 s**, each
+  drone on its own bid; Drone4's lowest (107.975 s); every book logging the
+  same three losing claims by the lowest valid bid at 0.5 s; the three
+  losers releasing at 0.5 s and claiming S3, S4, S1 the same tick -- the same
+  division as deliberating.
+* **No lease ran out**: every holder's lease renewed in its teammates' books
+  at most 2.0 s apart, from its claim to its completion (60–70 renewals each).
+* **188.0 s every flight**, against Phase 4's hand assignment at 192.1 s --
+  beside it, not a pass condition. 4,410 decisions known exactly.
+* **Deterministic**: each way flown twice gave the same books, division and
+  decisions, on every seed.
+
+**Beside the exit, the finding** (the run's header, `finding_100m`): the
+scenario's own 100 m radio, one flight -- met, but **8 searches of 4 sectors
+and 20 lease expiries**, the first at 51 s: a far-sector holder out of
+everyone's reach, its lease run out mid-search, its sector searched again.
+
+**Evidence:** [`evidence/exit-criterion-2026-11-04.md`](evidence/exit-criterion-2026-11-04.md),
+generated from the record: every seed's checks; seed 17's bids, claims,
+conflict, corrections, releases, second claims and lease renewals; the 100 m
+finding. A first version measured "widest gap" across every status update
+of the flight (10 s, the periodic ones before and after holding); it now
+measures what the check does, a holder's renewals while it holds.
+
+**Tests: 21, in `tests/test_allocation_exit.py`:** every check passes on a real
+seed; the flights are what they say, each flown again rather than reused; and
+each check failing on that seed altered to break it -- a drone told a sector,
+a claim not on its own bid, a deliberate claim without every bid (and the
+exit holding the deliberating flight to every bid), flying what it did not
+last claim, a sector searched twice, books that disagree, a contested flight
+that contested nothing, a deliberating flight with a conflict, a conflict
+logged for the wrong winner, a loser that never let go, a lease run out, a
+holder gone quiet, two flights that differ, a belief that is wrong, one
+failing check failing the seed; the 100 m finding; the script writing its
+record, and a failing seed failing the run.
+
+**Mutations: 23, all caught.** The first pass caught 20; the three survivors
+were test gaps -- the "flown again" flight being the first one reused, the
+exit not holding deliberating claims to every bid, the run's verdict not
+following its seeds -- each closed by a test above.
+
+**The goldens did not move.** `record_golden.py --check` matches all four.
+878 tests pass, 24 skipped; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-11-04 | **Each seed is flown deliberating and contested, each twice** | Conflicts must happen to be resolved, so the contested flight makes them; flying each twice is what "deterministically" is checked against |
 | 2026-11-04 | **The exit flies with every message delivered; the 100 m radio is a finding beside it** | The user's decision: on the canonical radio far-sector holders go silent, leases expire mid-search and sectors are searched twice -- partitions are Phase 10's subject, and the exit is the protocol under perfect communication |
 | 2026-11-04 | **A bid counts only while its message is current** | A bid from a drone that has since become busy or gone home must stop counting, or a free drone can wait for ever; a message's own time to live is the measure |
 | 2026-11-04 | **An inbox is read oldest first, ties by sender then sequence** | Thread order decided the order of one instant's messages; a book logging in that order differed run to run |
