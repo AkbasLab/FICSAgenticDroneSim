@@ -45,7 +45,7 @@ disk are not study data, for reasons that are easy to forget.
 | **5** | [Persistent single agent](phase-05-persistent-agent/) | One agent completes a search task with no preflight action list | **Complete** 2026-10-21 — one agent told only "search S3" meets 20/20 seeds and 5/5 troubles on the mock; in CarlaAir, three nominal flights of a small variant (20/20 seeds each) and one with an injected fault, 4 of 4 met |
 | **6** | [Belief state](phase-06-belief-state/) | The logger can show exactly what an agent knew and did not know | **Complete** 2026-11-02 — 1340 of 1340 decisions logged complete, correct and without a leak on the mock (a single agent and an independent pair, 20 seeds each); 10 of 10 in a CarlaAir flight |
 | **7** | [Inter-agent messaging](phase-07-inter-agent-messaging/) | Four agents exchange heartbeats; team beliefs update only on delivery | **Complete** 2026-11-04 — on the mock, 20 of 20 seeds: 5,820 teammate records each traced to a delivered message, blocked flights believing nothing, talking steering nothing; live, two drones talking in CarlaAir, MET, every decision the mock twin's |
-| 8 | Decentralized task allocation | Four drones divide sectors with no central assignment | Not started |
+| **8** | [Decentralized task allocation](phase-08-decentralized-task-allocation/) | Four drones divide sectors with no central assignment | In progress — started 2026-11-04 |
 | 9 | Roles and failure recovery | One agent is stopped; the rest reassign its task with no human command | Not started |
 | 10 | Degraded communications | The same mission replays under four conditions with reproducible delivery | Not started |
 | 11 | Runtime safety guardian | Injected unsafe commands are prevented from executing | Not started |
