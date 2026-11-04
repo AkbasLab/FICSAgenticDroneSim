@@ -94,8 +94,8 @@ model.
 
 ## Where the project is
 
-**Phases 1 to 5 are complete** (2026-10-20 to 2026-10-21), each tagged
-`phase-NN-complete`. **Phase 6, the belief state, is next.**
+**Phases 1 to 7 are complete** (2026-10-20 to 2026-11-04), each tagged
+`phase-NN-complete`. **Phase 8, decentralized task allocation, is next.**
 
 | Phase | Done | What it left |
 |---|---|---|
@@ -104,6 +104,8 @@ model.
 | 3 · Flight-skill layer | 2026-10-21 | Eleven skills with contracts and structured results, a mock simulator held to the same contract; four drones flown live |
 | 4 · Search-and-relay mission | 2026-10-21 | The canonical mission as data, a judge of AUV-05's six criteria, and a scripted controller that meets it on 20 of 20 seeds |
 | 5 · Persistent single agent | 2026-10-21 | One rule-based agent, told only its task, choosing each next skill on events: 20 of 20 seeds and 5 of 5 troubles on the mock, four live flights |
+| 6 · Belief state | 2026-11-02 | A belief in six blocks, unknowns said not zeroed, and a log of exactly what each decision knew and did not: 1340 of 1340 decisions on the mock, 10 of 10 live |
+| 7 · Inter-agent messaging | 2026-11-04 | Thirteen message types, one envelope, a bus that is the only way to talk, a log of every message's fate: team beliefs only from delivery on 20 of 20 seeds, and two drones talking live |
 
 Each phase keeps its own record in [`phases/`](phases/): objectives, the exit
 criterion and whether it is actually met, deliverables, decisions taken, and the
@@ -115,8 +117,8 @@ Objectives Checklist`; each phase also has a detail note `AUV-01` … `AUV-23`.
 |---|---|---|
 | 0 · Foundations | 0–1 | Phase 0 deliverable done, its exit (the one-minute explanation) untested; **Phase 1 complete** |
 | 1 · Platform | 2–4 | **Complete**: Phases 2, 3 and 4 |
-| 2 · One agent | 5–6 | **Phase 5 complete**; Phase 6 next |
-| 3 · The team | 7–9 | Not started |
+| 2 · One agent | 5–6 | **Complete**: Phases 5 and 6 |
+| 3 · The team | 7–9 | **Phase 7 complete**; Phase 8 next |
 | 4 · Adversity | 10–11 | Not started |
 | 5 · Intelligence | 12 | Not started |
 | 6 · Apparatus | 13–16 | Not started |

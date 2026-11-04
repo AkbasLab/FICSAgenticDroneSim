@@ -1,7 +1,7 @@
 # Phase 7 — Build the inter-agent message protocol under perfect communication
 
 **Stage:** 3 · The team · **Vault note:** `AUV-07 — Inter-Agent Messaging`
-**Started:** 2026-11-02 · **Completed:** —
+**Started:** 2026-11-02 · **Completed:** 2026-11-04
 
 > Until now each drone has known its teammates are on the roster and nothing
 > more: in Phase 6's pair flight two drones passed within 3.25 m, each holding
@@ -17,10 +17,10 @@
 
 Mirrored from `AUV-22 — Phase Objectives Checklist`.
 
-- [ ] **7.1** Define message types — 14: `HEARTBEAT` `STATUS_UPDATE` `TASK_ANNOUNCEMENT` `TASK_BID` `TASK_AWARD` `TASK_ACCEPT` `TASK_RELEASE` `TASK_COMPLETE` `INTENT_UPDATE` `TARGET_FOUND` `HELP_REQUEST` `ROLE_CHANGE` `MISSION_UPDATE`
-- [ ] **7.2** Use a common message envelope — `AgentMessage` with id, type, sender, recipients, mission, timestamp, sequence number, TTL, payload, confidence
-- [ ] **7.3** Prevent hidden global communication — agents interact only via `send()` and `receive_available()`; **no** inspection of the global queue, other agents' memory, undelivered messages, or ground truth
-- [ ] **7.4** Add message logging — creation, scheduled delivery, actual delivery, dropped/delivered, sender, recipient, size, expiration, **whether it influenced a decision**
+- [x] **7.1** Define message types — 14: `HEARTBEAT` `STATUS_UPDATE` `TASK_ANNOUNCEMENT` `TASK_BID` `TASK_AWARD` `TASK_ACCEPT` `TASK_RELEASE` `TASK_COMPLETE` `INTENT_UPDATE` `TARGET_FOUND` `HELP_REQUEST` `ROLE_CHANGE` `MISSION_UPDATE`
+- [x] **7.2** Use a common message envelope — `AgentMessage` with id, type, sender, recipients, mission, timestamp, sequence number, TTL, payload, confidence
+- [x] **7.3** Prevent hidden global communication — agents interact only via `send()` and `receive_available()`; **no** inspection of the global queue, other agents' memory, undelivered messages, or ground truth
+- [x] **7.4** Add message logging — creation, scheduled delivery, actual delivery, dropped/delivered, sender, recipient, size, expiration, **whether it influenced a decision**
 
 ## Exit criterion
 
@@ -28,17 +28,29 @@ Mirrored from `AUV-22 — Phase Objectives Checklist`.
 > flying, and their **local team beliefs update only when messages are
 > delivered**.
 
-**Met:** on the mock, 2026-11-02 — 20 of 20 seeds passed all six checks; 5,820 teammate records, in 2,020
-decisions, each traced to a message delivered before the decision · **Evidence:**
-[`evidence/exit-criterion-2026-11-02.md`](evidence/exit-criterion-2026-11-02.md).
-**Live, 2026-11-04:** the live variant's two agents flown once in CarlaAir, talking on a 20 m radio --
-**MET**, all four checks a single flight can be held to, and every decision the mock twin's
-(`results/messaging-live-20261104-015555-live1`).
+**Met:** **yes, 2026-11-04** · **Evidence:**
+[`evidence/exit-criterion-2026-11-02.md`](evidence/exit-criterion-2026-11-02.md)
+and [`evidence/live-run-2026-11-04.md`](evidence/live-run-2026-11-04.md).
 
-Planned evidence: four rule agents on `search_relay_001` (S1–S4) across 20
-seeds, every team-belief update traced to a delivered message and none
-without one, with negative controls in which messages are not delivered and
-beliefs do not move. Optionally, two drones talking in CarlaAir.
+**On the mock**, the four canonical rule agents (S1–S4) on Phase 7's perfect
+network, each seed 1–20 flown three ways -- talking; blocked, the radio cut
+to 1 m so every message is sent and none arrives; and silent: **20 of 20
+seeds passed all six checks.** 5,820 teammate records, in 2,020 decisions,
+each traced to a message from that teammate delivered to that drone before
+the decision, with its task, aged from sending; nothing undelivered ever
+believed; every blocked flight's teammates "never heard" throughout; and
+talking and blocked flights made exactly the silent flight's decisions.
+Re-run on the closing code, identical row for row.
+
+**In CarlaAir**, flown by the user, the live variant's two agents on a 20 m
+radio judged on the poller's positions: **MET on the four checks a single
+flight can be held to** -- 57 messages delivered within 17 m, 35 out of
+range at 21.9–38.9 m while the drones searched lanes 36 m apart, records
+gone stale out of range and fresh back over the pads -- and **every one of
+the 17 decisions the mock twin's**.
+
+The plan was the mock across 20 seeds with negative controls, and
+optionally two drones talking in CarlaAir. Both were done.
 
 ## Deliverables
 
@@ -53,7 +65,7 @@ beliefs do not move. Optionally, two drones talking in CarlaAir.
 | The live variant's mock gate (6b) | `scripts/messaging_exit.py --scenario search_relay_live_small`, `results/` | **Done** 2026-11-04; 20 of 20 seeds; the exit reproduces |
 | The live path for agents that talk (6c) | `agentic_uav/experiments/single_agent.py` (`fly_agents_live`), `agentic_uav/experiments/messaging.py` (`talking_checks`), `agentic_uav/experiments/knowledge.py`, `scripts/messaging_exit.py --sim airsim` | **Done** 2026-11-04; real-time dry run on the mock passes; Phases 5–7 reproduce |
 | One live flight (6d) | `results/messaging-live-20261104-015555-live1` | **Done** 2026-11-04: flown by the user; MET, the twin's decisions |
-| The close (6e) | `evidence/`, the ledger, the index, the vault | step 6e |
+| The close (6e) | `evidence/live-run-2026-11-04.md`, the ledger, the index, the vault | **Done** 2026-11-04; phase closed |
 
 ## Plan
 
@@ -719,6 +731,63 @@ messages delivered, went stale when delivery stopped and were renewed when
 it resumed -- with the radio judged on what the poller saw, not on the
 simulator's word.
 
+### 2026-11-04 — close: Phase 7 complete
+
+**The live evidence**, [`evidence/live-run-2026-11-04.md`](evidence/live-run-2026-11-04.md),
+is generated from the live1 record: the checks beside the twin's; the radio
+message by message, in runs of one fate (each way: delivered 0–12.2 s at
+4.0–13.0 m, out of range 13.2–26.8 s at 21.9–38.9 m, delivered again from
+27.8 s); what each believed of the other at each decision, live and twin side
+by side; and every decision against the twin's, with its own-position error
+at the belief's time (worst 0.418 m of 0.625 m). The twin is flown again to
+write it, and checked to be the record's own before it is used.
+
+**One difference the evidence shows, and why it does not matter here.** At
+17–18 s on the mock, Drone2 still held a *current* record of Drone1; live, at
+22–23 s, its record had *expired*. The last message each heard before falling
+silent differed: on the mock, a status update sent at 10.0 s from 19.9 m,
+current for 10 s; live, CarlaAir's slower climb put Drone1's next status
+update (13.2 s) just out of range, so the last heard was a heartbeat, current
+for 3 s. The beliefs differed in kind; the decisions did not, because the rule
+policy is not steered by teammate records -- which is what "steers nothing"
+holds on the mock. Phase 8's allocation will be the first policy that is,
+and then such differences will move decisions.
+
+**The exit holds at the closing code.** Re-run at the code of `96d8b4e`, with
+only this record and the evidence changed: the messaging exit's 2,415 rows
+identical to the run of record `messaging-exit-20261102-213008-exit`; step
+6b's gate identical; Phase 6's knowledge exit and Phase 5's exit identical
+to theirs. Neither re-run is kept: each is the same record.
+
+**What Phase 7 leaves for Phase 8 onwards:**
+
+* **A protocol of thirteen types and one envelope** (`core/messages.py`),
+  with a payload schema for the two in use and every other type refused
+  until a phase defines it -- `TASK_ANNOUNCEMENT` to `TASK_COMPLETE` are
+  Phase 8's to fill.
+* **A bus that is the only way to talk** (`simulator/message_bus.py`): a
+  direct link judged when sent, each recipient its own copy, a record of
+  every delivery's fate; an agent holds `send` and `receive_available` and
+  nothing that leads to the queue. Phase 10 puts loss, latency and outages
+  behind the same two functions.
+* **A message log** that says of every message whether it was delivered,
+  in a belief when a decision was made, and read by the policy deciding --
+  the measure of whether communication mattered.
+* **Team beliefs only from delivery**, shown on the mock with negative
+  controls and live: heard, aged, expired by kind, renewed.
+* **A simulated clock with no same-instant race**, and a knowledge log that
+  judges a belief at the instant it describes: two defects that would have
+  muddied every comparison after this one, found here and fixed at the root.
+* **A live path for talking agents** (`fly_agents_live`, `--sim airsim`)
+  that Phases 8–10 can fly with nothing more than a new policy.
+
+**Test and check totals at close:** 761 tests, 24 skipped (15 need a live
+CarlaAir, 9 real time), 109 more than at Phase 6's close. The four Phase 2
+goldens are unedited through every step, and the audit is clean.
+Mutations: 21, 20, 19, 25 and 19 by step, then 10, 9 and 18 for 6a–6c, 141 in
+all, every one caught; 5 of 6c's only by the real-time tests, which were run
+for them.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -741,6 +810,25 @@ simulator's word.
 | 2026-11-04 | **A live flight is held to four checks, its mock twin to six** | Blocked and silent cannot be flown at the same time as the live flight; the twin shows them beside it, and is not a pass condition |
 
 ## Open questions
+
+- **No policy yet listens.** The rule policy is steered by nothing it hears
+  ("steers nothing" holds by design); so far messages change beliefs and
+  nothing else. Phase 8's allocation is the first to act on them, and the
+  first place a stale or missing record can cost a decision -- the live
+  flight already shows the two differing in kind (expired live, current on
+  the mock) at the same point of the mission.
+- **The live radio is judged on polls.** A message's range is judged on the
+  poller's latest positions, up to one poll (0.625 m) behind the drone: near
+  the 20 m edge a message can be judged in range when the drone has just left
+  it, or the reverse. Honest for what is known, and invisible at this range;
+  Phase 10's degraded links should judge it the same way, on purpose.
+- **Windows' monotonic clock ticks every 15.6 ms.** It is why a decision is
+  stamped up to 16 ms after its belief, and every live time is quantised to
+  it. The knowledge log now judges at the belief's time; a later phase timing
+  anything finer than a tick should use `time.perf_counter`.
+- **Thirteen types, not the fourteen the plan counts.** The source plan's
+  count and list disagree (step 1); the missing fourteenth, if there is one,
+  is for whoever wrote the list to name.
 
 ---
 

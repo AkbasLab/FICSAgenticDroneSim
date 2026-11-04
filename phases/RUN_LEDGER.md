@@ -257,6 +257,9 @@ and kept on purpose. Planning data from every 70B session stands.
 | **`20261021-233618-fault1`** single-agent, live | none (rule-based agent) | 1 flight, judged on 20 seeds | **Phase 5 fault-once flight** — the first horizontal move refused once in our code: retried at once, "fault once" check met, 20/20 |
 | **`20261023-095034-exit`** knowledge log, mock | none (rule-based agents) | 40 flights (single + pair, seeds 1–20), 1340 decisions | **Phase 6 exit run** — every decision logged with what the agent knew, what it recorded as unknown, and the truth gap: 1340/1340 complete, correct, no leak; 40/40 tasks met |
 | **`20261102-194003-live1`** knowledge log, live | none (rule-based agent) | 1 flight, 10 decisions | **Phase 6 live flight** — Drone1 in CarlaAir told only "search S1": 10/10 decisions passed, "correct" within one observed poll (0.625 m; worst 0.567 m); the mock twin's decisions |
+| **`20261102-213008-exit`** messaging, mock | none (rule-based agents) | 60 flights (4 agents, seeds 1–20, each talking, blocked and silent), 2,020 decisions | **Phase 7 exit run** — 20/20 seeds passed all six checks: 5,820 teammate records each traced to a delivered message; blocked flights believed nothing; talking and blocked made the silent flight's decisions |
+| **`20261104-005602-live-variant-mock`** messaging, mock | none (rule-based agents) | 60 flights (the live variant's pair, seeds 1–20, three ways), 336 decisions | **Phase 7 live-variant gate** — the pair to be flown live, on its 20 m radio: 20/20 seeds passed all six checks; a gate, not the exit |
+| **`20261104-015555-live1`** messaging, live | none (rule-based agents) | 1 flight, 2 drones, 17 decisions, 94 messages | **Phase 7 live flight** — two agents talking in CarlaAir, the radio judged on the poller: MET on the four checks one flight can be held to; 57 delivered, 35 out of range; every decision the mock twin's |
 
 The `p2-` sessions are in `phases/phase-02-repository-architecture/results/`,
 not Phase 1's. They meet every condition in §1 and are the Phase 2 exit
@@ -348,7 +351,7 @@ vertical movement. That GPU load is in the protocol deliberately.
 
 ---
 
-## 4. Phases 2 to 6 have no run inventory
+## 4. Phases 2 to 7 have no run inventory
 
 None is a measurement phase, so none has a run count. Their exit criteria
 are demonstrations.
@@ -360,6 +363,7 @@ are demonstrations.
 | **4** — Search-and-relay mission | A scripted, non-agentic controller completes the canonical mission | A feasibility check (AUV-19's gate G1), judged against AUV-05's six criteria on fixed seeds, not a scored comparison. **Done 2026-10-21**: 20/20 exit seeds on the mock (twice: before and after a controller fix), and three live flights of a small variant, 20/20 each; see §3 |
 | **5** — Persistent single agent | One agent completes a search task with no preflight action list, recognises success or failure, and decides what next | A demonstration on fixed seeds and fixed troubles, judged by Phase 4's evaluator, not a scored comparison. **Done 2026-10-21**: 20/20 seeds and 5/5 troubles on the mock; three nominal live flights of a small variant, 20/20 each, and one live flight with an injected fault, met; see §3 |
 | **6** — Belief state | The logger can show, for each decision, exactly what the agent knew and what it did not know | A demonstration on fixed seeds, every decision checked, not a scored comparison. **Done 2026-11-02**: 1340/1340 decisions on the mock (a single agent and an independent pair, 20 seeds each), and 10/10 in one live flight; see §3 |
+| **7** — Inter-agent messaging | Four deterministic agents exchange heartbeats and status messages while flying; their team beliefs update only when messages are delivered | A demonstration on fixed seeds with negative controls, every record traced, not a scored comparison. **Done 2026-11-04**: 20/20 seeds on the mock (talking, blocked and silent), and one live flight of two talking drones, MET; see §3 |
 
 > **Phase 3's exit criterion names four drones**, and on the evidence of M09 it
 > is not blocked: multi-drone flight works when the extra drones are spawned at
