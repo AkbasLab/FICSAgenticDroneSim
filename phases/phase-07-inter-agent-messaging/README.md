@@ -31,7 +31,9 @@ Mirrored from `AUV-22 — Phase Objectives Checklist`.
 **Met:** on the mock, 2026-11-02 — 20 of 20 seeds passed all six checks; 5,820 teammate records, in 2,020
 decisions, each traced to a message delivered before the decision · **Evidence:**
 [`evidence/exit-criterion-2026-11-02.md`](evidence/exit-criterion-2026-11-02.md).
-The optional live flight (step 6) is not yet flown.
+**Live, 2026-11-04:** the live variant's two agents flown once in CarlaAir, talking on a 20 m radio --
+**MET**, all four checks a single flight can be held to, and every decision the mock twin's
+(`results/messaging-live-20261104-015555-live1`).
 
 Planned evidence: four rule agents on `search_relay_001` (S1–S4) across 20
 seeds, every team-belief update traced to a delivered message and none
@@ -50,7 +52,8 @@ beliefs do not move. Optionally, two drones talking in CarlaAir.
 | The clock's same-instant order (6a) | `agentic_uav/core/clock.py` (`sleep_after_others`), `agentic_uav/agents/drone_agent.py` | **Done** 2026-11-04; goldens unedited; Phases 5–7 reproduce |
 | The live variant's mock gate (6b) | `scripts/messaging_exit.py --scenario search_relay_live_small`, `results/` | **Done** 2026-11-04; 20 of 20 seeds; the exit reproduces |
 | The live path for agents that talk (6c) | `agentic_uav/experiments/single_agent.py` (`fly_agents_live`), `agentic_uav/experiments/messaging.py` (`talking_checks`), `agentic_uav/experiments/knowledge.py`, `scripts/messaging_exit.py --sim airsim` | **Done** 2026-11-04; real-time dry run on the mock passes; Phases 5–7 reproduce |
-| Optional live flight; close | `results/`, `evidence/` | step 6d–6e |
+| One live flight (6d) | `results/messaging-live-20261104-015555-live1` | **Done** 2026-11-04: flown by the user; MET, the twin's decisions |
+| The close (6e) | `evidence/`, the ledger, the index, the vault | step 6e |
 
 ## Plan
 
@@ -662,6 +665,59 @@ folder: the strays were deleted and every such test now writes to a scratch
 folder.
 
 **The goldens did not move.** 761 tests pass, 24 skipped; audit clean.
+
+### 2026-11-04 — step 6d: one live flight, two drones talking — MET
+
+**The scene.** CarlaAir launched fresh (`.\CarlaAir.ps1 Town10HD`),
+`settings.json` declaring Drone1 only. A read-only check by the user:
+`vehicles ['Drone1']`, Drone1 at x −0.05, y 0.05, z 29.25, not under API
+control -- the fresh launch of Phases 4–6 exactly. No Vega.
+
+**The flight**, `python scripts\messaging_exit.py --sim airsim --block live1`,
+flown by the user at `cb84112` with a clean tree (`agentic_uav` digest
+`8a0a91f0a1d0d47a`) → `results/messaging-live-20261104-015555-live1`. Drone2
+was spawned at runtime and placed at (4.0, 0.0), Drone1 at (−0.02, 0.02); both
+at rest 2.5 s after the reset; grounds 29.245 and 29.282, Phase 4's under
+these pads. 360 polls of each drone over 39.3 s; the poller kept 9.13 Hz,
+worst gap 0.125 s, so 0.625 m allowed. Every skill succeeded; closest pair
+3.91 m, on the pads; contacts only SM_seaM, the floor mesh, counted as ground.
+
+**MET: all four checks a single flight can be held to.**
+
+| Check | Live | Mock twin |
+|---|---|---|
+| met | yes | yes |
+| exchanged | yes | yes |
+| only on delivery | yes, 15 records | yes, 15 records |
+| known exactly | yes, 17 of 17 decisions | yes |
+| blocked moves nothing | - | yes |
+| steers nothing | - | yes |
+
+* **94 messages** (77 heartbeats, 17 status updates): **57 delivered, 35 out
+  of range, 2 pending** at the end. Every delivery crossed at most 17.0 m;
+  the 35 out of range were sent from 13.2 to 26.8 s, at 21.9–38.9 m, the
+  lanes 36 m apart -- the radio judged on the poller's positions, as built.
+  Read at the next tick: 0.48–0.55 s after sending.
+* **What each believed, over the flight:** never heard at take-off; each
+  heard the other from 9.6–10.1 s; at 22.0–24.1 s, out of range searching,
+  each record was **expired** -- the last heard was a heartbeat, current for
+  3 s, aged 9.8–11.9 s -- and shown so; back over the pads at 29.3 s, fresh
+  again, 0.5 s old.
+* **What mattered:** 10 messages were in a belief when a decision was made,
+  and 8 were read by the policy deciding.
+* **Every decision the mock twin's.** Both drones made exactly the twin's
+  decisions, in order, each with its reason -- Drone1 nine, Drone2 eight,
+  continues included -- and the same skills; Drone2 goes straight from
+  take-off to its search on the mock too. Only the times differ: CarlaAir is
+  slower (first heard at 9.6 s against 7.5 s; 39.3 s against 31.5 s).
+* **Heights:** cruise medians 12.7 m and 16.7 m against 12 and 16 asked, with
+  peaks of 14.3 and 18.0 m -- CarlaAir's climb overshoot, the same as Phase 6's
+  live flight (14.3 m on 12).
+
+So live, as on the mock, two agents' beliefs of each other came only from
+messages delivered, went stale when delivery stopped and were renewed when
+it resumed -- with the radio judged on what the poller saw, not on the
+simulator's word.
 
 ## Decisions
 
