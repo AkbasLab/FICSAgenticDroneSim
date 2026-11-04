@@ -197,6 +197,53 @@ class RealFlightTests(unittest.TestCase):
         self.assertIn("incorrect: its record of Drone2", self.knowledge(
             lambda b: b["team"]["Drone2"].update(age_s=b["team"]["Drone2"]["age_s"] - 1.0), index=index))
 
+    def test_a_record_is_aged_from_its_beliefs_own_time(self):
+        # Live, the belief (and every age in it) is taken at the observation,
+        # and the decision is stamped a little after: 15-16 ms on the real-time
+        # dry run. A record is aged from the belief, so that gap is not an error.
+        def later(run, seconds):
+            entries = list(run.traces["Drone1"])
+            entries[self.heard_at] = dataclasses.replace(entries[self.heard_at], at=entries[self.heard_at].at + seconds)
+            return dataclasses.replace(run, traces={**run.traces, "Drone1": tuple(entries)})
+        self.assertEqual(only_on_delivery(later(self.talk, 0.016), self.rows)[1], [])
+        # ... but an age that disagrees with the belief's time is still caught,
+        # past the half-millisecond roundings of the three values.
+        self.assertIn("aged", self.broken(lambda b: b["team"]["Drone2"].update(age_s=b["team"]["Drone2"]["age_s"] + 0.003)))
+        # Within the roundings (each value to the millisecond) is not an error.
+        self.assertEqual(self.broken(lambda b: b["team"]["Drone2"].update(age_s=b["team"]["Drone2"]["age_s"] + 0.001)), "")
+
+    def test_a_belief_is_judged_at_its_own_time(self):
+        # A decision stamped a tick after its belief (16 ms, live) is judged on
+        # what the belief describes: where the drone was when it was observed.
+        moving = next(i for i, e in enumerate(self.talk.traces["Drone1"])
+                      if e.belief["self"]["airborne"] and isinstance(e.belief["team"]["Drone2"], dict)
+                      and isinstance(e.belief["self"]["velocity"], list)
+                      and any(abs(v) > 1.0 for v in e.belief["self"]["velocity"]))
+        row = entry_json(self.talk.traces["Drone1"][moving])
+        row["at"] += 0.016
+        truth = Truth(TEAM, self.talk.trajectories, self.talk.start, self.talk.report.until)
+        self.assertEqual(knowledge_entry(row, "Drone1", truth).problems, [])
+
+    def test_where_a_teammate_spoke_is_reckoned_from_the_beliefs_time(self):
+        # A belief taken a second before the decision holds a record a second
+        # younger: it spoke at the same moment, and the record is right.
+        truth = Truth(TEAM, self.talk.trajectories, self.talk.start, self.talk.report.until)
+        import math
+
+        def moving(i):
+            e = self.talk.traces["Drone1"][i]
+            r = e.belief["team"]["Drone2"]
+            if not isinstance(r, dict) or r["age_s"] < 1.0:
+                return False
+            spoke = e.at - r["age_s"]
+            return math.dist(truth.position("Drone2", spoke), truth.position("Drone2", spoke + 1.0)) > 2.0
+        index = next(i for i in range(len(self.talk.traces["Drone1"])) if moving(i))
+
+        def earlier(b):
+            b["self"]["updated_at"] -= 1.0
+            b["team"]["Drone2"]["age_s"] -= 1.0
+        self.assertNotIn("its record of Drone2", self.knowledge(earlier, index=index))
+
     def test_one_teammates_place_in_anothers_record_is_a_leak(self):
         # Drone2's record may say where Drone2 is; it may not say where Drone3 is.
         truth = Truth(TEAM, self.talk.trajectories, self.talk.start, self.talk.report.until)
@@ -303,7 +350,7 @@ class LiveVariantTests(unittest.TestCase):
         import messaging_exit
         with redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit):
-                messaging_exit.main(["--scenario", "search_single_001"])
+                messaging_exit.main(["--scenario", "search_single_001", "--out", tempfile.gettempdir()])
 
 
 if __name__ == "__main__":

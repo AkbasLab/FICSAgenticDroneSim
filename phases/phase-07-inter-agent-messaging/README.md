@@ -49,7 +49,8 @@ beliefs do not move. Optionally, two drones talking in CarlaAir.
 | The exit | `agentic_uav/experiments/messaging.py`, `agentic_uav/experiments/knowledge.py` (heard teammates), `scripts/messaging_exit.py`, `results/`, `evidence/` | **Done** 2026-11-02; exit met on the mock |
 | The clock's same-instant order (6a) | `agentic_uav/core/clock.py` (`sleep_after_others`), `agentic_uav/agents/drone_agent.py` | **Done** 2026-11-04; goldens unedited; Phases 5–7 reproduce |
 | The live variant's mock gate (6b) | `scripts/messaging_exit.py --scenario search_relay_live_small`, `results/` | **Done** 2026-11-04; 20 of 20 seeds; the exit reproduces |
-| Optional live flight; close | `results/`, `evidence/` | step 6c–6e |
+| The live path for agents that talk (6c) | `agentic_uav/experiments/single_agent.py` (`fly_agents_live`), `agentic_uav/experiments/messaging.py` (`talking_checks`), `agentic_uav/experiments/knowledge.py`, `scripts/messaging_exit.py --sim airsim` | **Done** 2026-11-04; real-time dry run on the mock passes; Phases 5–7 reproduce |
+| Optional live flight; close | `results/`, `evidence/` | step 6d–6e |
 
 ## Plan
 
@@ -576,6 +577,92 @@ wrong; the refusal removed).
 (`messaging-exit-20261102-213008-exit`) is identical, 2,415 rows. **The
 goldens did not move.** 744 tests pass, 22 skipped; audit clean.
 
+### 2026-11-04 — step 6c: the live path for agents that talk
+
+**`fly_agents_live`** (`experiments/single_agent.py`) is the mock's talking
+pair with the simulator outside: reset; Drone2 spawned at runtime; both at
+rest; the poller and the separation monitor; then one agent per drone, each
+on its own thread on the real clock, each skill on its own connection, its
+sensors from the poller. The bus judges range from **the poller's latest
+position** of each drone -- what is known of where they are, not the
+simulator's word. Heights (12 m, 16 m) and messages (0.1 s delay) as on the
+mock. It refuses a task list that is not one task per pad, and pads that are
+not the spawn layout. The flight comes back as a `LiveTeamFlight`, and
+`as_run` makes it the mock's `TeamAgentRun`, so the checks apply unchanged.
+
+**The checks a flight can be held to on its own.** `talking_checks`
+(`experiments/messaging.py`) is the exit's met, exchanged, only on delivery
+and known exactly, split out; the exit's checks are built on it and add the
+two that need blocked and silent flights. `scripts/messaging_exit.py --sim
+airsim` flies the pair once, holds it to those four -- known exactly within
+one observed poll of flight, Phase 6's live allowance -- and flies the mock
+twin beside it with all six. The record is `messaging-live-<stamp>`; its
+verdict reads **"Live flight: MET"**, and it carries `live_flight_met`, never
+`exit_criterion_met`.
+
+**Found by the real-time dry run: a belief and its decision are two
+instants.** The whole live path flown on the mock in real time, Drone2
+spawned at runtime, failed twice before it passed:
+
+* *only on delivery*, on 4 of 15 records: each record's age was 15–16 ms short
+  of the time since its message was sent;
+* *known exactly*, on 1 of 17 decisions: Drone1's believed position 0.625 m
+  from the truth, against 0.625 m allowed.
+
+One cause. The belief, and every age in it, is taken when the agent observes;
+the decision is stamped when it decides, a little later. Measured over two
+dry runs: 0 ms in the median, at most 16 ms -- one tick of Windows' monotonic
+clock, 8 cm at 5 m/s, which the one-poll allowance is not for. On the mock
+the two instants are one, since simulated time does not pass while an agent
+computes, so no mock check could have seen it.
+
+**The fix: a belief is judged at the instant it describes**, its own time
+(`self.updated_at`). The delivery check ages a record from it, allowing only
+the half-millisecond roundings of the three values it compares (1.5 ms); the
+knowledge log judges the whole entry at it -- own position, battery, link,
+sightings, and where a heard teammate was when it spoke. Measured: the worst
+own-position error at the belief's time against at the decision, 0.315 against
+0.390 m and 0.390 against 0.470 m on two dry runs. **Phase 6's live run of
+record**, re-judged from what it saved (on its own clock): 0.494 m against
+0.567 m, and still 10 of 10, every decision identical to the record in what
+was known, unknown and the truth gap.
+
+**The real-time dry run** (the mock standing in for AirSim, 37.6 s): Drone2
+spawned at runtime, both at rest in 0.3 s, both agents finished, each at its
+own height; the poller kept 9.2 Hz, worst gap 0.125 s, so 0.625 m allowed;
+**all four checks passed**, 15 teammate records in 17 decisions; messages both
+delivered and out of range. The script, end to end on the mock in real time:
+**Live flight: MET**.
+
+**Every run of record reproduces** at this code: Phase 5's exit, Phase 6's
+knowledge exit, Phase 7's exit and step 6b's gate, identical; and Phase 6's
+live record as above.
+
+**Tests: 17 new.** In `tests/test_messaging_live.py`, 14: the live path refuses
+what it cannot fly; a live flight comes back as a run the checks apply to,
+with its record; the knowledge check is held to the tolerance it is given;
+the script's record -- four checks for the flight, six for its twin, the
+verdict the flight's and never the exit's, following the checks, a flight
+that did not finish or heard nothing not met; live flies only the variant,
+live options only live; and, behind `AUV_SLOW_TESTS`, the live path and the
+script whole in real time on the mock. In `tests/test_messaging_exit.py`, 3:
+a record aged from its belief's time, not the decision's, still caught past
+the roundings and passed within them; where a teammate spoke reckoned from
+the belief's time; a belief judged at its own time. One of Phase 6's tests
+shifted a flight 1000 s but not its belief's own time, which a real shifted
+flight would move too; it now moves both.
+
+**Mutations: 18, all caught,** 13 by the fast tests and 5 -- the bus judging
+range on the first poll or on none, both drones at one height, no comms, the
+live tolerance dropped in the script -- only by the real-time tests, which
+were run for them. The first pass found one gap, the tolerance not reaching
+the knowledge log, and the test for it is above. It also found that two
+command-line tests, were a refusal lost, would fly a full mock exit into this
+folder: the strays were deleted and every such test now writes to a scratch
+folder.
+
+**The goldens did not move.** 761 tests pass, 24 skipped; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -593,6 +680,9 @@ goldens did not move.** 744 tests pass, 22 skipped; audit clean.
 | 2026-11-02 | **A heard teammate's position may stand only in its own record, and must be true to when it spoke** | The leak check now has messages to allow for; allowing them only in the record that came in one, and checking that record against the truth, keeps the check as strict as before |
 | 2026-11-04 | **Fix the same-instant race in the clock: an agent's tick wakes after everything else due then** | It is a defect of the shared timeline, so it is fixed there; moving the agents' ticks off the skills' instants would have moved every decision time, and the runs of record would no longer reproduce |
 | 2026-11-04 | **The live variant's mock run is a gate, labelled so** | Two agents on a 20 m radio are what will fly live, so they are proved on the mock first; but the criterion names four agents, so the variant's record must never read as the exit |
+| 2026-11-04 | **A belief is judged at the instant it describes, not when its decision is stamped** | The two are one on the mock and up to a clock tick apart live; the allowance is for the poll's lag, not for comparing two different instants |
+| 2026-11-04 | **Live, the bus judges range from the poller's latest positions** | It is what is known of where the drones are; the simulator's own word would be a truth the agents never had |
+| 2026-11-04 | **A live flight is held to four checks, its mock twin to six** | Blocked and silent cannot be flown at the same time as the live flight; the twin shows them beside it, and is not a pass condition |
 
 ## Open questions
 

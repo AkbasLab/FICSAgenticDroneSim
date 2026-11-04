@@ -45,6 +45,9 @@ from .single_agent import TEAM_TASKS, TeamAgentRun, fly_agents_on_mock
 
 BLOCKED_RANGE_M = 1.0          # the four pads are 4 m apart: nothing is ever within 1 m of another drone
 MODES = ("talking", "blocked", "silent")
+# A record's age, its belief's time and the message's sending are each written
+# to the millisecond, so they can disagree by half a millisecond apiece.
+AGE_ROUNDING_S = 1.5e-3
 
 
 def messaging_flights(scenario: Scenario, seed: int, tasks: dict[str, str] | None = None) -> dict[str, TeamAgentRun]:
@@ -79,6 +82,9 @@ def only_on_delivery(run: TeamAgentRun, rows: list[dict[str, Any]]) -> tuple[int
     for drone, trace in run.traces.items():
         for e in trace:
             at = round(e.at - run.start, 3)
+            # Ages are taken when the belief was (its own time), which live is a
+            # little before the decision is stamped; on the mock the two are one.
+            seen = e.belief["self"]["updated_at"] - run.start
             for member, record in e.belief["team"].items():
                 if record == "never heard":
                     continue
@@ -94,8 +100,9 @@ def only_on_delivery(run: TeamAgentRun, rows: list[dict[str, Any]]) -> tuple[int
                     problems.append(f"{where}: {mid} is not {member}'s")
                 if record["task"] != run.tasks.get(member):
                     problems.append(f"{where}: task {record['task']!r}, but {member} was told {run.tasks.get(member)!r}")
-                if abs(record["age_s"] - (at - created[mid])) > 1e-3:
-                    problems.append(f"{where}: aged {record['age_s']} s, but {mid} was sent {at - created[mid]:.3f} s before")
+                if abs(record["age_s"] - (seen - created[mid])) > AGE_ROUNDING_S + 1e-9:
+                    problems.append(f"{where}: aged {record['age_s']} s, but {mid} was sent "
+                                    f"{seen - created[mid]:.3f} s before the belief")
     for r in rows:
         if r["status"] != "delivered" and (r["in_belief_at_s"] is not None or r["read_by_policy_at_s"] is not None):
             problems.append(f"{r['recipient']} believed or read {r['message_id']}, which was {r['status']}")
@@ -114,25 +121,41 @@ def exchanged(rows: list[dict[str, Any]], drones: list[str]) -> list[str]:
     return problems
 
 
-def exit_checks(flights: dict[str, TeamAgentRun], scenario: Scenario | None = None) -> dict[str, Any]:
-    """Each part of the exit criterion on one seed's three flights, with what it found."""
-    talk, blocked, silent = flights["talking"], flights["blocked"], flights["silent"]
+def talking_checks(talk: TeamAgentRun, scenario: Scenario | None = None,
+                   tolerance: dict[str, Any] | None = None) -> dict[str, Any]:
+    """The checks a talking flight can be held to on its own: met, exchanged, only on delivery, known exactly.
+
+    These are the ones a live flight is held to (it cannot also be flown
+    blocked and silent). `tolerance` is the knowledge log's: the mock's
+    default, or a live flight's `poll_tolerance`.
+    """
     rows = message_log(talk.deliveries, talk.traces, talk.start)
-    brows = message_log(blocked.deliveries, blocked.traces, blocked.start)
     drones = sorted(talk.tasks)
     checked, delivery_problems = only_on_delivery(talk, rows)
-    knowledge = None
-    if scenario is not None:
-        sc = dataclasses.replace(scenario, random_seed=talk.seed)
-        knowledge = knowledge_summary(knowledge_log(talk.traces, Truth(sc, talk.trajectories, talk.start,
-                                                                      talk.report.until)))
-    heard_blocked = [f"{b['drone']} at {b['at_s']} s believed {m}" for b in team_beliefs(blocked)
-                     for m, r in b["team"].items() if r != "never heard"]
     checks = {
         "met": {"ok": talk.met, "problems": [] if talk.met else ["the talking flight did not meet its tasks"]},
         "exchanged": {"ok": not exchanged(rows, drones), "problems": exchanged(rows, drones)},
         "only_on_delivery": {"ok": checked > 0 and not delivery_problems, "records_checked": checked,
                              "problems": delivery_problems if checked else ["no teammate record was ever held"]},
+    }
+    if scenario is not None:
+        sc = dataclasses.replace(scenario, random_seed=talk.seed)
+        knowledge = knowledge_summary(knowledge_log(talk.traces, Truth(sc, talk.trajectories, talk.start,
+                                                                      talk.report.until), tolerance))
+        checks["known_exactly"] = {"ok": knowledge["ok"] == knowledge["decisions"], "decisions": knowledge["decisions"],
+                                   "passed": knowledge["ok"], "problems": knowledge["problems"][:20]}
+    return checks
+
+
+def exit_checks(flights: dict[str, TeamAgentRun], scenario: Scenario | None = None) -> dict[str, Any]:
+    """Each part of the exit criterion on one seed's three flights, with what it found."""
+    talk, blocked, silent = flights["talking"], flights["blocked"], flights["silent"]
+    rows = message_log(talk.deliveries, talk.traces, talk.start)
+    brows = message_log(blocked.deliveries, blocked.traces, blocked.start)
+    heard_blocked = [f"{b['drone']} at {b['at_s']} s believed {m}" for b in team_beliefs(blocked)
+                     for m, r in b["team"].items() if r != "never heard"]
+    checks = {
+        **talking_checks(talk, scenario),
         "blocked_moves_nothing": {
             "ok": bool(brows) and all(r["status"] == "out_of_range" for r in brows) and not heard_blocked,
             "sent": len(brows), "delivered": sum(r["status"] == "delivered" for r in brows),
@@ -143,9 +166,6 @@ def exit_checks(flights: dict[str, TeamAgentRun], scenario: Scenario | None = No
                                         for name, run in (("talking", talk), ("blocked", blocked))
                                         if decisions(run) != decisions(silent)]},
     }
-    if knowledge is not None:
-        checks["known_exactly"] = {"ok": knowledge["ok"] == knowledge["decisions"], "decisions": knowledge["decisions"],
-                                   "passed": knowledge["ok"], "problems": knowledge["problems"][:20]}
     checks["all"] = all(c["ok"] for c in checks.values())
     checks["messages"] = log_summary(rows)
     return checks

@@ -247,8 +247,13 @@ def knowledge_entry(entry: Any, drone: str, truth: Truth,
     out = KnowledgeEntry(drone, round(t - truth.start, 3), [e["trigger"] for e in data["events"]],
                          {"kind": d["kind"], "skill": d.get("skill"), "reason": d.get("reason", "")})
     _classify(belief, out)
-    _gap(belief, drone, t, truth, out)
-    _check(belief, drone, t, truth, out, tolerance)
+    # A belief is judged at the instant it describes -- its own time, when it
+    # was observed -- not when the decision was stamped. On the mock the two
+    # are one; live the stamp can trail by a tick of the monotonic clock
+    # (16 ms on Windows: 8 cm at 5 m/s), which the allowance is not for.
+    taken = belief.get("self", {}).get("updated_at", t)
+    _gap(belief, drone, taken, truth, out)
+    _check(belief, drone, taken, truth, out, tolerance)
     return out
 
 
@@ -356,7 +361,8 @@ def _check(belief: dict[str, Any], drone: str, t: float, truth: Truth, out: Know
     real_seen = truth.seen_by(drone, t)
     if seen != real_seen:
         out.problems.append(f"incorrect: believed sightings {sorted(seen)}, truly detected {sorted(real_seen)}")
-    # A heard teammate's record must say where it truly was when it spoke.
+    # A heard teammate's record must say where it truly was when it spoke:
+    # the belief's time less the record's age.
     for member, record in belief.get("team", {}).items():
         if isinstance(record, dict) and isinstance(record.get("position"), list):
             then = t - record["age_s"]

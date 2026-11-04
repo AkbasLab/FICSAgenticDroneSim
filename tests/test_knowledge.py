@@ -159,6 +159,7 @@ class SingleLogTests(unittest.TestCase):
         later = Truth(SINGLE, moved, self.flight.report.start + shift, self.flight.report.until + shift)
         row = entry_json(self.flight.trace[2])
         row["at"] += shift
+        row["belief"]["self"]["updated_at"] += shift      # the belief's own time moves with the flight
         here, there = knowledge_entry(self.flight.trace[2], "Drone1", self.truth), knowledge_entry(row, "Drone1", later)
         self.assertEqual(here.at_s, there.at_s)
         self.assertEqual(here.gap, there.gap)

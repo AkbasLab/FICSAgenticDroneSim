@@ -461,3 +461,150 @@ def fly_agent_live(scenario: Scenario, task: str, scene: Any, connect: Callable[
                            tuple(faults.struck) if faults is not None else (),
                            {"added": layout.get("added", []), "layout": layout.get("layout", {}),
                             "at_rest_s": layout.get("at_rest_s", {})}, summary)
+
+
+# ------------------------------------------------------- live, talking (Phase 7)
+
+@dataclass(frozen=True)
+class LiveTeamFlight:
+    """One live flight of several agents, talking through a bus: what they decided and heard, and the polls."""
+
+    scenario: Scenario
+    tasks: dict[str, str]
+    samples: dict[str, list[tuple[float, float, float, float]]]
+    grounds: dict[str, float]
+    contacts: tuple[Contact, ...]
+    start: float
+    end: float
+    poll_hz: float
+    traces: dict[str, tuple[TraceEntry, ...]]
+    finished: dict[str, bool]
+    skills: dict[str, tuple[tuple[str, str], ...]]
+    deliveries: tuple[Any, ...] = ()
+    range_m: float | None = None
+    layout: dict[str, Any] = field(default_factory=dict)
+    monitor: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def observer(self) -> str:
+        return f"polled-{self.poll_hz:g}Hz"
+
+    def trajectories(self) -> dict[str, Trajectory]:
+        return trajectories_from_samples(self.samples, self.grounds)
+
+    def judge(self, seed: int | None = None) -> MissionReport:
+        """The flight against `seed`'s targets (default: the scenario's own); see LiveAgentFlight.judge."""
+        scenario = self.scenario if seed is None else dataclasses.replace(self.scenario, random_seed=seed)
+        return evaluate(scenario, self.trajectories(), self.start, self.end,
+                        contacts=self.contacts, observer=self.observer)
+
+    def as_run(self, label: str) -> TeamAgentRun:
+        """The flight as a TeamAgentRun, so the mock's checks apply to it as they stand."""
+        return TeamAgentRun(label, self.scenario.random_seed, dict(self.tasks), self.judge(), dict(self.traces),
+                            dict(self.finished), dict(self.skills), self.start, self.trajectories(), self.deliveries)
+
+    def as_json(self) -> dict[str, Any]:
+        t0 = self.start
+        return {
+            "kind": "flight", "scenario": self.scenario.scenario_id, "tasks": dict(self.tasks),
+            "observer": self.observer, "poll_hz": self.poll_hz, "range_m": self.range_m,
+            "duration_s": round(self.end - t0, 3), "finished": dict(self.finished),
+            "skills": {d: [list(s) for s in v] for d, v in self.skills.items()},
+            "grounds": {d: round(g, 3) for d, g in self.grounds.items()},
+            "layout": self.layout, "monitor": self.monitor,
+            "contacts": [{"drone": c.drone, "object": c.object, "at_s": round(c.at - t0, 3)} for c in self.contacts],
+            "traces": {d: [e.as_json() for e in t] for d, t in self.traces.items()},
+            "samples": {d: [[round(t - t0, 3), round(x, 3), round(y, 3), round(z, 3)] for t, x, y, z in rows]
+                        for d, rows in self.samples.items()},
+        }
+
+
+def fly_agents_live(scenario: Scenario, tasks: dict[str, str], scene: Any, connect: Callable[[], Any],
+                    clock: Clock, poll_hz: float = DEFAULT_POLL_HZ,
+                    settle_s: float = RESET_SETTLE_S) -> LiveTeamFlight:
+    """Reset, spawn and place every pad's drone, wait for rest, then run one agent per drone, talking, live.
+
+    The mock's `fly_agents_on_mock(..., messaging=True)` with the simulator
+    outside: each agent on its own thread on the real clock, each skill on
+    its own connection, the poller and the separation monitor on theirs. The
+    agents read their sensors from the poller, and the bus judges range from
+    the poller's latest position of each drone -- what is known of where they
+    are, not the simulator's own word. Heights and messages as on the mock.
+    """
+    drones = check_live_pads(scenario)
+    if sorted(tasks) != sorted(drones):
+        raise ValueError(f"one task per drone on {scenario.scenario_id}'s pads {drones}, got {sorted(tasks)}")
+    scene.reset()
+    clock.sleep(settle_s)
+    scene.confirm_connection()
+    layout = ensure_vehicles(scene, drones, settle=clock.sleep)
+    layout["at_rest_s"] = wait_at_rest(scene, drones, clock)
+    grounds = {d: scene.get_pose(d).z for d in drones}             # at rest: TAKE_OFF's own reading
+    roster = [v.id for v in scenario.vehicles]
+    heights = {d: BASE_ALTITUDE_M + i * ALTITUDE_STEP_M for i, d in enumerate(roster)}
+
+    observer = PollingObserver(connect, drones, grounds, clock=clock, hz=poll_hz)
+    monitor = SeparationMonitor(connect(), drones)
+    observer.start()
+    monitor.start()
+    monitor_t0 = clock.now()
+    began = clock.now()
+    while not all(observer.samples().get(d) for d in drones):      # the first poll, before anything reads
+        if clock.now() - began > FIRST_POLL_TIMEOUT_S:
+            observer.stop()
+            monitor.stop()
+            raise RuntimeError(f"no poll of {drones} within {FIRST_POLL_TIMEOUT_S:g} s")
+        clock.sleep(0.05)
+
+    def where(drone: str) -> tuple[float, float, float]:
+        t, x, y, z = observer.samples()[drone][-1]                 # the latest poll
+        return (x, y, grounds[drone] - z)
+
+    reach = scenario.network.communication_range_m
+    bus = MessageBus(list(tasks), clock, where, reach, mission_id=scenario.scenario_id, delay_s=MESSAGE_DELAY_S)
+    executors = {d: ActionExecutor(SkillRunner(connect(), d, clock), clock, abort_via=connect(), connect=connect)
+                 for d in tasks}
+    sensors = {d: polled_sensors(observer, scenario, d, grounds) for d in tasks}
+    agents: dict[str, DroneAgent] = {}
+    errors: dict[str, BaseException] = {}
+    barrier = threading.Barrier(len(tasks))
+
+    def body(drone: str) -> None:
+        try:
+            agent = DroneAgent(scenario.brief(), sensors[drone], executors[drone],
+                               RulePolicy(altitude_m=heights[drone]), comms=bus.comms(drone))
+            agents[drone] = agent
+            barrier.wait()                        # every agent built before any starts
+            agent.assign(tasks[drone])
+            agent.run(max_s=MAX_FLIGHT_S)
+        except BaseException as exc:              # recorded, never silent
+            errors[drone] = exc
+            barrier.abort()
+
+    start = clock.now()
+    threads = [threading.Thread(target=body, args=(d,), name=f"{d}-agent") for d in tasks]
+    try:
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+    finally:
+        for e in executors.values():
+            e.close()
+        end = clock.now()
+        watched = monitor.stop()
+        observer.stop()
+    if errors:
+        drone, exc = sorted(errors.items())[0]
+        raise RuntimeError(f"{drone}'s agent raised: {type(exc).__name__}: {exc}") from exc
+    contacts = tuple(Contact(c["drone"], c["object"], monitor_t0 + c["first_at_s"])
+                     for c in watched.get("collisions_polled", []))
+    skills = {d: tuple((e.command.skill.value, "running" if e.running else
+                        (e.result.status.value if e.result is not None else "error"))
+                       for e in executors[d].history()) for d in tasks}
+    summary = {k: watched.get(k) for k in ("samples", "min_separation_m", "per_pair_min_m")}
+    return LiveTeamFlight(scenario, dict(tasks), observer.samples(), grounds, contacts, start, end, poll_hz,
+                          {d: tuple(a.trace) for d, a in agents.items()},
+                          {d: a.finished for d, a in agents.items()}, skills, bus.deliveries(), reach,
+                          {"added": layout.get("added", []), "layout": layout.get("layout", {}),
+                           "at_rest_s": layout.get("at_rest_s", {})}, summary)
