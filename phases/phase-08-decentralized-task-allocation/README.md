@@ -43,7 +43,7 @@ deterministic. Optionally, two drones dividing two sectors in CarlaAir.
 |---|---|---|
 | Tasks and the task book (8.1) | `agentic_uav/coordination/tasks.py` | **Done** 2026-11-04; goldens unedited |
 | Deterministic bids and their manifest (8.3) | `agentic_uav/coordination/bids.py`, `configs/allocation/default.toml`, `agentic_uav/experiments/allocation.py` | **Done** 2026-11-04; goldens unedited |
-| The contract-net protocol (8.2, 8.4, 8.5) | `agentic_uav/coordination/contract_net.py`, `agentic_uav/core/messages.py` | step 3 |
+| The contract-net protocol (8.2, 8.4, 8.5) | `agentic_uav/coordination/contract_net.py`, `agentic_uav/core/messages.py` | **Done** 2026-11-04; goldens unedited; Phase 7 reproduces |
 | Agents that allocate | `agentic_uav/agents/`, `agentic_uav/experiments/` | step 4 |
 | The exit | `agentic_uav/experiments/`, `scripts/`, `results/`, `evidence/` | step 5 |
 | Optional live flight; close | `results/`, `evidence/` | step 6 |
@@ -235,10 +235,112 @@ change with the speed.
 **The goldens did not move.** `record_golden.py --check` matches all four.
 798 tests pass, 24 skipped; audit clean.
 
+### 2026-11-04 — step 3: the contract-net, as pure logic (8.2, 8.4, 8.5)
+
+**The messages** (`core/messages.py`). Payload schemas for the six `TASK_*`
+types: an announcement (task, version, why), a **bid with its five terms**, a
+claim (`TASK_AWARD`) **with its bid** -- so a conflict can be settled from the
+claims alone -- an acknowledgement naming the holder, a release (why), a
+completion. A version is an integer from 1, a progress a fraction, text not
+empty. **A holder's progress rides on `STATUS_UPDATE`** as an optional group --
+task, version, progress -- that comes all together or not at all, so a drone
+holding nothing, and every Phase 7 agent, sends the status update it always
+did. Phase 7's two schemas are unchanged, and **its exit and gate re-run
+identical** to their records.
+
+**`coordination/contract_net.py`: one drone's side of the protocol**, with no
+clock, no bus and no other drone -- messages in, messages to send out:
+
+| AUV-08's step | What carries it |
+|---|---|
+| an unassigned task is announced | the brief announces the mission's; `TASK_ANNOUNCEMENT` one returned to the pool |
+| eligible drones compute a bid | `bids.bid_for`, from the drone's own belief |
+| bids are exchanged | `TASK_BID`, every term |
+| the best bidder claims | `TASK_AWARD` |
+| others acknowledge | `TASK_ACCEPT` |
+| the winner reports progress | `STATUS_UPDATE`'s task group, every 2 s |
+| the lease expires if reports stop | each drone, from its own book |
+| an expired or released task is announced again | `TASK_ANNOUNCEMENT`, one version on |
+
+* **Who claims what.** A drone holding nothing bids for every open task it
+  has not bid for and starts its bid window. When the window has passed it
+  reads the bids it has heard -- for open tasks, from drones holding nothing
+  -- lowest first, ids breaking ties, and gives each task to the best bidder
+  not yet given one; if that gives it a task, it claims it. Every drone that
+  heard the same bids gives the same answer. **With a window of 0
+  (contested), every drone claims at once on its own bids alone.**
+* **Duplicate claims, by AUV-08's rules**: a claim for an older version is
+  refused; the lowest bid wins; equal bids, the lower id; the losers release
+  and bid again for what is left; **every losing claim is logged in every
+  book**, the winner's own included, once.
+* **Leases.** A claim starts its lease; each progress report renews it from
+  when it was sent. A drone that sees a teammate's lease run out reopens the
+  task one version on and announces it. A drone that comes back to find its
+  task gone learns it from the newer version, and is free again.
+* **Endings.** `complete` (the task done, heard by all), `release` (a holder
+  that cannot finish gives it back, one version on, and bids for nothing
+  more), `stop`. A claim never heard is learned from the holder's progress.
+  `idle`: holding nothing, and no open task it could bid a value for.
+* **Every claim keeps the bids its claimant had heard** (`claims_made`), so
+  the record can trace it.
+
+**A defect of my first version, found by the contested test.** It settled
+each claim the moment it arrived, so four simultaneous claims for S2 were
+settled one by one: Drone1's book logged "Drone2 displaced Drone1", then
+"Drone3 displaced Drone2", then "Drone4 displaced Drone3", and two losers
+released naming the wrong winner. The holder came out right; the corrections
+log -- rule 5, part of the record -- did not. **A tick's claims are now settled
+together, at the start of the next tick**, and every book logs each losing
+claim against the true winner.
+
+**Tests: 24 in `tests/test_contract_net.py`, 5 more in `tests/test_messages.py`.**
+Drones exchange real messages over a small wire in the test -- what one says
+at a tick the others hear at the next, unless the test drops it:
+
+* *deliberating*: every drone gets one task, nobody assigning them -- Drone4
+  S2, Drone3 S1, Drone2 S4, Drone1 S3, the greedy reading of step 2's bids;
+  every book agrees; 16 bids at 0 s, 4 claims at 1 s, no conflicts; every
+  claim made on every bid; each acknowledged by the other three; the lease
+  running from the claim, the first report a period on; progress renewing
+  every lease over a minute;
+* *contested*: all four claim S2 at once; every book logs Drone1–3's claims
+  lost to Drone4's by the lowest bid, once; three releases naming Drone4; the
+  losers claim again and the same division results; run twice, identical;
+* the rules: **equal bids go to the lower id**; **a lost bid makes a conflict
+  and the rules settle it**; a claim for an old version refused and logged;
+  each losing claim logged once, however late it comes;
+* leases: **a silent holder loses its task to the pool** -- announced at
+  version 2 within a lease and a tick of its last report; the returned task
+  goes to a drone that comes free; the silent one learns it lost it;
+* endings: complete, give up, a claim learned from its progress, idle, every
+  out a valid message, the JSON; and the schemas: each task message, refused
+  for its reasons, progress on a status update, the group all or nothing, a
+  heartbeat taking none.
+
+My own test errors along the way, each against what the protocol rightly
+did: a bid expected after a give-up when every other drone was busy, a
+progress report expected inside 3 s, a lease measured from an acknowledgement
+rather than a report, and a silent drone expected to stay free when, free and
+still the best bidder, it rightly claimed the new version.
+
+**Mutations: 34, all caught.** The first pass caught 30 of 35. Four survivors
+were test gaps -- a losing claim logged more than once, the lease from the
+settling rather than the claim, the first report at the claim, an
+eligible-but-waiting drone called idle -- closed by the tests above. The
+fifth, a released claim dropped from the table, changed nothing (the winner's
+always outranks it, and the next version has a fresh table): the line was
+dead, and is gone.
+
+**The goldens did not move.** `record_golden.py --check` matches all four.
+827 tests pass, 24 skipped; audit clean.
+
 ## Decisions
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-11-04 | **A tick's claims are settled together, at the next tick** | Claims made at one instant are one conflict; settled one by one they leave a log of displacements that never happened |
+| 2026-11-04 | **Every losing claim is logged in every book, once** | Rule 5 asks for all corrections; logging only where a book's holder changed would leave the winner's own book silent about the conflict it won |
+| 2026-11-04 | **Progress rides on STATUS_UPDATE as an all-or-nothing group** | No type of the thirteen is a progress report; a group present only for a holder leaves every Phase 7 message, and record, as it was |
 | 2026-11-04 | **A bid costs the rule policy's own lanes, pinned by a test** | A bid that costs a different path from the one flown would let the wrong drone win; equality is checked for every sector and height |
 | 2026-11-04 | **Battery, deadline and capability gate eligibility rather than add a penalty** | A penalty would need a price for running out; there is none worth paying, so an unable drone simply does not bid a value |
 | 2026-11-04 | **A task carries a version, one higher each time it returns to the pool** | AUV-08's first conflict rule compares versions; without one a late claim for a task that has since been released and re-claimed would look current |

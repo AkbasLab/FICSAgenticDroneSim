@@ -12,10 +12,16 @@ filled with an invented type. Six are the contract-net protocol of Phase 8
 `INTENT_UPDATE` is the shared-intent half of controlled emergence.
 
 PAYLOAD SCHEMAS ONLY FOR THE TYPES IN USE. Phase 7 sends `HEARTBEAT` and
-`STATUS_UPDATE`, and only those have a schema. The other eleven exist as
-names; a message of a type with no schema yet is refused, so no phase can
-start sending one without first saying what it carries. Every payload field
-is checked: none missing, none unknown, each of its kind.
+`STATUS_UPDATE`; Phase 8 adds the six `TASK_*` of its contract-net. The other
+five exist as names; a message of a type with no schema yet is refused, so no
+phase can start sending one without first saying what it carries. Every
+payload field is checked: none missing, none unknown, each of its kind.
+
+AN OPTIONAL GROUP (Phase 8). A drone holding a task reports its progress on
+its `STATUS_UPDATE` -- the task, its version and how far along it is -- and
+that is what renews its lease. The three fields come together or not at all,
+so a drone holding nothing (and every Phase 7 agent) sends the status update
+it always did.
 
 THE ENVELOPE (7.2) is AUV-07's, field for field. Two fields are not
 decoration: `sequence_number` and `time_to_live_s` are what let an agent
@@ -79,8 +85,21 @@ def _text_or_none(v: Any) -> bool:
     return v is None or (isinstance(v, str) and bool(v))
 
 
+def _text(v: Any) -> bool:
+    return isinstance(v, str) and bool(v)
+
+
+def _version(v: Any) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool) and v >= 1
+
+
+def _fraction(v: Any) -> bool:
+    return _number(v) and 0.0 <= v <= 1.0
+
+
 KINDS: dict[str, Callable[[Any], bool]] = {
-    "point": _point, "number": _number, "flag": _flag, "text_or_none": _text_or_none}
+    "point": _point, "number": _number, "flag": _flag, "text_or_none": _text_or_none, "text": _text,
+    "version": _version, "fraction": _fraction}
 
 # Field -> kind. Every field is required; text fields may be None (not known).
 SCHEMAS: dict[MessageType, dict[str, str]] = {
@@ -90,6 +109,21 @@ SCHEMAS: dict[MessageType, dict[str, str]] = {
                             "task": "text_or_none", "stage": "text_or_none"},
     MessageType.STATUS_UPDATE: {"task": "text_or_none", "stage": "text_or_none", "skill": "text_or_none",
                                 "position": "point", "battery": "number", "degraded": "flag"},
+    # Phase 8's contract-net (AUV-08, 8.2). A bid carries its terms, so a
+    # reader of the log can see why it won; a claim carries its value, so a
+    # conflict can be settled by the rules from the claims alone (8.5).
+    MessageType.TASK_ANNOUNCEMENT: {"task_id": "text", "version": "version", "why": "text"},
+    MessageType.TASK_BID: {"task_id": "text", "version": "version", "value": "number",
+                           "d": "number", "b": "number", "l": "number", "c": "number", "r": "number"},
+    MessageType.TASK_AWARD: {"task_id": "text", "version": "version", "value": "number"},
+    MessageType.TASK_ACCEPT: {"task_id": "text", "version": "version", "holder": "text"},
+    MessageType.TASK_RELEASE: {"task_id": "text", "version": "version", "why": "text"},
+    MessageType.TASK_COMPLETE: {"task_id": "text", "version": "version"},
+}
+
+# Fields that come all together or not at all (Phase 8: a holder's progress).
+OPTIONAL_GROUPS: dict[MessageType, dict[str, str]] = {
+    MessageType.STATUS_UPDATE: {"task_id": "text", "task_version": "version", "task_progress": "fraction"},
 }
 
 # How long a message is current after its timestamp (AUV-10, 10.4: a
@@ -98,6 +132,13 @@ SCHEMAS: dict[MessageType, dict[str, str]] = {
 DEFAULT_TTL_S: dict[MessageType, float] = {
     MessageType.HEARTBEAT: 3.0,          # three heartbeats at 1 Hz
     MessageType.STATUS_UPDATE: 10.0,     # a decision's worth: the periodic check is 10 s
+    # Phase 8: what a task message says is current for as long as a lease.
+    MessageType.TASK_ANNOUNCEMENT: 10.0,
+    MessageType.TASK_BID: 10.0,
+    MessageType.TASK_AWARD: 10.0,
+    MessageType.TASK_ACCEPT: 10.0,
+    MessageType.TASK_RELEASE: 10.0,
+    MessageType.TASK_COMPLETE: 10.0,
 }
 
 
@@ -112,10 +153,15 @@ def payload_problems(message_type: MessageType, payload: Any) -> list[str]:
         json.dumps(payload, allow_nan=False)
     except (TypeError, ValueError) as exc:
         return [f"payload is not plain JSON: {exc}"]
+    group = OPTIONAL_GROUPS.get(message_type, {})
     problems = [f"missing {k}" for k in schema if k not in payload]
-    problems += [f"unknown field {k}" for k in payload if k not in schema]
+    problems += [f"unknown field {k}" for k in payload if k not in schema and k not in group]
     problems += [f"{k} is not a {schema[k]}: {payload[k]!r}" for k in schema
                  if k in payload and not KINDS[schema[k]](payload[k])]
+    present = [k for k in group if k in payload]
+    if present and len(present) != len(group):
+        problems.append(f"{', '.join(sorted(group))} come together or not at all; got {', '.join(present)}")
+    problems += [f"{k} is not a {group[k]}: {payload[k]!r}" for k in present if not KINDS[group[k]](payload[k])]
     return problems
 
 
