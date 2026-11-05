@@ -176,6 +176,22 @@ class FlownTests(unittest.TestCase):
         self.assertEqual(f["rule-fallback"]["fallback"], g.CONTINUE_LAST_VALID_PLAN)
         self.assertTrue(all(x["met"] for x in f.values()))
 
+    def test_what_followed_an_injection_is_a_knock_on_even_at_its_instant(self):
+        inj, run, record = self.flown("rule-zone")
+        own = X.own_entries(run, record, inj)
+        self.assertEqual([e["outcome"] for e in own], [g.REJECT])
+        fallback = next(i for i in FEW if i.name == "rule-fallback")
+        frun, frec = self.flights["injected"]["rule-fallback"]
+        self.assertEqual([e["outcome"] for e in X.own_entries(frun, frec, fallback)], [g.REJECT] * 3 + [g.FALLBACK])
+        guardians = copy.deepcopy(run.guardians)
+        later = dict(own[0], outcome=g.REJECT, checks=["landing_site"], reasons=["the policy's own answer"])
+        guardians[inj.drone]["log"].append(later)
+        flights = dict(self.flights, injected=dict(self.flights["injected"],
+                                                    **{"rule-zone": (dataclasses.replace(run, guardians=guardians), record)}))
+        f = X.injection_findings(flights)["rule-zone"]
+        self.assertEqual([k["checks"] for k in f["knock_on"]], [["landing_site"]])
+        self.assertEqual((f["outcome"], f["checks"]), (g.REJECT, ["restricted_zone"]))
+
     def flown(self, name):
         inj = next(i for i in FEW if i.name == name)
         run, record = self.flights["injected"][name]

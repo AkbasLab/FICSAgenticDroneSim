@@ -97,6 +97,7 @@ def by_injection(rows: list[dict], injections: tuple) -> dict[str, dict]:
             "met": sum(f["met"] for f in fs),
             "delay_s": [min(delays), round(statistics.median(delays), 1), max(delays)] if delays else None,
             "knock_on": sum(len(f["knock_on"]) for f in fs),
+            "knock_on_checks": dict(Counter(c for f in fs for k in f["knock_on"] for c in k["checks"])),
         }
     return out
 
@@ -156,8 +157,10 @@ def main(argv: list[str] | None = None) -> int:
               "| Delay s (min, median, max) | Knock-on |", "|---|---|---|---|---|---|---|---|---|"]
     for name, f in summary.items():
         fb = ", ".join(f"{k} {v}" for k, v in f["fallbacks"].items()) or "-"
+        knock = f"{f['knock_on']}" + (f" ({', '.join(f'{k} {v}' for k, v in f['knock_on_checks'].items())})"
+                                      if f["knock_on_checks"] else "")
         lines.append(f"| {name} | {f['channel']} | {f['expected']} ({f['check']}) | {f['made']}/{f['of']} "
-                     f"| {f['as_expected']}/{f['of']} | {fb} | {f['met']}/{f['of']} | {f['delay_s']} | {f['knock_on']} |")
+                     f"| {f['as_expected']}/{f['of']} | {fb} | {f['met']}/{f['of']} | {f['delay_s']} | {knock} |")
     approved = sum(r["checks"]["no_interventions"]["approved"] for r in rows)
     lines += ["", f"Clean flights: {approved} commands approved as they stood over the seeds, none modified, "
                   "refused or replaced.", "",

@@ -618,6 +618,19 @@ def exit_checks(flights: dict[str, Any], limits: GuardianLimits, scenario: Scena
 
 # ---------------------------------------------------------------- findings
 
+def own_entries(run: RecoveryRun, record: dict[str, Any] | None, injection: Injection) -> list[dict[str, Any]]:
+    """The guardian's entries for the injection itself: its first review -- for a repeat, its four -- or, for one
+    made at the handle, the handle's. Anything else, even at the same instant (the policy's own answer to the
+    refusal, refused in its turn), is a knock-on."""
+    if record is None:
+        return []
+    at = round(record["at"], 3)
+    log = [e for e in run.guardians[injection.drone]["log"] if abs(e["at"] - at) <= 1e-6]
+    if injection.style in ("direct", "conflict"):
+        return [e for e in log if e["source"] == "direct"][:1]
+    return log[:4] if injection.outcome == FALLBACK else log[:1]
+
+
 def injection_findings(flights: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Each injection's cost, against the clean flight; what the guardian did; the knock-ons after it."""
     clean = flights["clean"]
@@ -626,9 +639,8 @@ def injection_findings(flights: dict[str, Any]) -> dict[str, dict[str, Any]]:
     for inj in flights["injections"]:
         run, record = flights["injected"][inj.name]
         done = run.team.report.completion_s
-        at = None if record is None else round(record["at"], 3)
-        own = [e for e in interventions(run) if at is not None and e["drone"] == inj.drone and abs(e["at"] - at) <= 1e-6]
-        knock = [e for e in interventions(run) if e not in own]
+        own = own_entries(run, record, inj)
+        knock = [e for e in interventions(run) if not any(e is o for o in own)]
         out[inj.name] = {
             "made_at_s": None if record is None else record["fired_at"],
             "outcome": own[-1]["outcome"] if own else None,
