@@ -128,6 +128,9 @@ class FlightTests(unittest.TestCase):
         for stop, rule in ((None, self.rule), ({"Drone1": 60.0}, self.rule_stop)):
             run, logs = self.fly(EchoAsk(), stop)
             self.assertEqual(same_flight(run, rule), [])
+            # Agreeing, it runs the rule's own path -- the rule's reasons, every one, not a tool's "LLM ...".
+            self.assertEqual([(d, e.at, e.decision.reason) for d, t in run.team.traces.items() for e in t],
+                             [(d, e.at, e.decision.reason) for d, t in rule.team.traces.items() for e in t])
             for d, log in logs.items():
                 self.assertGreater(log["decisions"]["llm"], 5)
                 self.assertEqual(log["agreed"], log["decisions"]["llm"])
@@ -234,6 +237,78 @@ class FlightTests(unittest.TestCase):
         ctx = {"you": {"id": "Drone1"}, "memory": [{"at": 5.0, "tool": "hold", "s_ago": 1.0}], "actions": []}
         self.assertEqual(render(ctx), render(dict(reversed(list(ctx.items())))))
         self.assertNotIn('"at"', render(ctx)[1]["content"])
+
+
+    def test_a_reply_that_parses_but_is_not_possible_now_is_corrected_then_falls_back(self):
+        def impossible(request):
+            return T.reply_for("act_as_relay", {"teammate": "Drone9"})
+        run, logs = self.fly(Scripted(impossible))
+        self.assertEqual(same_flight(run, self.rule), [])
+        model = [e for log in logs.values() for e in log["log"] if e["kind"] != "procedural"]
+        self.assertTrue(model and all(e["kind"] == "fallback" and "is not unreachable" in e["problems"][0] for e in model))
+
+    def test_each_drones_memory_is_its_own_last_decisions(self):
+        seen = {}
+
+        def keep(request):
+            seen.setdefault(request["meta"]["drone"], []).append(context_of(request))
+            return request["meta"]["rule_reply"]
+        run, logs = self.fly(Scripted(keep))
+        for drone, ctxs in seen.items():
+            own = [e for e in logs[drone]["log"] if e["kind"] in ("llm", "corrected")]
+            for i, c in enumerate(ctxs):
+                self.assertEqual([m["tool"] for m in c["memory"]], [e["tool"] for e in own[:i]][-5:])
+
+
+class UnitTests(unittest.TestCase):
+    def belief(self, airborne=True):
+        from agentic_uav.agents.belief_state import BeliefState, Observation
+        brief = SC.brief()
+        b = BeliefState.start(brief, "Drone1", Observation(10.0, 0.0, 0.0, 0.0, False, 100.0, (), True, None, 0, None))
+        b.update(Observation(10.0, 60.0, -40.0, 12.0 if airborne else 0.0, airborne, 90.0, (), True, None, 0, None))
+        return b
+
+    def policy(self):
+        from agentic_uav.agents.recovery_policy import RecoveryPolicy
+        from agentic_uav.coordination.contract_net import ContractNet
+        from agentic_uav.coordination.tasks import tasks_from_brief
+        return RecoveryPolicy(ContractNet("Drone1", tasks_from_brief(SC.brief()), CFG), HEALTH, altitude_m=12.0)
+
+    def test_task_actions_need_a_task_held(self):
+        p, b = self.policy(), self.belief()
+        for tool in ("accept_task", "start_search", "release_task"):
+            self.assertIn("holds no task", T.check(tool, {"task_id": "search S1"}, p, b)[0])
+
+    def test_a_hold_is_from_1_to_30_seconds(self):
+        p, b = self.policy(), self.belief()
+        self.assertEqual(T.check("hold", {"duration_s": 10}, p, b), [])
+        for bad in (0, 31, True, "10"):
+            self.assertTrue(T.check("hold", {"duration_s": bad}, p, b), bad)
+
+    def test_on_the_ground_every_decision_is_procedure(self):
+        from agentic_uav.agents.llm_policy import LLMPolicy
+        from agentic_uav.core.events import Event, Trigger
+        pol = LLMPolicy(self.policy(), EchoAsk())
+        pol.inner.stage = __import__("agentic_uav.agents.rule_policy", fromlist=["Stage"]).Stage.SEARCHING
+        events = (Event(Trigger.PERIODIC, 10.0),)
+        self.assertTrue(pol._procedural(self.belief(airborne=False), events, 10.0))
+        self.assertFalse(pol._procedural(self.belief(airborne=True), events, 10.0))
+
+    def test_the_rules_relay_is_said_as_a_relay(self):
+        import types
+        from agentic_uav.agents.decision import Decision
+        from agentic_uav.control.skills import HoldPositionCommand
+        p = self.policy()
+        p.detector = types.SimpleNamespace(in_state=lambda *h: ("Drone3",))
+        d = Decision.start(HoldPositionCommand(duration_s=5.0), "relay toward Drone3", "r")
+        self.assertEqual(T.rule_tool(d, p), ("act_as_relay", {"teammate": "Drone3"}))
+
+    def test_a_replay_gives_the_replies_in_their_recorded_order(self):
+        req = {"messages": [{"role": "user", "content": "x"}], "meta": {}}
+        ask = ReplayAsk({request_key(req): ["a", "b"]})
+        self.assertEqual((ask(req), ask(req)), ("a", "b"))
+        with self.assertRaises(LookupError):
+            ask(req)
 
 
 if __name__ == "__main__":
