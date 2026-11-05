@@ -1,0 +1,22 @@
+# Phase 18.3 - the SECONDARY comparison: Gemini as the agent model.
+#
+# Same split, seeds and frozen configuration as main_v1, but only the agentic
+# architecture (the others do not use a model), so its cells line up with
+# main_v1's D cells seed for seed. Scoped small: a 4-drone D run makes ~25
+# model calls, and the free Gemini tier allows 20 requests per model per day -
+# this needs a paid key.
+design_id: gemini_v1
+split: test
+
+architectures: [agentic_decentralized]
+team_sizes:
+  stage1: [4]
+network_profiles: [final_nominal, final_severe]
+failure_profiles: [one_failure]
+seed_plan: {split: test, count: 20}
+
+planner: gemini:gemini-3.5-flash
+fault_interrupts_skill: true
+heartbeat_s: 8.0
+max_steps: 600
+exclusions: configs/experiments/exclusion_criteria.yaml

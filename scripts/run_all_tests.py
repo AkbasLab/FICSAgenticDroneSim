@@ -33,11 +33,12 @@ SUITES = [
     ("14",  "Experiment runner + logs",  "tests/test_experiment_runner.py", 25),
     ("15",  "Metric definitions",        "tests/test_evaluation.py", 90),
     ("16",  "Integration (mock adapter)", "tests/test_integration.py", 48),
-    ("16",  "Determinism",               "tests/test_determinism.py", 29),
+    ("16",  "Determinism",               "tests/test_determinism.py", 30),
     ("B",   "Guardrail benchmark",       "tests/test_guardrail_benchmark.py", 100),
     ("3-12", "AirSim code path (fake sim)", "tests/test_airsim_path.py", 20),
     ("16",  "AirSim regression missions", "tests/test_airsim_regression.py", 5),
     ("17",  "Pilots, calibration, freeze", "tests/test_pilot.py", 57),
+    ("18",  "Factorial experiment",       "tests/test_factorial.py", 57),
 ]
 
 DEMOS = [
@@ -59,6 +60,8 @@ DEMOS = [
     ("17", "Pilot matrix + log audit", "scripts/run_pilot.py configs/experiments/pilot_matrix_v2.yaml --no-plots --out /tmp/p17_pilot"),
     ("17", "Comms calibration",        "scripts/calibrate_comms.py configs/networks/calibration_ladder.yaml --no-plot --out /tmp/p17_cal"),
     ("17", "Freeze unchanged",         "scripts/freeze.py"),
+    ("18", "Factorial (dev split)",    "scripts/run_factorial.py configs/experiments/factorial_dev.yaml --out /tmp/p18_dev"),
+    ("18", "Factorial plan (held-out)", "scripts/run_factorial.py configs/experiments/factorial_main.yaml --dry-run"),
 ]
 
 

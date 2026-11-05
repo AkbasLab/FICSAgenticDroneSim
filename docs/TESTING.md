@@ -393,7 +393,7 @@ to a real invariant, applied to a throwaway copy of the repository; the
 simulator-free suites run against the damaged copy, and the defect counts as
 caught only if a suite fails.
 
-**20 of 20 caught**: eleven written up front, across allocation, communication, roles, belief and safety; five first found by flying in CARLA-Air; and four found by the Phase 17 pilot timelines (see `docs/PILOT.md`):
+**25 of 25 caught**: eleven written up front, across allocation, communication, roles, belief and safety; five first found by flying in CARLA-Air; four found by the Phase 17 pilot timelines (see `docs/PILOT.md`); and five that would break the Phase 18 experiment's guarantees (see `docs/FACTORIAL.md`):
 
 | Defect | Breaks |
 |---|---|
@@ -417,6 +417,11 @@ caught only if a suite fails.
 | `fault_on_belief_clock` | a fault lands one skill late; a "dead" LLM drone flies a whole sweep |
 | `grounded_drone_quits_while_bidding` | a drone on its pad whose rivals' bids were lost sits out the mission |
 | `idle_rounds_take_no_time` | idle waiting is instantaneous on a simulated clock; a drone lands before a failure can be noticed |
+| `crn_streams_shared` | per-link streams draw from the shared generator; architectures no longer share a seed's loss luck |
+| `partition_ignores_controller` | the temporary partition never touches the centralized controller's links |
+| `interrupted_sweep_still_credited` | a drone that fails mid-sweep is still credited with the sweep |
+| `exclusion_by_outcome` | a run with a poor outcome is excluded |
+| `held_out_seal_not_checked` | held-out runs continue after the prompt or rules changed |
 
 The last five were each invisible to the suite when they were found - they
 appeared only in real simulator runs - and each is now caught by the fake

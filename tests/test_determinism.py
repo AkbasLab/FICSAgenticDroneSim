@@ -61,7 +61,10 @@ RNG_ALLOWED = {"network_model.py"}
 #: Offline tools that use a generator *outside* any run: Phase 17.4 draws the
 #: held-out seeds from random.Random(<fixed tag>), so anyone can regenerate
 #: and verify the list. Nothing in a mission ever calls it.
-OFFLINE_RNG_ALLOWED = {"freeze.py"}
+OFFLINE_RNG_ALLOWED = {"freeze.py", "scenario_family.py"}
+# scenario_family.py (Phase 18.1) draws each seed's targets, zone, batteries
+# and fault from random.Random(<tag>/<seed>) *before* a run starts; the run
+# itself still has only the network model's generator.
 
 PASS, FAIL = [], []
 
@@ -121,6 +124,10 @@ def test_only_one_module_holds_a_random_number_generator():
           seeded == sorted(RNG_ALLOWED), f"found {seeded}")
 
     fsrc = open(os.path.join(PKG, "experiments", "freeze.py"), encoding="utf-8").read()
+    ssrc = open(os.path.join(PKG, "simulator", "scenario_family.py"), encoding="utf-8").read()
+    check("the scenario family is seeded per seed, never the global generator",
+          'random.Random(f"FICSAgenticDroneSim/scenario/' in ssrc and "random.random(" not in ssrc
+          and "random.choice(" not in ssrc and "random.uniform(" not in ssrc)
     check("the held-out seed generator is seeded with a fixed tag",
           "random.Random(HELDOUT_TAG)" in fsrc and "random.random(" not in fsrc)
 

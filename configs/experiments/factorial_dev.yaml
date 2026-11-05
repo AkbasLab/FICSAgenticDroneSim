@@ -1,0 +1,22 @@
+# Phase 18 - the same design on the DEVELOPMENT split, with the scripted
+# stand-in planner. For checking the pipeline end to end in a couple of minutes
+# before the real run. Development seeds never overlap the held-out ones.
+#
+#   python scripts/run_factorial.py configs/experiments/factorial_dev.yaml
+design_id: dev_v1
+split: development
+
+architectures: [centralized, independent, deterministic_decentralized, agentic_decentralized]
+team_sizes:
+  stage1: [2, 4]
+  stage2: [8]
+network_profiles: [final_nominal, final_moderate, final_severe, final_partitioned]
+failure_profiles: [none, one_failure]
+seed_plan: {split: development, count: 3}
+
+planner: scripted
+fault_interrupts_skill: true
+heartbeat_s: 8.0
+max_steps: 600
+exclusions: configs/experiments/exclusion_criteria.yaml
+min_valid_override: 3                     # 3 seeds here, so 3 valid per cell

@@ -96,6 +96,11 @@ def run_experiment(cfg: ExperimentConfig, out_root="results", root=ROOT,
     os.makedirs(directory, exist_ok=True)
 
     manifest = Manifest.begin(cfg, root)
+    try:
+        from .freeze import fingerprint, snapshot
+        manifest.freeze_fingerprint = fingerprint(snapshot())
+    except Exception as e:                                      # noqa: BLE001
+        manifest.warnings.append(f"freeze fingerprint unavailable: {e}")
     # written before anything can fail, so a run that dies on the first step
     # still leaves a record of what it was trying to do
     manifest.write(os.path.join(directory, "manifest.json"))
@@ -109,8 +114,15 @@ def run_experiment(cfg: ExperimentConfig, out_root="results", root=ROOT,
         from ..simulator.mock_adapter import MockVehicleAdapter
         from ..simulator.scenario_manager import load_scenario
 
-        scenario = _apply_team_size(cfg, load_scenario(cfg.scenario_path(root)),
-                                    manifest)
+        if cfg.scenario_split:
+            from ..simulator import scenario_family
+            scenario = scenario_family.generate(cfg.scenario_split, cfg.random_seed,
+                                                cfg.team_size)
+            manifest.team = [v.vehicle_id for v in scenario.vehicles]
+            manifest.scenario_draws = scenario_family.describe(scenario)
+        else:
+            scenario = _apply_team_size(cfg, load_scenario(cfg.scenario_path(root)),
+                                        manifest)
         backend, model_card = _backend_for(cfg, root)
         manifest.model = model_card
 
@@ -118,7 +130,7 @@ def run_experiment(cfg: ExperimentConfig, out_root="results", root=ROOT,
             cfg.architecture_key, scenario,
             lambda _vid: MockVehicleAdapter(0.0),
             condition=cfg.network_profile, seed=cfg.random_seed,
-            backend=backend, heartbeat_interval_s=cfg.heartbeat_s)
+            backend=backend, heartbeat_interval_s=cfg.heartbeat_s, crn=cfg.crn)
 
         log.emit(EventType.MISSION_STARTED, t=0.0,
                  experiment_id=cfg.experiment_id,
@@ -128,14 +140,21 @@ def run_experiment(cfg: ExperimentConfig, out_root="results", root=ROOT,
                  team_size=len(built.agents),
                  planner=cfg.planner)
         team = {a.vehicle_id for a in built.agents}
-        faults = {v: t for v, t in cfg.faults.items() if v in team}
+        from .experiment_config import SCENARIO_FAULTS
+        if cfg.failure_profile in SCENARIO_FAULTS:
+            from ..simulator.scenario_family import fault_of
+            faults = fault_of(scenario)
+            manifest.faults = dict(faults)
+        else:
+            faults = {v: t for v, t in cfg.faults.items() if v in team}
         for vid, when in sorted(faults.items()):
             log.emit(EventType.FAULT_INJECTED, t=when, vehicle=vid,
                      fault="vehicle_stopped", scheduled_at=when,
                      profile=cfg.failure_profile)
 
         result = arch.run(built, max_total_steps=cfg.max_steps,
-                          stop_at=faults)
+                          stop_at=faults,
+                          interrupt_skills=cfg.fault_interrupts_skill)
 
         log.emit(EventType.MISSION_COMPLETED, t=result.mission_time_s,
                  coverage=result.coverage,

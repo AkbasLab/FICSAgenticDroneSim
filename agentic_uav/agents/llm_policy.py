@@ -71,6 +71,17 @@ TOOL_OBJECTIVE = {
 }
 
 
+def _validated(turn, result):
+    """Record the validation result of the latest attempt on the turn."""
+    if not turn.exchanges:
+        return
+    if result == "accepted":
+        turn.exchanges[-1]["validation"] = "accepted"
+    else:
+        reason = getattr(getattr(result, "reason", None), "value", None)
+        turn.exchanges[-1]["validation"] = f"rejected: {reason or 'error'}: {result}"
+
+
 class LLMAgentPolicy:
     """A persistent per-agent LLM policy.
 
@@ -265,9 +276,11 @@ class LLMAgentPolicy:
             try:
                 decision = parse_decision(raw, known_peers=peers)
                 self._fill(turn, decision)
+                _validated(turn, "accepted")
                 return turn, decision
             except DecisionError as e:
                 err = e
+        _validated(turn, err)
 
         # --- 12.6.1: one structured correction, when it can help ---
         correctable = (self.allow_correction and isinstance(err, DecisionError)
@@ -280,15 +293,18 @@ class LLMAgentPolicy:
             turn.attempts = 2
             corrected_user = (user + "\n\n"
                               + context_builder.correction_prompt(err.hint))
-            raw2, err2 = self._ask(system, corrected_user, schema, turn)
+            raw2, err2 = self._ask(system, corrected_user, schema, turn,
+                                   prompt_for_log=corrected_user)
             if err2 is None:
                 try:
                     decision = parse_decision(raw2, known_peers=peers)
                     self._fill(turn, decision)
                     turn.corrected = True
+                    _validated(turn, "accepted")
                     return turn, decision
                 except DecisionError as e2:
                     err2 = e2
+            _validated(turn, err2)
             turn.rejection_detail = (f"{turn.rejection_detail} | after correction: "
                                      f"{err2}")
 
@@ -297,25 +313,39 @@ class LLMAgentPolicy:
         turn.fallback_cause = turn.rejection_reason
         return turn, None
 
-    def _ask(self, system, user, schema, turn):
-        """Call the backend under its timeout. Returns (text, error)."""
+    def _ask(self, system, user, schema, turn, prompt_for_log=None):
+        """Call the backend under its timeout. Returns (text, error).
+
+        Every attempt is appended to `turn.exchanges` (Phase 18.4): the prompt
+        that was sent (only the correction prompt is stored in full; the first
+        is `turn.user_prompt`), the raw text that came back, how long it took,
+        and - filled in by `_decide` - whether it validated."""
         started = time.monotonic()
+        ex = {"attempt": len(turn.exchanges) + 1,
+              "prompt": prompt_for_log if prompt_for_log is not None else "(user_prompt)",
+              "raw_response": None, "transport_error": None, "validation": None}
+        turn.exchanges.append(ex)
         try:
             raw = call_with_timeout(self.backend, system, user,
                                     self.timeout_s, schema=schema)
             turn.latency_s += time.monotonic() - started
             turn.raw_response = raw if turn.raw_response is None else turn.raw_response
+            ex["raw_response"], ex["latency_s"] = raw, time.monotonic() - started
             return raw, None
         except BackendTimeout as e:
             turn.latency_s += time.monotonic() - started
+            ex["transport_error"], ex["latency_s"] = f"timeout: {e}", time.monotonic() - started
             return None, DecisionError(RejectionReason.TIMEOUT, str(e))
         except BackendError as e:
             turn.latency_s += time.monotonic() - started
+            ex["transport_error"], ex["latency_s"] = f"backend: {e}", time.monotonic() - started
             return None, DecisionError(RejectionReason.BACKEND_ERROR, str(e))
         except Exception as e:                                   # noqa: BLE001
             # A backend that raises something unexpected must not take the
             # aircraft down with it. Fall through to the deterministic policy.
             turn.latency_s += time.monotonic() - started
+            ex["transport_error"] = f"{type(e).__name__}: {e}"
+            ex["latency_s"] = time.monotonic() - started
             return None, DecisionError(RejectionReason.BACKEND_ERROR,
                                        f"{type(e).__name__}: {e}")
 

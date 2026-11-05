@@ -1,0 +1,32 @@
+# Phase 18 - the main factorial experiment, on the held-out TEST split.
+#
+#   python scripts/run_factorial.py configs/experiments/factorial_main.yaml --dry-run
+#   python scripts/run_factorial.py configs/experiments/factorial_main.yaml            # stage 1
+#   python scripts/run_factorial.py configs/experiments/factorial_main.yaml --stage 2  # 8 drones, later
+#
+# Stage 1: 4 architectures x 2 team sizes x 4 networks x 2 failures = 64 cells
+# Stage 2: + 8 drones (32 cells) "after the smaller cases are stable"  -> 96
+# x 20 common random seeds = 1,280 runs (stage 1), 1,920 (all)
+#
+# Runs only with an unchanged freeze. The first run seals the configuration
+# into configs/frozen/test_seal.json; after that nothing that affects results
+# (the LLM prompt included) may change for this split.
+design_id: main_v1
+split: test
+
+architectures: [centralized, independent, deterministic_decentralized, agentic_decentralized]
+team_sizes:
+  stage1: [2, 4]
+  stage2: [8]
+network_profiles: [final_nominal, final_moderate, final_severe, final_partitioned]
+failure_profiles: [none, one_failure]
+seed_plan: {split: test, count: 20}       # the first 20 held-out seeds
+
+# 18.3: a fixed local model is the principal agent model. The exact build
+# (Ollama digest, quantisation) is recorded in every run's manifest.
+planner: llama3.1:8b
+
+fault_interrupts_skill: true              # a failure inside a sweep stops the sweep
+heartbeat_s: 8.0
+max_steps: 600
+exclusions: configs/experiments/exclusion_criteria.yaml

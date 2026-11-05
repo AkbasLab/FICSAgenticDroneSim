@@ -58,7 +58,18 @@ RULE_SOURCES = {
     "networks": ["agentic_uav/coordination/network_model.py",
                  "agentic_uav/coordination/comms_conditions.py",
                  "configs/networks/final_profiles.yaml"],
+    # Phase 18: how scenarios are generated per seed, and how runs are judged
+    "scenarios": ["agentic_uav/simulator/scenario_family.py"],
+    "design": ["configs/experiments/factorial_main.yaml",
+               "configs/experiments/factorial_gemini.yaml",
+               "configs/experiments/exclusion_criteria.yaml",
+               "agentic_uav/experiments/factorial.py",
+               "agentic_uav/experiments/pilot.py",
+               # the run loop decides scheduling and how a fault lands
+               "agentic_uav/experiments/architectures.py"],
     "prompts": ["agentic_uav/agents/context_builder.py",
+                # when the model is consulted, corrected, or bypassed
+                "agentic_uav/agents/llm_policy.py",
                 "agentic_uav/agents/llm_tools.py",
                 "agentic_uav/agents/decision_schema.py",
                 "configs/benchmark/guardrail_prompts.yaml"],
@@ -141,6 +152,7 @@ def snapshot() -> Dict[str, Dict[str, Any]]:
                      for name in sorted(os.listdir(os.path.join(ROOT, "configs", "missions")))
                      if name.endswith((".yaml", ".yml", ".json"))},
         "failure_profiles": ec.FAILURE_PROFILES,
+        "family_parameters": _family_parameters(),
     }
     held = heldout_seeds()
     groups["seeds"] = {"heldout_count": len(held), "heldout": _h(held),
@@ -149,6 +161,16 @@ def snapshot() -> Dict[str, Dict[str, Any]]:
     for group, files in RULE_SOURCES.items():
         groups.setdefault(group, {})["sources"] = {f: file_hash(f) for f in files}
     return groups
+
+
+def _family_parameters():
+    try:
+        from ..simulator import scenario_family
+        return {"parameters": scenario_family.PARAMETERS,
+                "quadrants": scenario_family.QUADRANTS,
+                "max_team": scenario_family.MAX_TEAM}
+    except Exception as e:                                      # noqa: BLE001
+        return f"unavailable: {e}"
 
 
 def fingerprint(groups) -> Dict[str, str]:
@@ -183,6 +205,30 @@ def development_seeds() -> List[int]:
                     used.update(int(s) for s in item.get(k, []) or [])
                 if "random_seed" in item:
                     used.add(int(item["random_seed"]))
+    return sorted(used)
+
+
+def validation_seeds() -> List[int]:
+    """Seeds the Phase 17 pilots and the calibration used: the validation split
+    of 18.2. Read from the pilot matrices (`pilot_id`) and calibration ladders
+    (`loss_axis`), not from every config, so a development design does not turn
+    its own seeds into validation seeds by listing them."""
+    import yaml
+    used = set()
+    for sub in ("experiments", "networks"):
+        d = os.path.join(ROOT, "configs", sub)
+        if not os.path.isdir(d):
+            continue
+        for name in os.listdir(d):
+            if not name.endswith((".yaml", ".yml")):
+                continue
+            with open(os.path.join(d, name), encoding="utf-8") as f:
+                try:
+                    data = yaml.safe_load(f)
+                except Exception:                               # noqa: BLE001
+                    continue
+            if isinstance(data, dict) and ("pilot_id" in data or "loss_axis" in data):
+                used.update(int(x) for x in data.get("seeds", []) or [])
     return sorted(used)
 
 

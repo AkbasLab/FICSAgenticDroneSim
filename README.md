@@ -808,11 +808,43 @@ scenario families, and 100 held-out seeds kept apart from every pilot seed.
 `scripts/freeze.py` names any change, and a deliberate one needs
 `--refreeze --reason`.
 
+## Phase 18 — The main factorial experiment
+
+4 architectures × 2 and 4 drones (8 later) × 4 network conditions × with and
+without a failure, on 20 common random seeds. That makes 1,280 runs in stage 1
+and 1,920 in all. Details in **[`docs/FACTORIAL.md`](docs/FACTORIAL.md)**.
+
+```bash
+python scripts/run_factorial.py configs/experiments/factorial_dev.yaml           # pipeline check, ~10 s
+python scripts/run_factorial.py configs/experiments/factorial_main.yaml --dry-run # 1,280 runs, ~12 h
+python scripts/run_factorial.py configs/experiments/factorial_main.yaml           # resumable
+```
+
+- **Common random numbers.** A seed decides the targets, the restricted
+  region, every battery and the failure (which drone, when). Every network link
+  gets its own random stream, so on one seed every architecture faces the same
+  mission and the same message-loss luck.
+- **A failure costs the work it interrupts.** A drone that fails mid-sweep is
+  not credited with the sweep. Before, it finished the sweep and then stopped,
+  so a failure never cost any work.
+- **Development / validation / test.**
+  - Held-out seeds run only on the test split, and only with an unchanged freeze.
+  - The first held-out run seals the configuration, prompt included, so it
+    cannot be tuned after the results are seen.
+- **Local model first.** `llama3.1:8b` is the principal model, with its exact
+  build recorded. Gemini is a secondary design on the same seeds.
+- **Every model decision saved**, every attempt included: input, raw and parsed
+  output, validation result, action, fallback.
+- **Exclusions are technical and predeclared:** infrastructure error,
+  incomplete logs, configuration mismatch, model unreachable. A test makes every
+  outcome absurd and checks no verdict changes. An excluded run is retried on
+  the same seed. A cell counts only with 18 of 20 valid replications.
+
 ---
 
 ## Testing
 
-634 tests and 18 demos (`python scripts/run_all_tests.py`), none of which need a
+692 tests and 20 demos (`python scripts/run_all_tests.py`), none of which need a
 simulator, GPU or API key.
 
 | Suite | Tests | Covers |
@@ -832,11 +864,12 @@ simulator, GPU or API key.
 | `test_experiment_runner.py` | 25 | configs, manifests, the event stream, and that failed runs survive |
 | `test_evaluation.py` | 90 | every metric has a written definition, and the conventions that keep it honest |
 | `test_integration.py` | 48 | the seven assembled-system scenarios: 2 and 4 agent allocation, loss, partition, conflict, relay, LLM fallback |
-| `test_determinism.py` | 28 | same seed, same run - and only one seeded RNG exists in the package |
+| `test_determinism.py` | 30 | same seed, same run - and only one seeded RNG exists in the package |
 | `test_airsim_path.py` | 20 | the AirSim code path, against a fake simulator |
 | `test_airsim_regression.py` | 5 | the five 16.3 regression missions (fake simulator, or `--real`) |
 | `test_guardrail_benchmark.py` | 100 | TRA / GBR / MVL harness across models |
 | `test_pilot.py` | 57 | pilot matrix, timelines, log audit, calibration rules, freeze, the four pilot defects |
+| `test_factorial.py` | 57 | common random numbers, splits and the held-out seal, saved decisions, technical-only exclusions |
 
 ---
 
@@ -850,6 +883,8 @@ simulator, GPU or API key.
 - **[`docs/SIM_TESTING.md`](docs/SIM_TESTING.md)** — flying Phases 3–7 in
   CARLA-Air for real: environment setup, pinned versions, the port layout, and
   the known failure modes when the simulator is involved.
+- **[`docs/FACTORIAL.md`](docs/FACTORIAL.md)** — Phase 18: the factorial design,
+  common random numbers, splits and the held-out seal, and the predeclared exclusions.
 - **[`docs/PILOT.md`](docs/PILOT.md)** — Phase 17: what the pilots found, the
   calibrated communication levels and why each is meaningful, and what is frozen.
 - **[`docs/METRICS.md`](docs/METRICS.md)** — every reported metric, its written

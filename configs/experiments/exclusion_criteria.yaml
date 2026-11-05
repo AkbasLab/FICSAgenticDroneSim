@@ -1,0 +1,56 @@
+# Phase 18 exit criterion: exclusions are decided by these technical criteria,
+# declared before any held-out run, and never by how a run turned out.
+#
+# This file is part of the freeze (configs/frozen/freeze.json) and its hash is
+# sealed into configs/frozen/test_seal.json by the first held-out run, so it
+# cannot be edited afterwards without that showing.
+version: 1
+
+# A cell is reported only if it has at least this many valid replications.
+min_valid_per_cell: 18          # of 20 seeds
+# An excluded run is retried with the SAME seed (common random numbers must
+# hold across architectures). A run still excluded after this many attempts is
+# recorded as excluded; the cell keeps its other seeds.
+max_attempts_per_run: 3
+
+criteria:
+  - id: X1_infrastructure_error
+    description: >
+      The run stopped because of the machine it ran on, not the system under
+      test: the model server could not be reached, memory or disk ran out, or
+      the operator interrupted it.
+    exception_types: [ConnectionError, ConnectionRefusedError, ConnectionResetError,
+                      BrokenPipeError, TimeoutError, MemoryError, KeyboardInterrupt,
+                      PermissionError, FileNotFoundError]
+
+  - id: X2_incomplete_logs
+    description: >
+      A run that finished but whose result directory fails the Phase 17 log
+      audit (a file missing, an event type missing, per-drone state missing, or
+      the event stream disagreeing with the reported result). It cannot be
+      checked, so it cannot be counted.
+    applies_to: completed_runs_only
+
+  - id: X3_configuration_mismatch
+    description: >
+      The run was not produced by the frozen configuration it claims: its
+      freeze fingerprint differs from the design's, or its seed, scenario or
+      team differ from its experiment id.
+
+  - id: X4_model_unreachable
+    description: >
+      For an agentic run, more than this fraction of model calls failed at the
+      transport level (connection refused or reset - the model never saw the
+      prompt). Timeouts and invalid replies are NOT transport failures: they
+      are the model's behaviour and stay in the results as fallbacks.
+    max_transport_failure_fraction: 0.2
+
+# Stated so nobody has to infer it: none of these is ever a reason to exclude
+# a run. They are results.
+never_grounds_for_exclusion:
+  - low coverage, unsearched sectors, duplicated sectors
+  - long mission time, or the step cap being reached
+  - drones not returning home, or landing away from base
+  - guardian interventions, separation or restricted-zone violations
+  - LLM invalid output, corrections, timeouts, fallbacks
+  - an exception raised by the system under test (counted as a mission failure)

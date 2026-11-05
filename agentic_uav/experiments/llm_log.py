@@ -49,6 +49,9 @@ class LLMTurn:
 
     latency_s: float = 0.0
     outcome: str = ""            # what actually happened as a result
+    #: Phase 18.4: every attempt in this turn, in order - the correction prompt
+    #: and its reply included, which `raw_response` alone does not keep.
+    exchanges: List[Dict[str, Any]] = field(default_factory=list)
 
     def as_dict(self):
         return asdict(self)

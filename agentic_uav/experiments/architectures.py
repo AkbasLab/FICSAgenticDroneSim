@@ -187,7 +187,7 @@ class BuiltRun:
 
 def build(spec_or_key, scenario, adapter_factory, condition=None, seed=None,
           backend=None, battery_s=None, heartbeat_interval_s=20.0,
-          bid_window_s=None, max_steps=160) -> BuiltRun:
+          bid_window_s=None, max_steps=160, crn=False) -> BuiltRun:
     """Construct a runnable team for any architecture.
 
     The shared components are created once, above the branch: the same ground
@@ -204,9 +204,15 @@ def build(spec_or_key, scenario, adapter_factory, condition=None, seed=None,
     run_seed = scenario.random_seed if seed is None else seed
 
     effective_condition = "nominal" if sp.force_perfect_comms else condition
-    profile = comms_condition(effective_condition) if effective_condition else None
+    from ..coordination.comms_conditions import resolve as _resolve_condition
+    profile = (_resolve_condition(effective_condition,
+                                  [v.vehicle_id for v in scenario.vehicles])
+               if effective_condition else None)
+    # Phase 18.1: with common random numbers every directed link has its own
+    # generator, so the same seed gives every architecture the same luck.
     net = NetworkModel(profile=profile, seed=run_seed,
-                       position_of=truth.true_position) if profile else None
+                       position_of=truth.true_position,
+                       streams="per_link" if crn else "shared") if profile else None
     bus = MessageBus(network=net)
     # The sensor is built after the network because base reachability depends on
     # both range and any active partition (Phase 16.2).
@@ -391,7 +397,8 @@ class RunResult:
         return d
 
 
-def run(built: BuiltRun, max_total_steps=600, stop_at=None) -> RunResult:
+def run(built: BuiltRun, max_total_steps=600, stop_at=None,
+        interrupt_skills=False) -> RunResult:
     """Step a built team to completion.
 
     Identical scheduling for every architecture - whichever agent is furthest
@@ -441,12 +448,81 @@ def run(built: BuiltRun, max_total_steps=600, stop_at=None) -> RunResult:
             # disconnected and started duplicating work.
             built.controller.tick(max(a.belief.now for a in built.agents))
         total += 1
-        if not agent.step():
+        # Phase 18: a fault that falls *inside* a skill. Simulated time jumps a
+        # whole skill per step, so without this a drone killed 20 s into a 70 s
+        # sweep finishes the sweep and only then stops - which, with one sector
+        # per drone, means a failure never costs any work at all. With
+        # `interrupt_skills` the step that crosses the fault time is undone from
+        # the fault onwards: the sweep is not credited, nothing it sensed after
+        # the fault is kept, nothing it sent from the end of the step goes out,
+        # and its track stops where it was.
+        fault = stop_at.get(agent.vehicle_id)
+        snap = None
+        if interrupt_skills and fault is not None and agent.vehicle_id not in stopped \
+                and _clock(agent) < fault:
+            snap = _snapshot(agent, built.bus)
+        alive = agent.step()
+        if snap is not None and _clock(agent) > fault:
+            _interrupt(agent, built.bus, fault, snap)
+            agent.stopped = True
+            stopped.add(agent.vehicle_id)
+            alive = False
+        if not alive:
             active.remove(agent)
 
     return _measure(built, total, stopped=stopped, tracks=_tracks(agents),
                     hit_step_cap=bool(active) and total >= max_total_steps,
                     step_cap=max_total_steps)
+
+
+def _snapshot(agent, bus):
+    lm = agent.belief.local_map
+    track = getattr(agent.adapter, "track", {}).get(agent.vehicle_id, [])
+    pending = {id(p[2]) for p in getattr(bus, "_pending", [])}
+    return {"regions": len(lm.searched_regions), "targets": len(lm.observed_targets),
+            "track": len(track), "pending": pending,
+            "clock": _clock(agent)}
+
+
+def _interrupt(agent, bus, fault, snap):
+    """Undo what a step did after the fault time (see `run`)."""
+    vid = agent.vehicle_id
+    lm = agent.belief.local_map
+    # the skill did not finish, so nothing it completed or sensed counts
+    del lm.searched_regions[snap["regions"]:]
+    del lm.observed_targets[snap["targets"]:]
+    # messages the drone queued in this step after acting never left it
+    kept = []
+    for item in getattr(bus, "_pending", []):
+        at, recipient, message, entry = item
+        if id(message) not in snap["pending"] and getattr(message, "sender_id", None) == vid:
+            entry.dropped = True
+            entry.drop_reason = "sender_failed"
+            continue
+        kept.append(item)
+    if hasattr(bus, "_pending"):
+        bus._pending = kept                               # noqa: SLF001
+    # the track ends where the drone was at the fault time
+    track = getattr(agent.adapter, "track", {}).get(vid)
+    if track and len(track) > snap["track"]:
+        before = track[:snap["track"]]
+        after = track[snap["track"]:]
+        prev = before[-1] if before else after[0]
+        cut = None
+        for p, t in [prev] + after:
+            if t >= fault:
+                cut = (p, t)
+                break
+            prev = (p, t)
+        if cut is not None and cut[1] > prev[1]:
+            f = (fault - prev[1]) / (cut[1] - prev[1])
+            from ..core.models import Position3D
+            pa, pb = prev[0], cut[0]
+            at = Position3D(pa.x + (pb.x - pa.x) * f, pa.y + (pb.y - pa.y) * f,
+                            pa.z + (pb.z - pa.z) * f)
+            keep = [x for x in after if x[1] < fault]
+            track[:] = before + keep + [(at, fault)]
+    agent.interrupted_at = fault
 
 
 def _clock(agent):

@@ -222,6 +222,48 @@ DEFECTS = [
      "an idle drone's waiting rounds take no simulated time, so it lands "
      "before a failed teammate can be noticed and its sector freed",
      ["tests/test_pilot.py", "tests/test_integration.py"]),
+
+    # --- Phase 18: the factorial experiment's guarantees ------------------------
+    ("crn_streams_shared", "experiment design",
+     "agentic_uav/coordination/network_model.py",
+     "        rng = self._link_rng(link)\n",
+     "        rng = self.rng\n",
+     "per-link streams draw from the shared generator, so architectures with "
+     "different traffic no longer share a seed's message-loss luck",
+     ["tests/test_factorial.py"]),
+
+    ("partition_ignores_controller", "experiment design",
+     "agentic_uav/coordination/comms_conditions.py",
+     "    a, b = ids[:half] + [CONTROLLER_ID], ids[half:]",
+     "    a, b = ids[:half], ids[half:]",
+     "the temporary partition never touches drone-controller links, so it has "
+     "no effect on the centralized architecture",
+     ["tests/test_factorial.py"]),
+
+    ("interrupted_sweep_still_credited", "fault injection",
+     "agentic_uav/experiments/architectures.py",
+     "    del lm.searched_regions[snap[\"regions\"]:]\n",
+     "",
+     "a drone that fails part-way through a sweep is still credited with it, so "
+     "the failure condition costs no work",
+     ["tests/test_factorial.py"]),
+
+    ("exclusion_by_outcome", "experiment design",
+     "agentic_uav/experiments/factorial.py",
+     "    return {\"status\": \"excluded\" if reasons else \"valid\", \"reasons\": reasons,",
+     "    if (_read(directory, 'result.json') or {}).get('coverage', 1) < 1:\n"
+     "        reasons.append('low coverage')\n"
+     "    return {\"status\": \"excluded\" if reasons else \"valid\", \"reasons\": reasons,",
+     "a run with a poor outcome is excluded - exactly what the exit criterion "
+     "forbids",
+     ["tests/test_factorial.py"]),
+
+    ("held_out_seal_not_checked", "experiment design",
+     "agentic_uav/experiments/factorial.py",
+     "        if seal[\"fingerprint\"] != fingerprint_now:",
+     "        if False:",
+     "held-out runs continue after the prompt or rules were changed",
+     ["tests/test_factorial.py"]),
 ]
 
 

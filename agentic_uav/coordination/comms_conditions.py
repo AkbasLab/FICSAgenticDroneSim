@@ -110,6 +110,54 @@ def _load_final():
 _load_final()
 
 
+# --- Phase 18: the temporary partition, sized to the team ---
+#
+# The Phase 10 partition names Drone1-4, so it means nothing for a team of 2
+# or 8. `final_partitioned` splits whichever team is flying into its first and
+# second half for PARTITION_WINDOW_S, with the base on the first half's side,
+# over the loss-free final link (so the partition is the only degradation).
+# The window outlasts the presumed-lost threshold (4 x 8 s heartbeat) but ends
+# before a typical mission does, so the halves must notice the split, carry on,
+# and re-merge - which is what "temporary" is meant to test.
+
+PARTITION_NAME = "final_partitioned"
+PARTITION_WINDOW_S = (30.0, 150.0)
+
+
+def partition_for(vehicle_ids, start_s=None, end_s=None):
+    ids = list(vehicle_ids)
+    half = max(1, len(ids) // 2)
+    # The centralized controller sits at the base, so it is on the base side.
+    # Without it in a group the partition would never touch drone<->controller
+    # links and would have no effect at all on Architecture A (found by the
+    # Phase 18 development run: A's partitioned cells equalled its nominal ones).
+    from .fleet_controller import CONTROLLER_ID
+    a, b = ids[:half] + [CONTROLLER_ID], ids[half:]
+    base = CONDITIONS.get("final_nominal")
+    start, end = PARTITION_WINDOW_S
+    return NetworkProfile(
+        name=PARTITION_NAME,
+        latency_ms_mean=base.latency_ms_mean if base else 150.0,
+        latency_ms_jitter=base.latency_ms_jitter if base else 50.0,
+        packet_loss_probability=base.packet_loss_probability if base else 0.0,
+        partitions=[Partition(group_a=a, group_b=b,
+                              start_s=start if start_s is None else start_s,
+                              end_s=end if end_s is None else end_s,
+                              base_side="a")])
+
+
+def resolve(name, vehicle_ids=None):
+    """A condition by name, built for the team that is flying. Use this rather
+    than `condition()` wherever the team is known."""
+    if name == PARTITION_NAME:
+        return partition_for(vehicle_ids or ["Drone1", "Drone2", "Drone3", "Drone4"])
+    return condition(name)
+
+
+# listed with the others, sized for the canonical 4-drone team
+CONDITIONS[PARTITION_NAME] = partition_for(["Drone1", "Drone2", "Drone3", "Drone4"])
+
+
 def condition(name):
     """Look up a condition by name. Raises with the valid options if unknown."""
     if name not in CONDITIONS:

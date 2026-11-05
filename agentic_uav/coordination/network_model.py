@@ -129,10 +129,27 @@ class NetworkModel:
     """
 
     def __init__(self, profile: NetworkProfile = None, seed: int = 0,
-                 position_of=None):
+                 position_of=None, streams: str = "shared"):
+        """`streams` selects how random draws are allocated.
+
+        `shared` (the default, and every phase before 18): one generator for the
+        whole network, drawn from in delivery order. Reproducible, but the draw a
+        message gets depends on every message sent before it anywhere - so two
+        architectures with different traffic see different loss sequences even
+        on the same seed.
+
+        `per_link` (Phase 18.1, common random numbers): one generator per
+        directed link, seeded from (seed, sender, recipient), and a fixed three
+        draws per message. The k-th message on Drone1 -> Drone3 then meets the
+        same luck under every architecture, whatever else is on the air.
+        """
+        if streams not in ("shared", "per_link"):
+            raise ValueError(f"streams must be 'shared' or 'per_link', not {streams!r}")
         self.profile = profile or NetworkProfile()
         self.seed = seed
+        self.streams = streams
         self.rng = random.Random(seed)
+        self._link_rngs: Dict[str, random.Random] = {}
         self.position_of = position_of
 
         # rate limiting / bandwidth accounting, per sender
@@ -162,6 +179,9 @@ class NetworkModel:
         if not self._within_bandwidth(sender, message, now):
             return self._drop("bandwidth")
 
+        if self.streams == "per_link":
+            return self._evaluate_per_link(sender, recipient, now)
+
         # 2. probabilistic loss
         loss = p.packet_loss_probability
         loss += p.asymmetric_links.get(f"{sender}->{recipient}", 0.0)
@@ -179,6 +199,41 @@ class NetworkModel:
 
         # 3. latency
         return Verdict(delivered=True, delay_s=self._draw_latency(sender, recipient))
+
+    def _link_rng(self, link):
+        rng = self._link_rngs.get(link)
+        if rng is None:
+            # str seeding is deterministic (SHA-512), unlike hash(), so this is
+            # the same generator in every process and on every platform
+            rng = random.Random(f"{self.seed}:{link}")
+            self._link_rngs[link] = rng
+        return rng
+
+    def _evaluate_per_link(self, sender, recipient, now):
+        """Common-random-number path: exactly three draws per message on its
+        own link's generator, whichever branch is taken, so the k-th message
+        on a link always consumes the same three numbers."""
+        p = self.profile
+        link = f"{sender}->{recipient}"
+        rng = self._link_rng(link)
+        u_burst, u_loss, z_lat = rng.random(), rng.random(), rng.gauss(0.0, 1.0)
+
+        loss = p.packet_loss_probability
+        loss += p.asymmetric_links.get(link, 0.0)
+        loss += self._interference_loss(sender, recipient)
+        if self._in_burst(link, now):
+            return self._drop("burst_loss")
+        if p.burst_loss_probability > 0 and u_burst < p.burst_loss_probability:
+            self._burst_until[link] = now + p.burst_length_s
+            return self._drop("burst_loss")
+        if loss > 0 and u_loss < min(loss, 1.0):
+            return self._drop("packet_loss")
+
+        if p.latency_ms_mean <= 0 and p.latency_ms_jitter <= 0:
+            return Verdict(delivered=True, delay_s=0.0)
+        ms = max(0.0, p.latency_ms_mean + p.latency_ms_jitter * z_lat)
+        ms *= self._interference_latency_multiplier(sender, recipient)
+        return Verdict(delivered=True, delay_s=ms / 1000.0)
 
     # --- components ---
 
@@ -271,13 +326,14 @@ class NetworkModel:
 
     def stats(self):
         return {"profile": self.profile.name,
-                "seed": self.seed,
+                "seed": self.seed, "streams": self.streams,
                 "dropped_by_reason": dict(self.dropped_by_reason)}
 
     def reset(self, seed=None):
         """Restart the RNG and all windowed state - used between replays."""
         self.seed = self.seed if seed is None else seed
         self.rng = random.Random(self.seed)
+        self._link_rngs.clear()
         self._sent_times.clear()
         self._bytes_window.clear()
         self._burst_until.clear()

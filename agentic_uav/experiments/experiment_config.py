@@ -50,7 +50,14 @@ FAILURE_PROFILES: Dict[str, Dict[str, float]] = {
     "drone_failure_midmission": {"Drone2": 30.0},
     "two_drone_failure": {"Drone2": 1.0, "Drone3": 45.0},
     "relay_failure": {"Drone4": 20.0},
+    # Phase 18: one vehicle fails at a time drawn from the seed - the same
+    # vehicle and time for every architecture (common random numbers). Only
+    # meaningful with a generated scenario (`scenario: family:<split>`).
+    "one_failure": {},
 }
+
+#: Failure profiles whose fault comes from the generated scenario, not this table.
+SCENARIO_FAULTS = {"one_failure"}
 
 
 @dataclass
@@ -68,6 +75,11 @@ class ExperimentConfig:
     heartbeat_s: float = 8.0
     max_steps: int = 600
     notes: str = ""
+    # Phase 18.1: one random stream per network link, so the same seed gives
+    # every architecture the same message-loss luck.
+    crn: bool = False
+    # Phase 18: a fault inside a skill interrupts it (see architectures.run)
+    fault_interrupts_skill: bool = False
 
     @property
     def architecture_key(self):
@@ -82,7 +94,15 @@ class ExperimentConfig:
                 f"have {', '.join(sorted(FAILURE_PROFILES))}")
         return dict(FAILURE_PROFILES[self.failure_profile])
 
+    @property
+    def scenario_split(self):
+        """`family:test` -> "test"; None for a scenario file."""
+        s = str(self.scenario)
+        return s.split(":", 1)[1] if s.startswith("family:") else None
+
     def scenario_path(self, root):
+        if self.scenario_split:
+            return self.scenario
         name = self.scenario
         if not name.endswith((".yaml", ".yml")):
             name += ".yaml"
@@ -119,9 +139,17 @@ class ExperimentConfig:
         if os.path.isdir(path):
             out = []
             for name in sorted(os.listdir(path)):
-                if name.endswith((".yaml", ".yml")):
-                    out.extend(ExperimentConfig.load_many(
-                        os.path.join(path, name)))
+                if not name.endswith((".yaml", ".yml")):
+                    continue
+                full = os.path.join(path, name)
+                with open(full, encoding="utf-8") as f:
+                    peek = yaml.safe_load(f)
+                # pilot matrices, factorial designs and the exclusion criteria
+                # live alongside the run configs but are not run configs
+                if isinstance(peek, dict) and any(
+                        k in peek for k in ("pilot_id", "design_id", "criteria")):
+                    continue
+                out.extend(ExperimentConfig.load_many(full))
             return out
         with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
@@ -204,6 +232,10 @@ class Manifest:
 
     event_counts: Dict[str, int] = field(default_factory=dict)
     team: List[str] = field(default_factory=list)
+    # Phase 18: what the seed decided (targets, zone, batteries, fault), and the
+    # freeze fingerprint the run was produced under
+    scenario_draws: Dict[str, Any] = field(default_factory=dict)
+    freeze_fingerprint: Dict[str, str] = field(default_factory=dict)
     warnings: List[str] = field(default_factory=list)
 
     @staticmethod

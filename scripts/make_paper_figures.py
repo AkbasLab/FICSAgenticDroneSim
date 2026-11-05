@@ -514,6 +514,58 @@ def fig_bid_collapse():
     save(fig, "fig6_bid_collapse")
 
 
+# --- Figure 7: the Phase 13 architecture comparison ----------------------
+
+
+def fig_architectures():
+    """A-E under the four Phase 10 conditions, with and without a lost drone.
+    Data from scripts/phase13_comparison.py (paper/figure_data/architectures.json)."""
+    data = load("architectures")
+    cells = data["cells"]
+    archs = ["A", "B", "C", "D", "E"]
+    conds = ["nominal", "moderate", "severe", "partitioned"]
+    cols = {"A": PURPLE, "B": GREY, "C": BLUE, "D": ORANGE, "E": GREEN}
+    names = {"A": "A centralized", "B": "B independent", "C": "C decentralized",
+             "D": "D agentic (scripted)", "E": "E open-loop"}
+    metrics = [("coverage", "sector coverage", (0, 1.08)),
+               ("duplicated_sectors", "duplicated sectors", (0, 4.6)),
+               ("mission_time_s", "mission time (s)", None)]
+    fig, axes = plt.subplots(2, 3, figsize=(WIDE, 4.2), sharex=True)
+    width = 0.16
+    for row, (fail, label) in enumerate((("none", "no failure"),
+                                         ("drone2_lost_t1", "Drone2 lost at t = 1 s"))):
+        for col, (m, ylabel, ylim) in enumerate(metrics):
+            ax = axes[row][col]
+            for j, a in enumerate(archs):
+                means, sds = [], []
+                for c in conds:
+                    cell = next(x for x in cells if x["architecture"] == a
+                                and x["condition"] == c and x["failure"] == fail)
+                    means.append(cell[f"{m}_mean"])
+                    sds.append(cell[f"{m}_sd"])
+                xs = [i + (j - 2) * width for i in range(len(conds))]
+                ax.bar(xs, means, width=width, color=cols[a], zorder=2,
+                       label=names[a] if (row == 0 and col == 0) else None)
+                ax.errorbar(xs, means, yerr=sds, fmt="none", ecolor="black",
+                            elinewidth=0.5, capsize=1.2, zorder=3)
+            ax.set_xticks(range(len(conds)))
+            ax.set_xticklabels(conds, rotation=12)
+            if ylim:
+                ax.set_ylim(*ylim)
+            ax.grid(axis="y", alpha=0.2, lw=0.4)
+            if row == 0:
+                ax.set_title(ylabel, fontsize=8)
+            if col == 0:
+                ax.set_ylabel(label, fontsize=7.5)
+    fig.legend(loc="upper center", ncol=5, frameon=False, fontsize=6.5,
+               bbox_to_anchor=(0.5, 1.02))
+    fig.text(0.5, -0.02, f"mean ± sd over {len(data['seeds'])} seeds, canonical scenario, "
+             "8 s heartbeat; D uses the scripted control backend, not a language model",
+             ha="center", fontsize=6.2, color=GREY)
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    save(fig, "fig7_architecture_comparison")
+
+
 FIGURES = [
     ("fig1_architecture", fig_architecture),
     ("fig1_architecture_plain", fig_architecture_plain),
@@ -522,6 +574,7 @@ FIGURES = [
     ("fig4_guardian_containment", fig_guardian),
     ("fig5_llm_failure_taxonomy", fig_llm_failures),
     ("fig6_bid_collapse", fig_bid_collapse),
+    ("fig7_architecture_comparison", fig_architectures),
 ]
 
 
