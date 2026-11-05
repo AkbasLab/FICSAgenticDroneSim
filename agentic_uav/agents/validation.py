@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import Any
 
 from ..control import navigation as nav
 from ..control.skills import (
@@ -55,6 +56,19 @@ ESTIMATE_SPEED_MPS = 5.0          # the skills' default cruise; the estimate's o
 class Verdict:
     ok: bool
     reasons: tuple[str, ...] = ()
+    # Phase 11, from the guardian only: its outcome when it is not a plain approve or refusal, and what runs
+    # instead of the decision -- the decision modified, or a safe fallback -- with the fallback's name.
+    outcome: str | None = None
+    replacement: Decision | None = None
+    fallback: str | None = None
+
+    def as_json(self) -> dict[str, Any]:
+        out: dict[str, Any] = {"ok": self.ok, "reasons": list(self.reasons)}
+        if self.outcome is not None:
+            out["outcome"] = self.outcome
+            out["replacement"] = None if self.replacement is None else self.replacement.as_json()
+            out["fallback"] = self.fallback
+        return out
 
 
 def ground_track(command: SkillCommand, here: tuple[float, float],
@@ -75,26 +89,42 @@ def ground_track(command: SkillCommand, here: tuple[float, float],
     return [here] + points
 
 
+def zone_problems(command: SkillCommand, here: tuple[float, float], home: tuple[float, float],
+                  zones: tuple[Any, ...]) -> list[str]:
+    """The NO RESTRICTED ZONE rule: one reason per zone the skill's ground track touches."""
+    track = ground_track(command, here, home)
+    reasons = []
+    for zone in zones:
+        for a, b in zip(track, track[1:]):
+            if zone.polygon.crosses(a, b):
+                reasons.append(f"the path {a} -> {b} enters restricted zone {zone.id}")
+                break
+    return reasons
+
+
+def battery_problems(command: SkillCommand, here: tuple[float, float], home: tuple[float, float],
+                     left: float, battery: Any) -> list[str]:
+    """The HOME ON WHAT IS LEFT rule, by the brief's battery model; waived for the way home."""
+    track = ground_track(command, here, home)
+    heads_home = command.skill in BATTERY_WAIVED or math.dist(track[-1], home) <= HOME_RADIUS_M
+    if heads_home:
+        return []
+    flown = sum(math.dist(a, b) for a, b in zip(track, track[1:]))
+    back = math.dist(track[-1], home)
+    seconds = (flown + back) / ESTIMATE_SPEED_MPS
+    cost = battery.hover_drain_per_s * seconds + battery.move_drain_per_m * (flown + back)
+    if left - cost < battery.reserve:
+        return [f"{left:.1f} % left, about {cost:.1f} % to fly this and home: "
+                f"under the {battery.reserve:g} % reserve"]
+    return []
+
+
 def validate(decision: Decision, belief: BeliefState) -> Verdict:
     if decision.kind is not DecisionKind.START or decision.command is None:
         return Verdict(True)
     command = decision.command
     me = belief.self_
-    track = ground_track(command, (me.x, me.y), me.home)
-    reasons = []
-    for zone in belief.brief.restricted_zones:
-        for a, b in zip(track, track[1:]):
-            if zone.polygon.crosses(a, b):
-                reasons.append(f"the path {a} -> {b} enters restricted zone {zone.id}")
-                break
-    heads_home = command.skill in BATTERY_WAIVED or math.dist(track[-1], me.home) <= HOME_RADIUS_M
-    if not heads_home:
-        flown = sum(math.dist(a, b) for a, b in zip(track, track[1:]))
-        home = math.dist(track[-1], me.home)
-        battery = belief.brief.battery
-        seconds = (flown + home) / ESTIMATE_SPEED_MPS
-        cost = battery.hover_drain_per_s * seconds + battery.move_drain_per_m * (flown + home)
-        if me.battery - cost < battery.reserve:
-            reasons.append(f"{me.battery:.1f} % left, about {cost:.1f} % to fly this and home: "
-                           f"under the {battery.reserve:g} % reserve")
+    here = (me.x, me.y)
+    reasons = zone_problems(command, here, me.home, belief.brief.restricted_zones)
+    reasons += battery_problems(command, here, me.home, me.battery, belief.brief.battery)
     return Verdict(not reasons, tuple(reasons))

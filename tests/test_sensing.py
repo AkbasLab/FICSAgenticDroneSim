@@ -224,6 +224,15 @@ class BoundaryTests(unittest.TestCase):
             with self.subTest(module=os.path.basename(path)):
                 self.assertEqual(boundary_violations(path, "agentic_uav.agents"), [])
 
+    def test_the_safety_package_reaches_no_ground_truth(self):
+        # Phase 11: the guardian knows what its drone knows, so it sits behind the agents' own boundary.
+        folder = os.path.join(ROOT, "agentic_uav", "safety")
+        modules = [os.path.join(folder, f) for f in sorted(os.listdir(folder)) if f.endswith(".py")]
+        self.assertIn(os.path.join(folder, "guardian.py"), modules)
+        for path in modules:
+            with self.subTest(module=os.path.basename(path)):
+                self.assertEqual(boundary_violations(path, "agentic_uav.safety"), [])
+
     def test_the_executor_handle_is_functions_and_the_clock(self):
         from agentic_uav.control.action_executor import ActionExecutor, SkillHandle
         world = MockWorld(declared=["Drone1"])

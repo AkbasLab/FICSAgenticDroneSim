@@ -34,6 +34,7 @@ class DecisionKind(Enum):
     ABORT = "abort"
     CONTINUE = "continue"
     FINISH = "finish"
+    INVALID = "invalid"     # Phase 11: an answer that could not be read as a decision (`agents.proposal`)
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,10 @@ class Decision:
     objective: str | None = None
     command: SkillCommand | None = None
     reason: str = ""
+    # Phase 11: when what the decision was based on was true, if it is not "now" (a slow LLM's answer);
+    # and, for a proposal, the text it was read from.
+    issued_at: float | None = None
+    raw: str | None = None
 
     def __post_init__(self) -> None:
         if (self.kind is DecisionKind.START) != (self.command is not None):
@@ -63,12 +68,21 @@ class Decision:
     def finish(cls, objective: str | None = None, reason: str = "") -> "Decision":
         return cls(DecisionKind.FINISH, objective, None, reason)
 
+    @classmethod
+    def invalid(cls, raw: str, problems: tuple[str, ...] | list[str], issued_at: float | None = None) -> "Decision":
+        """An answer that could not be read: the text, and why (each problem "[check] what")."""
+        return cls(DecisionKind.INVALID, None, None, "; ".join(p.replace("; ", ", ") for p in problems), issued_at, raw)
+
     def as_json(self) -> dict[str, Any]:
         out: dict[str, Any] = {"kind": self.kind.value, "objective": self.objective, "reason": self.reason}
         if self.command is not None:
             from dataclasses import asdict
             out["skill"] = self.command.skill.value
             out["command"] = asdict(self.command)
+        if self.issued_at is not None:
+            out["issued_at"] = round(self.issued_at, 3)
+        if self.raw is not None:
+            out["raw"] = self.raw
         return out
 
 

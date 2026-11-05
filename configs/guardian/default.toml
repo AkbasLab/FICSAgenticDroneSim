@@ -1,0 +1,23 @@
+# Phase 11's guardian manifest: the limits every command is checked against (AUV-11, 11.1).
+#
+# Fixed on 2026-11-04, before any run. Every run records the manifest it used.
+# The battery reserve and the minimum separation are NOT here: they are the
+# brief's own (search_relay_001: 20 %, 2 m), so the guardian and the judge can
+# never disagree on them. Read strictly by agentic_uav/safety/guardian.py
+# (parse_limits): every key required, none unknown, numbers only.
+#
+# The rule-based team flies well inside all of these -- 12 to 24 m, 5 m/s,
+# inside the sectors and the start line -- so a clean flight meets none of them.
+
+[limits]
+fence_margin_m = 20.0       # the geofence: sectors, start line and base, and this much round them
+fence_clamp_m = 20.0        # a point at most this far outside is moved onto the fence; further is refused
+min_altitude_m = 5.0        # the band a command may fly in (take-off and landing pass below it)
+max_altitude_m = 40.0
+max_speed_mps = 8.0
+command_timeout_s = 2.0     # a decision on news older than this is stale: four agent ticks
+landing_radius_m = 5.0      # LAND only this close to home or the base
+
+[fallback]
+hold_s = 10.0               # a fallback hold lasts this long, then the agent decides again
+hazard_factor = 2.0         # a teammate within this many separations is a hazard nearby
