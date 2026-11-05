@@ -49,7 +49,7 @@ twice (8 searches of 4 sectors, 20 lease expiries) -- the exit flies with every
 message delivered by the user's decision; partitions are Phase 10's subject.
 
 **Live**: the path is built and passes its real-time dry run on the mock;
-**the optional CarlaAir flight is not flown**.
+**the optional CarlaAir flight, flown later the same day, MET** (the record below).
 
 ## Deliverables
 
@@ -61,7 +61,7 @@ message delivered by the user's decision; partitions are Phase 10's subject.
 | Agents that allocate | `agentic_uav/agents/team_policy.py`, `agentic_uav/agents/drone_agent.py` (coordinator), `agentic_uav/experiments/allocation.py` (`fly_team_on_mock`), `agentic_uav/simulator/message_bus.py` (tie order) | **Done** 2026-11-04; goldens unedited; Phases 5–7 reproduce |
 | The exit | `agentic_uav/experiments/allocation_exit.py`, `scripts/allocation_exit.py`, `results/`, `evidence/` | **Done** 2026-11-04; exit met on the mock |
 | The live path (6) | `agentic_uav/experiments/allocation.py` (`fly_team_live`), `agentic_uav/experiments/allocation_exit.py` (`live_checks`), `scripts/allocation_exit.py --sim airsim` | **Done** 2026-11-04; real-time dry run on the mock passes |
-| Optional live flight; close | `results/`, `evidence/`, the ledger, the index, the vault | **Done** 2026-11-04; phase closed on the mock; the live flight not flown |
+| Optional live flight; close | `results/`, `evidence/`, the ledger, the index, the vault | **Done** 2026-11-04; phase closed on the mock; the live flight flown later that day, MET |
 
 ## Plan
 
@@ -586,6 +586,37 @@ four Phase 2 goldens are unedited through every step, and the audit is
 clean. Mutations: 17, 21, 34, 27, 23 and 16 by step, 138 in all, every one
 caught.
 
+### 2026-11-04 — the optional live flight, flown after Phase 11: MET
+
+Flown by the user, later the same day, at `8c42b7d` with a clean tree
+(`agentic_uav` digest `0347e62328f28010`). The code the flight ran is Phase 11's,
+but none of Phase 11's changes is on this path: no guardian is given, so the
+agents keep Phase 5's step. Result:
+`results/allocation-live-20261104-222823-live1`.
+
+**The scene.** CarlaAir launched fresh (`.\CarlaAir.ps1 Town10HD`), and a
+read-only check by the user found Drone1 only, at (−0.05, 0.05), z 29.24, not
+under API control. Drone2 was spawned at runtime at (4.0, 0.0); both were at
+rest 2.48 s after the reset. The poller kept 9.15 Hz (worst gap 0.14 s), so
+"correct" allowed 0.7 m.
+
+**MET: all six checks a single flight can be held to** -- met,
+no_central_assignment, one_holder_each, conflicts_resolved, leases_renewed,
+known_exactly. Deterministic needs a second flight, so it is the mock twin's
+alone, and it passed there too.
+
+| | Live | Mock twin |
+|---|---|---|
+| Division | Drone1 searched S2, Drone2 searched S1 | the same |
+| Completion | 38.6 s | 32.0 s |
+| Closest pair | 4.05 m | -- |
+| Contacts | the floor mesh only (SM_seaM, counted as ground) | -- |
+| Messages | 128: 123 delivered, 5 still in flight at the end | -- |
+
+Every skill succeeded, and both drones landed on their pads. The 6.6 s over
+the twin is Phase 4's live overhead -- settling and overshoot -- not a
+different flight.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -614,7 +645,7 @@ caught.
 - **The division never varies with the seed** -- the bids depend on the
   geometry, not the targets. Varied layouts, or tasks that appear in flight
   (a target to inspect), are what would make allocation choose differently.
-- **The live flight is not flown**: the path passed its dry run on the mock.
+- **One live flight, MET** (after Phase 11): two drones dividing S1 and S2 in CarlaAir exactly as the mock twin did.
 
 ---
 

@@ -33,8 +33,8 @@ Mirrored from `AUV-22 — Phase Objectives Checklist`.
 **Met:** yes, on the mock, 2026-11-04 — 20 of 20 seeds passed all eight checks, each seed flown with no stop and with
 each drone stopped in turn at 60 s, each stopped flight twice (180 flights, every message delivered) · **Evidence:**
 [`evidence/exit-criterion-2026-11-04.md`](evidence/exit-criterion-2026-11-04.md).
-The optional live flight is built and passed its real-time dry run on the mock (step 5), but is not yet
-flown in CarlaAir: `python scripts/recovery_exit.py --sim airsim --block live1`, the user's to fly.
+The optional live flight, flown later the same day in CarlaAir, was **NOT MET**. Drone1, sent to
+search the stopped Drone2's sector, flew beneath it and the two collided (see the record below).
 
 Planned evidence: the four canonical drones on `search_relay_001`, seeds
 1–20, each seed flown with no stop and with each drone stopped in turn
@@ -51,7 +51,7 @@ report. Optionally, two drones in CarlaAir, one stopped.
 | Roles and their triggers (9.1) | `agentic_uav/coordination/roles.py`, `agentic_uav/core/messages.py` (`ROLE_CHANGE`) | **Done** 2026-11-04; goldens unedited |
 | Recovery behaviour (9.3); stopping an agent | `agentic_uav/agents/recovery_policy.py`, `agentic_uav/agents/team_policy.py` (hooks), `agentic_uav/coordination/` (abandoned, finished), `agentic_uav/experiments/recovery.py` (`fly_recovery_on_mock`) | **Done** 2026-11-04; goldens unedited; Phases 5–8 reproduce |
 | The exit; reprioritization; 9.4 | `agentic_uav/experiments/recovery_exit.py`, `scripts/recovery_exit.py`, `results/`, `evidence/` | **Done** 2026-11-04; exit met on the mock |
-| Optional live flight; close | `agentic_uav/experiments/recovery.py` (`fly_recovery_live`), `agentic_uav/experiments/recovery_exit.py` (`live_checks`), `scripts/recovery_exit.py --sim airsim` | **Live path done** 2026-11-04 and dry-run in real time on the mock; the live flight not flown |
+| Optional live flight; close | `agentic_uav/experiments/recovery.py` (`fly_recovery_live`), `agentic_uav/experiments/recovery_exit.py` (`live_checks`), `scripts/recovery_exit.py --sim airsim` | **Live path done** 2026-11-04 and dry-run in real time on the mock; the live flight flown later that day, **NOT MET** (a collision) |
 
 ## Plan
 
@@ -477,6 +477,62 @@ the high-priority-target trigger wait for a message that carries sightings.
 Telling a partition from a failure waits for a network that partitions --
 Phase 10.
 
+### 2026-11-04 — the optional live flight, flown after Phase 11: NOT MET -- a collision
+
+Flown by the user, later the same day, at `8c42b7d` (`agentic_uav` digest
+`0347e62328f28010`, the same code as Phase 8's live flight; "dirty" only because
+that flight's results were untracked at the time). No guardian is on this path.
+CarlaAir was relaunched fresh after Phase 8's flight, and a read-only check by
+the user found Drone1 only, not under API control. Drone2 was spawned at runtime
+at (4.0, 0.0). The poller kept 9.08 Hz (worst gap 0.156 s), so "correct" allowed
+0.78 m. Result: `results/recovery-live-20261104-223149-live1`, 119.7 s of flight.
+**The user's decision: recorded as it is, NOT MET, and not flown again for a
+pass.**
+
+**Five of the seven checks held; reassigned and continued failed.**
+
+| Check | Live | Mock twin |
+|---|---|---|
+| detected | yes -- suspected 3.093 s, unreachable 10.375 s, failed 30.359 s | yes |
+| no_false_alarm | yes | yes |
+| reassigned | **no** -- Drone2's S1 was searched by no survivor | yes |
+| continued | **no** -- the mission not met | yes |
+| no_new_command | yes | yes |
+| roles_from_interactions | yes -- scout, reserve, relay, scout, reserve | yes |
+| known_exactly | yes | yes |
+
+**What happened, from the poll record** (times from the flight's start):
+
+1. **17.34 s.** Drone2 was stopped mid-search in S1. It held at (−8.9, −19.1),
+   18.2 m up.
+2. **About 28 s.** Drone2 went unreachable, its lease came back to the pool
+   (Phase 8's rule), and Drone1 claimed S1. It flew there and began
+   searching it at its own layer, about 12.5 m, at 37.3 s.
+3. **40.0 to 40.9 s.** Drone1's lane took it almost exactly beneath the
+   hovering Drone2: 0.3 m apart horizontally, 5.5 m below. While under it,
+   Drone1 **rose 1.7 m uncommanded**, from 12.5 to 14.2 m, then sank back
+   toward its height as it moved on.
+4. **41.84 to 41.95 s.** About 3.8 m to the side, Drone1's position
+   **jumped 5 m upward in one 0.11 s poll**, from 13.3 to 18.3 m -- Drone2's
+   height. That is 45 m/s; nothing flies that, so it looks like the
+   simulator's physics, not flight. The two drones' contact registered at
+   42.03 s, closest 3.0 m centre to centre.
+5. **After the contact,** both froze where they were. Drone1's search
+   failed three times, its way home three times, and its landing timed out.
+   The flight ended with Drone1 airborne, 19 m from its pad; S1 was 54 %
+   covered, one target was found and reported, and both drones were left in
+   the air.
+
+**What it shows.** The trigger looks like a CarlaAir artefact: a drone passing
+under another is lifted, then thrown into it. The exposure, though, is the
+team's own. Its only deconfliction is height: layers 4 m apart, which the mock
+-- with no physics between drones -- can never fault. Nothing avoids a silent
+teammate's last known position: not the recovery policy, which sends the new
+holder to search the very sector the stopped drone hovers in; and not Phase
+11's guardian, which checks separation only against records still current, so
+a silent drone's position is ignored. A stopped drone hovering in a sector is
+exactly the case where that position is the most reliable thing known.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -512,6 +568,15 @@ Phase 10.
 4. **Measuring emergence.** These agents are deterministic and bid on
    geometry, so allocation divergence across seeds is one division by design.
    What would count as emergence measured, rather than conditions held?
+5. **A silent teammate as an obstacle** (the live flight). The team keeps apart
+   by height alone, and nothing avoids a silent drone's last known position:
+   not the policy, which sends the new holder into that drone's sector, and
+   not the guardian, which ignores records no longer current. Should a
+   stopped teammate's last known position become a keep-out volume -- in
+   routing, in the search, in the guardian -- for as long as it is believed
+   failed? That would change mock results, so it is its own decision. And is
+   CarlaAir's lift-and-jump beneath another drone reproducible, and
+   reportable upstream?
 
 ---
 
