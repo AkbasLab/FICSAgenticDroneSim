@@ -1,0 +1,18 @@
+# Phase 12's model, frozen for the runs of record (AUV-12, 12.7).
+#
+# Read strictly by agentic_uav/experiments/llm.py (parse_llm). The digest is the full sha256 the
+# server reports for the name; preflight() refuses a server whose copy differs. Empty until the model
+# is pinned on Vega (step 5): runs of record need it.
+
+[model]
+name = "llama3.3:70b"
+digest = ""
+
+[options]
+temperature = 0          # 12.7: zero
+seed = 0
+num_ctx = 8192           # a decision's context is a few thousand tokens
+num_predict = 400        # a reply is one small JSON object
+
+[call]
+timeout_s = 60.0         # 12.6: past this, no reply -- the rule policy decides, and it is recorded

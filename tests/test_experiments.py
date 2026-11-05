@@ -144,10 +144,11 @@ class RunnerSeamTests(unittest.TestCase):
 
     def test_nothing_in_the_package_reaches_past_its_adapters(self):
         # AirSim is imported only by the AirSim adapter, Ollama only by the
-        # Ollama planner and the endpoint check, and the baseline by nobody.
+        # Ollama planner, the endpoint check and (Phase 12) the LLM policy's
+        # model client, and the baseline by nobody.
         allowed = {
             "airsim": {"simulator/airsim_adapter.py"},
-            "ollama": {"planners/ollama_planner.py", "planners/endpoint.py"},
+            "ollama": {"planners/ollama_planner.py", "planners/endpoint.py", "planners/llm_ask.py"},
             "open_loop_agent": set(),
         }
         package = os.path.join(ROOT, "agentic_uav")

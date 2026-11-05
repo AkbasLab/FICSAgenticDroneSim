@@ -42,8 +42,9 @@ from typing import Any
 from ..control.routing import length
 from ..control.skills import DEFAULT_SPEED_MPS, HoldPositionCommand, TakeOffCommand
 from ..coordination.keepout import KeepOutConfig
-from ..coordination.bids import Bidder, bid_for
+from ..coordination.bids import Bid, Bidder, bid_for
 from ..coordination.contract_net import ContractNet, Out
+from ..coordination.tasks import MissionTask
 from ..core.events import Event, Trigger
 from ..core.messages import AgentMessage
 from .belief_state import BeliefState
@@ -70,6 +71,8 @@ class TeamPolicy(RulePolicy):
         self._outbox: list[Out] = []
         self._news: list[Event] = []
         self._idle_said = False
+        # Phase 12: tasks its agent (an LLM's `decline_task`) will not bid for. Empty: exactly as before.
+        self.declined: set[str] = set()
 
     # ------------------------------------------------------ as a coordinator
 
@@ -80,8 +83,7 @@ class TeamPolicy(RulePolicy):
         me = belief.self_
         bidder = Bidder(me.vehicle_id, me.x, me.y, me.battery, me.home, belief.time_left, self.altitude_m,
                         self.speed_mps)
-        out += self.net.tick(now, lambda task: bid_for(task, bidder, belief.brief, self.net.config.weights),
-                             self._progress(belief))
+        out += self.net.tick(now, lambda task: self._bid(task, bidder, belief), self._progress(belief))
         for n in self.net.take_news():
             self._news.append(Event(Trigger.MESSAGE, now, {"allocation": n["what"],
                                                            **{k: v for k, v in n.items() if k != "what"}}))
@@ -91,6 +93,11 @@ class TeamPolicy(RulePolicy):
             self._idle_said = True
             self._news.append(Event(Trigger.MESSAGE, now, {"allocation": "nothing left"}))
         return out
+
+    def _bid(self, task: MissionTask, bidder: Bidder, belief: BeliefState) -> Bid:
+        if task.task_id in self.declined:
+            return Bid(task.task_id, task.version, bidder.drone, None, {}, {}, "declined by its agent")
+        return bid_for(task, bidder, belief.brief, self.net.config.weights)
 
     def drain(self) -> list[Out]:
         out, self._outbox = self._outbox, []

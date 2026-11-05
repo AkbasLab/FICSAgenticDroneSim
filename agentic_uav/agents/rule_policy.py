@@ -293,6 +293,10 @@ class RulePolicy:
 
     def _keep_outs(self, belief: BeliefState) -> list:
         """The squares round teammates silent in the air, to plan round (`coordination.keepout`); none when off."""
+        return [square for _, square in self._keep_out_list(belief)]
+
+    def _keep_out_list(self, belief: BeliefState) -> list:
+        """(teammate, square) for each keep-out it plans round; none when off."""
         if self.keep_out is None:
             return []
         heard = []
@@ -302,8 +306,7 @@ class RulePolicy:
                 p = record.report.position
                 heard.append((drone, p[0], p[1], p[2], record.report.at))
         me = belief.self_
-        return [square for _, square in keep_outs(heard, me.updated_at, self.keep_out, (me.x, me.y),
-                                                  ZONE_CLEARANCE_M)]
+        return keep_outs(heard, me.updated_at, self.keep_out, (me.x, me.y), ZONE_CLEARANCE_M)
 
     def _obstacles(self, belief: BeliefState, avoid: list) -> list:
         return [z.polygon for z in belief.brief.restricted_zones] + avoid
