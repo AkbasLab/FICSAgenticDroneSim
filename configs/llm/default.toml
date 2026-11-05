@@ -2,11 +2,11 @@
 #
 # Read strictly by agentic_uav/experiments/llm.py (parse_llm). The digest is the full sha256 the
 # server reports for the name; preflight() refuses a server whose copy differs. Empty until the model
-# is pinned on Vega (step 5): runs of record need it.
+# is pinned on Vega (step 5): runs of record need it. Chosen by the user, on bench2's evidence.
 
 [model]
 name = "llama3.3:70b"
-digest = ""
+digest = "a6eb4748fd2990ad2952b2335a95a7f952d1a06119a0aa6a2df6cd052a93a3fa"   # pinned 2026-11-05 from bench2 (Vega gpu02, Ollama 0.40.6)
 
 [options]
 temperature = 0          # 12.7: zero
