@@ -6,7 +6,7 @@
 
 What is flown and checked is in `experiments/keepout_check.py`: each seed, the
 canonical four with each drone stopped at 60 s (twice each), and the live
-variant's pair with Drone2 stopped at 17 s (the live flight's mock twin), with
+variant's pair with each drone stopped at 17 s (the live flight's mock twin), with
 the keep-out and the guardian on; and the four with no stop, against Phase 9's
 own flight. Checked: Phase 9's eight checks, on the four and on the twin; no
 survivor enters the keep-out; the guardian never intervenes; with no stop,
@@ -110,8 +110,8 @@ def main(argv: list[str] | None = None) -> int:
     lines = [f"# Keep-out check — {scenario.scenario_id} and {twin.scenario_id}, mock", "",
              f"Run {started}, `scripts/keepout_check.py`, {wall:.1f} s wall. Keep-out {keep_out.half_width_m:g} m "
              f"either side of a teammate silent {keep_out.after_s:g} s in the air, with the guardian; the four with "
-             "each drone stopped at 60 s (twice each) and with no stop; the live pair's twin with Drone2 stopped at "
-             "17 s (twice).", "",
+             "each drone stopped at 60 s (twice each) and with no stop; the live pair's twin with each drone stopped at "
+             "17 s (twice each).", "",
              "| Seed | " + " | ".join(CHECKS) + " |", "|---|" + "---|" * len(CHECKS)]
     for r in rows:
         lines.append(f"| {r['seed']} | " + " | ".join("yes" if r["checks"][k]["ok"] else "**no**" for k in CHECKS) + " |")

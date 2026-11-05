@@ -12,7 +12,9 @@ THE FLIGHTS, each seed:
     phase 9            no stop, no keep-out, no guardian: Phase 9's own flight
     no stop            keep-out and guardian on, nothing stopped
     <drone> stopped    each of the canonical four stopped at 60 s, keep-out and guardian on -- twice each
-    twin               the live variant's pair, Drone2 stopped at 17 s -- the live flight's mock twin
+    twin               the live variant's pair with each drone stopped at 17 s (twice each) -- the live
+                       flight's mock twin, both ways round (the first run of record stopped only Drone2;
+                       after the live re-fly showed the cost in these small sectors, both)
 
 THE CHECKS, each on every seed:
 
@@ -62,9 +64,10 @@ def keepout_flights(scenario: Scenario, twin: Scenario, seed: int, config: Alloc
         four[f"{label} again"] = fly_recovery_on_mock(sc, config, health, label, {v.id: STOP_AT_S}, **on)
     tw = dataclasses.replace(twin, random_seed=seed)
     pair = {"no stop": fly_recovery_on_mock(tw, config, health, "no stop", **on)}
-    for again in ("", " again"):
-        pair[f"{TWIN_VICTIM} stopped{again}"] = fly_recovery_on_mock(tw, config, health, f"{TWIN_VICTIM} stopped",
-                                                                     {TWIN_VICTIM: LIVE_STOP_AT_S}, **on)
+    for v in tw.vehicles:
+        for again in ("", " again"):
+            pair[f"{v.id} stopped{again}"] = fly_recovery_on_mock(tw, config, health, f"{v.id} stopped",
+                                                                  {v.id: LIVE_STOP_AT_S}, **on)
     return {"seed": seed, "phase9": fly_recovery_on_mock(sc, config, health, "no stop"), "four": four, "pair": pair,
             "scenario": sc, "twin": tw}
 

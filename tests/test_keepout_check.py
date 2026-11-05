@@ -41,12 +41,19 @@ class KeepOutCheckTests(unittest.TestCase):
         cls.flights = C.keepout_flights(SC, TWIN, 17, load_allocation(), load_recovery(), load_guardian(), KO)
         cls.checks = C.keepout_checks(cls.flights, KO)
 
-    def test_all_hold_on_seed_17(self):
-        self.assertTrue(self.checks["all"], {k: v["problems"] for k, v in self.checks.items() if k != "all"})
+    def test_on_seed_17_all_hold_but_the_twins_drone1_stop(self):
+        failed = [k for k in C.CHECKS if not self.checks[k]["ok"]]
+        self.assertEqual(failed, ["twin_checks"], {k: self.checks[k]["problems"] for k in failed})
+        # The cost in the variant's small sectors: a target only the stopped drone saw lies in its keep-out,
+        # beyond the survivor's reach as it goes round -- never reported.
+        self.assertEqual(self.checks["twin_checks"]["failed"], ["continued"])
+        self.assertTrue(any("Drone1 stopped" in p and "never reported: T1" in p
+                            for p in self.checks["twin_checks"]["problems"]), self.checks["twin_checks"]["problems"])
 
     def test_the_findings_measure_every_survivor_of_every_stop(self):
         f = C.keepout_findings(self.flights, KO)
-        self.assertEqual(sorted(f), sorted([f"four, {v.id} stopped" for v in SC.vehicles] + ["twin, Drone2 stopped"]))
+        self.assertEqual(sorted(f), sorted([f"four, {v.id} stopped" for v in SC.vehicles]
+                                           + [f"twin, {v.id} stopped" for v in TWIN.vehicles]))
         self.assertEqual(len(f["four, Drone1 stopped"]["passes"]), 3)
         self.assertTrue(all(p["closest_to_heard_m"] >= KO.half_width_m for x in f.values() for p in x["passes"]))
 
