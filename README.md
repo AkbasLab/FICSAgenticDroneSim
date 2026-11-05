@@ -94,8 +94,8 @@ model.
 
 ## Where the project is
 
-**Phases 1 to 10 are complete** (2026-10-20 to 2026-11-04), each tagged
-`phase-NN-complete`. **Phase 11, the runtime safety guardian, is next.**
+**Phases 1 to 11 are complete** (2026-10-20 to 2026-11-04), each tagged
+`phase-NN-complete`. **Phase 12, the LLM as agent policy, is next.**
 
 | Phase | Done | What it left |
 |---|---|---|
@@ -122,7 +122,7 @@ Objectives Checklist`; each phase also has a detail note `AUV-01` … `AUV-23`.
 | 1 · Platform | 2–4 | **Complete**: Phases 2, 3 and 4 |
 | 2 · One agent | 5–6 | **Complete**: Phases 5 and 6 |
 | 3 · The team | 7–9 | **Complete**: Phases 7, 8 and 9 |
-| 4 · Adversity | 10–11 | **Phase 10 complete**; Phase 11 next |
+| 4 · Adversity | 10–11 | **Complete** (Phases 10 and 11) |
 | 5 · Intelligence | 12 | Not started |
 | 6 · Apparatus | 13–16 | Not started |
 | 7 · Science | 17–20 | Not started |
