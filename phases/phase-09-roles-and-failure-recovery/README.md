@@ -533,6 +533,113 @@ holder to search the very sector the stopped drone hovers in; and not Phase
 a silent drone's position is ignored. A stopped drone hovering in a sector is
 exactly the case where that position is the most reliable thing known.
 
+### 2026-11-05 — after the live collision: the keep-out, its check, and a second live flight
+
+**The plan**, shown in full and approved with all seven recommendations: keep
+every drone out of a square round a teammate silent in the air -- in the
+policies (routes, the search, the relay) and, as a backstop, in Phase 11's
+guardian -- off unless a flight is given it, so every run of record stands;
+checked on Phase 9's stop flights; flown live once more.
+
+**What was built** (`23f8e7a`, `e756a24`, `5fc62cc`):
+
+* `coordination/keepout.py` and `configs/keepout/default.toml`: a teammate
+  is SILENT IN THE AIR when its latest report is 10 s old (the ladder's
+  "unreachable", judged from the record alone) and put it 3 m up or more; round
+  where it was last heard stands a KEEP-OUT, a square 5 m either side, **at
+  every height** -- the live lift began beneath the stopped drone. A drone
+  already inside one is not trapped: the router's own test decides.
+* `routing.search_path`: the search's lanes go round the areas a search
+  must avoid (a new, optional `avoid` on SEARCH_REGION); with none it is the
+  plain lawnmower, point for point. The skill, Phase 5's zone rule and the
+  guardian all trace a search by it. A command that avoids nothing is
+  written exactly as before (`command_json`), so no record changes.
+* The policies plan round keep-outs on the way to a sector, in the search,
+  on the way home and to a relay point. Phase 11's guardian gains a 13th
+  check, `keep_out`, refusing any path into one.
+* `scripts/keepout_check.py` (the check on the mock) and
+  `recovery_exit.py --sim airsim --keep-out` (the live flight with it).
+
+**Two slips, found and fixed on the way.** (1) The first draft's "already
+inside, let it fly out" rule was too generous: a drone on a route's corner
+node, just outside the keep-out, counted as inside -- and its search then flew
+straight through the stopped drone's column. It now uses the router's exact
+test; a test holds it. (2) A test failed that had passed: the mutation
+harness runs tests with `-I`, which ignores `PYTHONPYCACHEPREFIX`, so mutants
+compiled into the real `__pycache__`; a mutant the same length as the line it
+replaced (`if avoid:` -> `if False:`), restored within the same second, left its
+bytecode trusted. The harness now deletes the cache on restore. Every
+mutation set of Phase 11 and of this fix was re-run with it: Phase 11's 59
+and this fix's 27, all caught.
+
+**Every run of record reproduces**: Phases 5–10's identical, and Phase 11's
+guardian exit identical row for row once NaN is read as equal to NaN (its
+`rule-waypoint` injection is a NaN). 1,211 tests pass, 29 skipped; the goldens
+did not move.
+
+**The check of record** (`results/keepout-check-20261105-101457-check`, 20
+seeds, the four with each drone stopped at 60 s twice, the live pair's twin
+with each drone stopped at 17 s twice, and the four with no stop):
+
+| Check | Seeds passing |
+|---|---|
+| phase_9_checks -- Phase 9's eight, on the four-drone stop flights | 20 / 20 |
+| twin_checks -- the same eight on the live pair's twin | **7 / 20** |
+| kept_out -- no survivor into a keep-out | 20 / 20 |
+| no_interventions -- the guardian never needed | 20 / 20 |
+| no_stop_unchanged -- with nothing stopped, Phase 9's flight knot for knot | 20 / 20 |
+
+Every twin failure is one flight: **Drone1 stopped**, with a target only
+Drone1 had seen lying inside its keep-out -- Drone2, going round, never came
+within reach of it, so it was never reported (C3). The closest any survivor
+came to a stopped drone: 7.1 m on the four, 15.4 m on the twin. A first run
+of this check flew only Drone2's stop on the twin; it passed every seed and
+missed this. It was deleted and the check widened after the live re-fly
+showed the cost.
+
+**The same twin without the keep-out**: met 20 of 20 both ways round -- and in
+**all 40 flights the survivor flew into the stopped drone's column**, the
+geometry of the live collision.
+
+| Twin, seeds 1–20 | Met (Drone1 stopped / Drone2 stopped) | Into the stopped drone's column |
+|---|---|---|
+| without the keep-out | 20 / 20 | 40 of 40 flights |
+| with the keep-out | 7 / 20 | 0 of 40 |
+
+**The live re-fly: NOT MET on coverage -- and no collision**
+(`results/recovery-live-20261105-095748-live2`, flown by the user at
+`e756a24`, `agentic_uav` digest `7ffbe6f0466c7565`; "dirty" only for the
+check's untracked results). CarlaAir fresh, the read-only check clean, Drone2
+spawned at (4.0, 0.0); the poller kept 9.16 Hz, so 0.705 m allowed. Drone2 was
+stopped at 17.438 s and held at (−8.8, −19.1), 18.2 m up -- just west of S1,
+on its lanes' lead-in.
+
+| Check | Live | Mock twin |
+|---|---|---|
+| detected | yes -- 3.125, 10.0, 30.484 s | yes |
+| no_false_alarm | yes | yes |
+| reassigned | yes -- Drone1 searched S1 | yes |
+| continued | **no** -- coverage | **no** -- Drone1's stop (above) |
+| no_new_command | yes | yes |
+| roles_from_interactions | yes | yes |
+| known_exactly | yes | yes |
+| kept_out | yes -- **closest 19.72 m** | yes -- 15.36 m |
+| no_interventions | yes | yes |
+
+Drone1 searched S1 round the keep-out, found and reported both targets, flew
+home and landed with 94.7 % left; no contact but the floor; closest pair 4.05 m,
+on the pads. The mission failed on coverage alone: **S1 81.9 %**, 91.0 % overall
+against 95 % -- the square, 14 m across with its clearance, cut S1's lane starts.
+
+**What it shows.** The fix does what it was built for: live and on the mock,
+no drone flew into a silent teammate's column, and the guardian never had to
+refuse one. Its cost depends on sector size: on the canonical 80 m sectors,
+lanes either side of the square still cover it and nothing is lost (20 of
+20); on the live variant's 18 × 16 m sectors the square is most of a lane, so
+coverage falls or a target near the stopped drone goes unreported. The
+earlier claim that "a target beneath it is still seen" holds at the square's
+centre, not at its far side.
+
 ## Decisions
 
 | Date | Decision | Why |
@@ -576,7 +683,14 @@ exactly the case where that position is the most reliable thing known.
    routing, in the search, in the guardian -- for as long as it is believed
    failed? That would change mock results, so it is its own decision. And is
    CarlaAir's lift-and-jump beneath another drone reproducible, and
-   reportable upstream?
+   reportable upstream? *(2026-11-05: the keep-out was built -- see the record
+   above. It kept every drone clear, live and on the mock; the second live
+   flight did not collide.)*
+6. **Safety against coverage in small sectors.** The keep-out cost the live
+   variant coverage (81.9 % of S1) and, on its twin, a target only the stopped
+   drone had seen (13 of 20 seeds). Report the kept-out area as unsearched -- a
+   partial result, as reprioritization already does -- or search it from a
+   safe side, or a keep-out sized to the sector? Not shrunk on unproven safety.
 
 ---
 
