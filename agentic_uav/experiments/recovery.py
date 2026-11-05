@@ -54,7 +54,7 @@ from ..agents.drone_agent import DroneAgent  # noqa: E402
 from ..agents.recovery_policy import RecoveryPolicy  # noqa: E402
 from ..control.action_executor import ActionExecutor  # noqa: E402
 from ..control.scripted import ALTITUDE_STEP_M, BASE_ALTITUDE_M  # noqa: E402
-from ..control.skills import SkillRunner  # noqa: E402
+from ..control.skills import SkillRunner, command_json  # noqa: E402
 from ..coordination.bids import AllocationConfig  # noqa: E402
 from ..coordination.contract_net import ContractNet  # noqa: E402
 from ..coordination.tasks import tasks_from_brief  # noqa: E402
@@ -99,7 +99,7 @@ LINK_WINDOW_S = 10.0       # Phase 10: an agent on a network estimates each link
 def fly_recovery_on_mock(scenario: Scenario, config: AllocationConfig, health: HealthConfig,
                          label: str = "no stop", stop: dict[str, float] | None = None,
                          range_m: float | None | str = None, network: Any = None, guardian: Any = None,
-                         wrap_policy: Any = None, wrap_handle: Any = None) -> RecoveryRun:
+                         wrap_policy: Any = None, wrap_handle: Any = None, keep_out: Any = None) -> RecoveryRun:
     """The team told the team mission, with the recovery policy; each drone in `stop` stopped at its time.
 
     A stop is made FROM OUTSIDE, at a set time from the flight's start: the
@@ -117,6 +117,9 @@ def fly_recovery_on_mock(scenario: Scenario, config: AllocationConfig, health: H
     handle. `wrap_policy(drone, policy)` and `wrap_handle(drone, handle,
     guardian)` let a harness put something between the agent and its policy
     or its handle -- the exit's injections -- and are for nothing else.
+
+    `keep_out` (after Phase 9's live collision): a `KeepOutConfig`. Every policy
+    then plans round teammates silent in the air, and every guardian checks it.
     """
     stop = dict(stop or {})
     if network is not None and range_m is not None:
@@ -144,8 +147,8 @@ def fly_recovery_on_mock(scenario: Scenario, config: AllocationConfig, health: H
     else:
         bus = MessageBus(roster, world.clock, where, None, mission_id=scenario.scenario_id, network=model)
     brief = scenario.brief()
-    policies = {d: RecoveryPolicy(ContractNet(d, tasks_from_brief(brief), config), health, altitude_m=heights[d])
-                for d in roster}
+    policies = {d: RecoveryPolicy(ContractNet(d, tasks_from_brief(brief), config), health, altitude_m=heights[d],
+                                  keep_out=keep_out) for d in roster}
     agents: dict[str, DroneAgent] = {}
     stopped: dict[str, float] = {}
     errors: dict[str, BaseException] = {}
@@ -154,7 +157,7 @@ def fly_recovery_on_mock(scenario: Scenario, config: AllocationConfig, health: H
 
     guardians: dict[str, Guardian] = {}
     if guardian is not None:
-        guardians = {d: Guardian(brief, d, guardian, executors[d].handle(), heights[d]) for d in roster}
+        guardians = {d: Guardian(brief, d, guardian, executors[d].handle(), heights[d], keep_out) for d in roster}
 
     def body(drone: str) -> None:
         with world.clock.participate():
@@ -208,7 +211,7 @@ def fly_recovery_on_mock(scenario: Scenario, config: AllocationConfig, health: H
                         {d: agents[d].finished for d in roster if d in agents},
                         skills, start, trajectories, bus.deliveries())
     executed = {d: [{"serial": e.serial, "started_at": e.started_at, "skill": e.command.skill.value,
-                     "command": asdict(e.command)} for e in executors[d].history()] for d in roster}
+                     "command": command_json(e.command)} for e in executors[d].history()] for d in roster}
     return RecoveryRun(team, config, health, stopped, {d: policies[d].as_json() for d in roster}, searched, model,
                        {d: g.as_json() for d, g in guardians.items()}, executed)
 
@@ -235,20 +238,24 @@ class LiveRecoveryFlight:
     stopped: dict[str, float] = field(default_factory=dict)
     policies: dict[str, dict[str, Any]] = field(default_factory=dict)
     searched: dict[str, list[str]] = field(default_factory=dict)
+    guardians: dict[str, dict[str, Any]] = field(default_factory=dict)   # after Phase 9's live collision, if guarded
 
     def as_run(self, label: str = "live") -> RecoveryRun:
         """As a RecoveryRun -- the stopped drones told to the judge -- so the exit's checks apply as they stand."""
         return RecoveryRun(self.flight.as_run(label, failed=tuple(self.stopped)), self.config, self.health,
-                           dict(self.stopped), dict(self.policies), dict(self.searched))
+                           dict(self.stopped), dict(self.policies), dict(self.searched), guardians=dict(self.guardians))
 
     def as_json(self) -> dict[str, Any]:
-        return {**self.flight.as_json(), "allocation": self.config.as_json(), "health": self.health.as_json(),
-                "stopped": self.stopped, "policies": self.policies, "searched": self.searched}
+        out = {**self.flight.as_json(), "allocation": self.config.as_json(), "health": self.health.as_json(),
+               "stopped": self.stopped, "policies": self.policies, "searched": self.searched}
+        if self.guardians:
+            out["guardians"] = self.guardians
+        return out
 
 
 def fly_recovery_live(scenario: Scenario, config: AllocationConfig, health: HealthConfig, scene: Any, connect: Any,
                       clock: Clock, stop: dict[str, float], poll_hz: float = DEFAULT_POLL_HZ,
-                      settle_s: float = RESET_SETTLE_S) -> LiveRecoveryFlight:
+                      settle_s: float = RESET_SETTLE_S, guardian: Any = None, keep_out: Any = None) -> LiveRecoveryFlight:
     """Phase 8's live team, with the recovery policy, and the drones in `stop` stopped at their times, live.
 
     A stop is made from outside, as on the mock: the agent stops, its skill is
@@ -288,8 +295,11 @@ def fly_recovery_live(scenario: Scenario, config: AllocationConfig, health: Heal
     executors = {d: ActionExecutor(SkillRunner(connect(), d, clock), clock, abort_via=connect(), connect=connect)
                  for d in drones}
     sensors = {d: polled_sensors(observer, scenario, d, grounds) for d in drones}
-    policies = {d: RecoveryPolicy(ContractNet(d, tasks_from_brief(brief), config), health, altitude_m=heights[d])
-                for d in drones}
+    policies = {d: RecoveryPolicy(ContractNet(d, tasks_from_brief(brief), config), health, altitude_m=heights[d],
+                                  keep_out=keep_out) for d in drones}
+    # After Phase 9's live collision: optionally each drone's guardian, with the keep-out, as on the mock.
+    guardians = {} if guardian is None else \
+        {d: Guardian(brief, d, guardian, executors[d].handle(), heights[d], keep_out) for d in drones}
     agents: dict[str, DroneAgent] = {}
     stopped: dict[str, float] = {}
     errors: dict[str, BaseException] = {}
@@ -298,8 +308,14 @@ def fly_recovery_live(scenario: Scenario, config: AllocationConfig, health: Heal
 
     def body(drone: str) -> None:
         try:
-            agent = DroneAgent(brief, sensors[drone], executors[drone], policies[drone], comms=bus.comms(drone),
-                               coordinator=policies[drone])
+            if drone in guardians:
+                agent = DroneAgent(brief, sensors[drone], guardians[drone].handle(), policies[drone],
+                                   validator=guardians[drone].review, comms=bus.comms(drone),
+                                   coordinator=policies[drone])
+                guardians[drone].attach(agent.belief)
+            else:
+                agent = DroneAgent(brief, sensors[drone], executors[drone], policies[drone], comms=bus.comms(drone),
+                                   coordinator=policies[drone])
             agents[drone] = agent
             barrier.wait()
             agent.assign_team()
@@ -341,4 +357,5 @@ def fly_recovery_live(scenario: Scenario, config: AllocationConfig, health: Heal
                             {d: agents[d].finished for d in drones if d in agents}, skills, bus.deliveries(), None,
                             {"added": layout.get("added", []), "layout": layout.get("layout", {}),
                              "at_rest_s": layout.get("at_rest_s", {})}, summary)
-    return LiveRecoveryFlight(flight, config, health, stopped, {d: policies[d].as_json() for d in drones}, searched)
+    return LiveRecoveryFlight(flight, config, health, stopped, {d: policies[d].as_json() for d in drones}, searched,
+                              {d: g.as_json() for d, g in guardians.items()})

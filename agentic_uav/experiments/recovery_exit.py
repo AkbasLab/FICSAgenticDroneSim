@@ -59,14 +59,15 @@ TROUBLE_DEADLINE_S = 250.0       # too short for a returned far sector to be red
 
 
 def recovery_flights(scenario: Scenario, seed: int, config: AllocationConfig, health: HealthConfig,
-                     stop_at: float = STOP_AT_S) -> dict[str, RecoveryRun]:
-    """The seed flown with no stop, and with each drone stopped at `stop_at` -- each stopped flight twice."""
+                     stop_at: float = STOP_AT_S, **fly: Any) -> dict[str, RecoveryRun]:
+    """The seed flown with no stop, and with each drone stopped at `stop_at` -- each stopped flight twice.
+    `fly` passes on to every flight (after Phase 9's live collision: `guardian=`, `keep_out=`)."""
     sc = dataclasses.replace(scenario, random_seed=seed)
-    out = {"no stop": fly_recovery_on_mock(sc, config, health, "no stop")}
+    out = {"no stop": fly_recovery_on_mock(sc, config, health, "no stop", **fly)}
     for v in scenario.vehicles:
         label = f"{v.id} stopped"
-        out[label] = fly_recovery_on_mock(sc, config, health, label, {v.id: stop_at})
-        out[f"{label} again"] = fly_recovery_on_mock(sc, config, health, label, {v.id: stop_at})
+        out[label] = fly_recovery_on_mock(sc, config, health, label, {v.id: stop_at}, **fly)
+        out[f"{label} again"] = fly_recovery_on_mock(sc, config, health, label, {v.id: stop_at}, **fly)
     return out
 
 

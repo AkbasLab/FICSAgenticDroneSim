@@ -41,6 +41,7 @@ from typing import Any
 
 from ..control.routing import length
 from ..control.skills import DEFAULT_SPEED_MPS, HoldPositionCommand, TakeOffCommand
+from ..coordination.keepout import KeepOutConfig
 from ..coordination.bids import Bidder, bid_for
 from ..coordination.contract_net import ContractNet, Out
 from ..core.events import Event, Trigger
@@ -54,8 +55,9 @@ HOLD_S = 5.0                 # a wait for a task is held in slices this long
 
 class TeamPolicy(RulePolicy):
     def __init__(self, net: ContractNet, altitude_m: float = DEFAULT_ALTITUDE_M,
-                 speed_mps: float = DEFAULT_SPEED_MPS) -> None:
+                 speed_mps: float = DEFAULT_SPEED_MPS, keep_out: KeepOutConfig | None = None) -> None:
         self._team_setup(net, altitude_m, speed_mps)
+        self.keep_out = keep_out
 
     def _team_setup(self, net: ContractNet, altitude_m: float, speed_mps: float) -> None:
         # Its own method, so a policy built on this one (Phase 9's) sets up the same

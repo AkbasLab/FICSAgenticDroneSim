@@ -43,6 +43,10 @@ knows; a reason names its check, `[check] what`:
                      nobody deciding
     proposal         an answer that could not be read as a decision
                      (`agents.proposal`)
+    keep_out         (added after Phase 9's live collision; on when given a
+                     `KeepOutConfig`) the path enters the square round a
+                     teammate silent in the air, at any height
+                     (`coordination.keepout`)
 
 THE FOUR OUTCOMES (11.2):
 
@@ -95,10 +99,10 @@ from typing import Any
 
 from ..agents.belief_state import BeliefState
 from ..agents.decision import Decision, DecisionKind
-from ..agents.validation import HOME_RADIUS_M, ESTIMATE_SPEED_MPS, Verdict, battery_problems, zone_problems
+from ..agents.validation import HOME_RADIUS_M, ESTIMATE_SPEED_MPS, Verdict, battery_problems, searched, zone_problems
 from ..control import navigation as nav
 from ..control.action_executor import Execution, SkillHandle
-from ..control.routing import NoRouteError, route
+from ..control.routing import AVOID_CLEARANCE_M, NoRouteError, route, search_path
 from ..control.skills import (
     DEFAULT_SPEED_MPS,
     MAX_ALTITUDE_M,
@@ -116,7 +120,9 @@ from ..control.skills import (
     SkillCommand,
     SkillName,
     TakeOffCommand,
+    command_json,
 )
+from ..coordination.keepout import KeepOutConfig, keep_outs
 from ..core.geometry import Region
 from ..core.scenario import MissionBrief
 
@@ -127,7 +133,7 @@ FALLBACK = "execute_safe_fallback"
 OUTCOMES = (APPROVE, MODIFY, REJECT, FALLBACK)
 
 CHECKS = ("proposal", "waypoint", "altitude", "geofence", "restricted_zone", "speed", "battery", "timeout",
-          "separation", "landing_site", "conflict", "finish_airborne")
+          "separation", "landing_site", "conflict", "finish_airborne", "keep_out")
 
 HOLD_POSITION = "HOLD_POSITION"
 CLIMB_OR_DESCEND = "CLIMB_OR_DESCEND_TO_SAFE_LAYER"
@@ -306,8 +312,7 @@ def track3d(command: SkillCommand, here: tuple[float, float, float],
     elif isinstance(command, FollowWaypointsCommand):
         points = [(w.x, w.y, w.altitude_m) for w in command.waypoints]
     elif isinstance(command, SearchRegionCommand):
-        points = [(w.x, w.y, w.altitude_m) for w in nav.lawnmower(command.region, command.spacing_m,
-                                                                  command.altitude_m)]
+        points = [(w.x, w.y, w.altitude_m) for w in searched(command)]
     elif isinstance(command, InspectPointCommand):
         points = [(command.target.x, command.target.y, command.altitude_m)]
     elif isinstance(command, ReturnHomeCommand):
@@ -339,7 +344,14 @@ def _numbers(command: SkillCommand) -> list[tuple[str, Any]]:
 
 def waypoint_problems(command: SkillCommand) -> list[tuple[str, str]]:
     bad = [f"{name} is {v!r}" for name, v in _numbers(command) if not math.isfinite(v)]
-    return [("waypoint", f"not a number a drone can fly to: {', '.join(bad)}")] if bad else []
+    if bad:
+        return [("waypoint", f"not a number a drone can fly to: {', '.join(bad)}")]
+    if isinstance(command, SearchRegionCommand) and command.avoid:
+        try:
+            search_path(command.region, command.spacing_m, command.altitude_m, command.avoid)
+        except NoRouteError as exc:
+            return [("waypoint", f"the search cannot go round what it must avoid: {exc}")]
+    return []
 
 
 def modify(command: SkillCommand, limits: GuardianLimits,
@@ -454,13 +466,14 @@ class Guardian:
     """One drone's guardian: reviews its decisions, guards its executor handle, falls back, keeps a log."""
 
     def __init__(self, brief: MissionBrief, drone: str, limits: GuardianLimits, handle: SkillHandle,
-                 layer_m: float) -> None:
+                 layer_m: float, keep_out: KeepOutConfig | None = None) -> None:
         self.brief = brief
         self.drone = drone
         self.limits = limits
         self.box = operating_box(brief, limits.fence_margin_m)
         self.layer_m = min(limits.max_altitude_m, max(limits.min_altitude_m, layer_m))
         self.separation_m = brief.safety.min_separation_m
+        self.keep_out = keep_out          # after Phase 9's live collision; None: the check is off
         self._inner = handle
         self.clock = handle.clock
         self.log: list[dict[str, Any]] = []
@@ -540,6 +553,11 @@ class Guardian:
                 found.append(("separation", f"the path passes {near:.1f} m from {mate.drone}'s last known "
                                             f"position ({view.now - mate.at:.1f} s old), under the "
                                             f"{self.separation_m:g} m separation"))
+        for drone, zone in self._keep_outs(view):
+            if any(zone.crosses(a[:2], b[:2]) or zone.contains(*b[:2]) for a, b in zip(track, track[1:])):
+                found.append(("keep_out", f"the path enters the keep-out round {drone}'s last known position, "
+                                          f"{self.keep_out.half_width_m:g} m either side, at any height: "
+                                          f"silent there {view.now - self._heard_at(view, drone):.1f} s"))
         if isinstance(command, LandCommand):
             sites = {"home": view.home, "the base": (self.brief.base.x, self.brief.base.y)}
             if min(math.dist(here2, s) for s in sites.values()) > self.limits.landing_radius_m:
@@ -568,6 +586,17 @@ class Guardian:
                 out.append(("separation", f"{mate.drone} last known {d:.1f} m away, inside the "
                                           f"{self.separation_m:g} m separation"))
         return out
+
+    def _keep_outs(self, view: GuardianView) -> list:
+        """The squares round teammates silent in the air, as the policies plan them (`coordination.keepout`)."""
+        if self.keep_out is None:
+            return []
+        heard = [(m.drone, m.x, m.y, m.altitude_m, m.at) for m in view.teammates]
+        return keep_outs(heard, view.now, self.keep_out, (view.x, view.y), AVOID_CLEARANCE_M)
+
+    @staticmethod
+    def _heard_at(view: GuardianView, drone: str) -> float:
+        return next(m.at for m in view.teammates if m.drone == drone)
 
     def _running(self) -> SkillCommand | None:
         latest = self._inner.current()
@@ -612,8 +641,8 @@ class Guardian:
     def _way_home(self, view: GuardianView) -> SkillCommand:
         speed = min(DEFAULT_SPEED_MPS, self.limits.max_speed_mps)
         try:
-            leg = route((view.x, view.y), view.home, [z.polygon for z in self.brief.restricted_zones],
-                        FALLBACK_CLEARANCE_M)
+            leg = route((view.x, view.y), view.home, [z.polygon for z in self.brief.restricted_zones]
+                        + [zone for _, zone in self._keep_outs(view)], FALLBACK_CLEARANCE_M)
         except NoRouteError:
             return ReturnHomeCommand(altitude_m=self.layer_m, speed_mps=speed)
         return FollowWaypointsCommand(tuple(nav.Waypoint(x, y, self.layer_m) for x, y in leg[1:]) or
@@ -623,6 +652,9 @@ class Guardian:
         here2 = (view.x, view.y)
         bad = zone_problems(command, here2, view.home, self.brief.restricted_zones)
         bad += [p for p in (track3d(command, view.here, view.home)[1:]) if outside_by(self.box, p[0], p[1]) > 0]
+        track = track3d(command, view.here, view.home)
+        bad += [d for d, zone in self._keep_outs(view)
+                if any(zone.crosses(a[:2], b[:2]) or zone.contains(*b[:2]) for a, b in zip(track, track[1:]))]
         if bad:
             return self._hold(view, f"{why}; its {name} would not be safe")
         return name, Decision.start(command, name.lower(), f"guardian fallback: {why}")
@@ -683,7 +715,8 @@ class Guardian:
                     if not refusals:
                         found += self._hard(command, view)
         if found:
-            self._note({"skill": command.skill.value, "command": asdict(command)}, "direct", REJECT, found, None, None)
+            self._note({"skill": command.skill.value, "command": command_json(command)}, "direct", REJECT, found, None,
+                       None)
             raise CommandRefused("; ".join(_tagged(found)))
         execution = self._inner.start(command)
         self._last_start_at, self._last_started = now, command

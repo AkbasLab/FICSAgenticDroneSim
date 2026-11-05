@@ -101,5 +101,34 @@ def route(start: Point2, goal: Point2, zones: list[Polygon] | tuple[Polygon, ...
     return path[::-1]
 
 
+AVOID_CLEARANCE_M = 2.0       # a search goes round an area to avoid this far off it (the policies' zone clearance)
+
+
+def search_path(region, spacing_m: float, altitude_m: float, avoid: tuple[Polygon, ...] | list[Polygon] = (),
+                clearance_m: float = AVOID_CLEARANCE_M) -> list:
+    """The SEARCH_REGION skill's path: the lawnmower, gone round every area in `avoid`.
+
+    With nothing to avoid it IS `navigation.lawnmower`, point for point. Otherwise
+    a lawnmower point within `clearance_m` of an area is dropped, and each pair
+    of the points left is joined by the shortest route keeping `clearance_m` off
+    every area (`route`), at the search's height. The skill, Phase 5's zone rule
+    and the guardian all trace a search by this one function, so they cannot
+    disagree about where it flies. Raises NoRouteError if no way round exists.
+    """
+    from . import navigation as nav            # navigation is the layer below; imported here, as only this needs it
+    lanes = nav.lawnmower(region, spacing_m, altitude_m)
+    if not avoid:
+        return lanes
+    obstacles = [grown(z, clearance_m) for z in avoid]
+    kept = [w for w in lanes if not any(o.contains(w.x, w.y) for o in obstacles)]
+    if not kept:
+        raise NoRouteError("every point of the search lies within an area to avoid")
+    path = [kept[0]]
+    for a, b in zip(kept, kept[1:]):
+        leg = route((a.x, a.y), (b.x, b.y), list(avoid), clearance_m)
+        path += [nav.Waypoint(x, y, altitude_m) for x, y in leg[1:-1]] + [b]
+    return path
+
+
 def length(path: list[Point2]) -> float:
     return sum(math.dist(a, b) for a, b in zip(path, path[1:]))

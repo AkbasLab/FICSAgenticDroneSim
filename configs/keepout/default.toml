@@ -1,0 +1,10 @@
+# The keep-out round a teammate silent in the air (after Phase 9's live collision, 2026-11-04).
+#
+# Fixed on 2026-11-04, before any run. Read strictly by agentic_uav/coordination/keepout.py
+# (parse_keepout). Off unless a flight is given it: Phases 5-11's runs of record fly without it.
+
+[keep_out]
+half_width_m = 5.0       # a square this far either side of the last known position, at every height;
+                         # with the 2 m clearance a drone passes 5-7 m off: a target beneath still seen
+after_s = 10.0           # silent this long: the failure ladder's 'unreachable', when its task comes back
+min_altitude_m = 3.0     # last known this high or more: in the air, not landed on its pad

@@ -32,6 +32,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..control import navigation as nav
+from ..control.routing import NoRouteError, search_path
 from ..control.skills import (
     ActAsRelayCommand,
     FollowWaypointsCommand,
@@ -71,6 +72,15 @@ class Verdict:
         return out
 
 
+def searched(command: SearchRegionCommand) -> list[nav.Waypoint]:
+    """Where a search flies: round its areas to avoid; if there is no way round, the plain lawnmower (the
+    skill will fail before it flies, and the lawnmower is what it would have tried)."""
+    try:
+        return search_path(command.region, command.spacing_m, command.altitude_m, command.avoid)
+    except NoRouteError:
+        return nav.lawnmower(command.region, command.spacing_m, command.altitude_m)
+
+
 def ground_track(command: SkillCommand, here: tuple[float, float],
                  home: tuple[float, float] | None = None) -> list[tuple[float, float]]:
     """The points the skill flies through, from `here`, on the ground (x, y)."""
@@ -79,7 +89,7 @@ def ground_track(command: SkillCommand, here: tuple[float, float],
     elif isinstance(command, FollowWaypointsCommand):
         points = [(w.x, w.y) for w in command.waypoints]
     elif isinstance(command, SearchRegionCommand):
-        points = [(w.x, w.y) for w in nav.lawnmower(command.region, command.spacing_m, command.altitude_m)]
+        points = [(w.x, w.y) for w in searched(command)]
     elif isinstance(command, InspectPointCommand):
         points = [(command.target.x, command.target.y)]
     elif isinstance(command, ReturnHomeCommand) and home is not None:

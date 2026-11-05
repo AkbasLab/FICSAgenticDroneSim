@@ -44,6 +44,7 @@ from ..control.skills import DEFAULT_SPEED_MPS, FollowWaypointsCommand, HoldPosi
 from ..coordination.bids import Bidder, bid_for
 from ..coordination.contract_net import ContractNet, Out
 from ..coordination.health import FailureDetector, Health, HealthConfig
+from ..coordination.keepout import KeepOutConfig
 from ..coordination.roles import Role, RoleKeeper, relay_point
 from ..coordination.tasks import MissionTask, TaskStatus
 from ..core.events import Event, Trigger
@@ -58,8 +59,9 @@ RELAY_ARRIVED_M = 2.0
 
 class RecoveryPolicy(TeamPolicy):
     def __init__(self, net: ContractNet, health: HealthConfig, altitude_m: float = DEFAULT_ALTITUDE_M,
-                 speed_mps: float = DEFAULT_SPEED_MPS) -> None:
+                 speed_mps: float = DEFAULT_SPEED_MPS, keep_out: KeepOutConfig | None = None) -> None:
         self._team_setup(net, altitude_m, speed_mps)
+        self.keep_out = keep_out
         self.health_config = health
         self.detector: FailureDetector | None = None
         self.roles: RoleKeeper | None = None
@@ -153,7 +155,7 @@ class RecoveryPolicy(TeamPolicy):
             return Decision.start(HoldPositionCommand(duration_s=HOLD_S), f"relay toward {mates[0]}",
                                   f"{reason}; holding at the relay point")
         try:
-            leg = route(here, point, [z.polygon for z in brief.restricted_zones], ZONE_CLEARANCE_M)
+            leg = route(here, point, self._obstacles(belief, self._keep_outs(belief)), ZONE_CLEARANCE_M)
         except NoRouteError:
             return Decision.start(HoldPositionCommand(duration_s=HOLD_S), f"relay toward {mates[0]}",
                                   f"{reason}; no route to the relay point")

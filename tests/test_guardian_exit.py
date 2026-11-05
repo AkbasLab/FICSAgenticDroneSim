@@ -54,10 +54,12 @@ class ScheduleTests(unittest.TestCase):
 
     def test_every_check_is_injected_and_both_channels_meet_every_check_they_can(self):
         by = {c: {i.check for i in X.INJECTIONS if i.channel == c} for c in X.CHANNELS}
-        self.assertEqual(by["rule"] | by["llm"], set(g.CHECKS))
+        # keep_out came after Phase 11, with Phase 9's live fix; it is shown by that fix's own verification.
+        later = {"keep_out"}
+        self.assertEqual(by["rule"] | by["llm"], set(g.CHECKS) - later)
         # A rule policy hands back objects, never text; an LLM's NaN is caught reading it, as text.
-        self.assertEqual(set(g.CHECKS) - by["rule"], {"proposal"})
-        self.assertEqual(set(g.CHECKS) - by["llm"], {"waypoint"})
+        self.assertEqual(set(g.CHECKS) - by["rule"] - later, {"proposal"})
+        self.assertEqual(set(g.CHECKS) - by["llm"] - later, {"waypoint"})
 
     def test_every_outcome_but_approve_is_expected_on_both_channels(self):
         for c in X.CHANNELS:

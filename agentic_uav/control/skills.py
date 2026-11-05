@@ -51,8 +51,10 @@ from ..core.clock import Clock, RealClock
 from ..core.models import Position, PrimitiveCommand
 from ..core.protocol import CRUISE_ALTITUDE, MOVE_SPEED
 from ..simulator.adapter import VehicleAdapter
+from ..core.geometry import Polygon
 from . import navigation as nav
 from .navigation import Region, Waypoint
+from .routing import search_path
 
 # --------------------------------------------------------------- constants
 #
@@ -193,6 +195,15 @@ class SkillCommand:
     skill: ClassVar[SkillName]
 
 
+def command_json(command: SkillCommand) -> dict[str, Any]:
+    """A command's fields as written in every record. A search's `avoid`, added after Phase 11, is left out
+    when empty, so a command that avoids nothing is written exactly as every earlier record wrote it."""
+    out = asdict(command)
+    if out.get("avoid") == ():
+        del out["avoid"]
+    return out
+
+
 @dataclass(frozen=True)
 class TakeOffCommand(SkillCommand):
     skill: ClassVar[SkillName] = SkillName.TAKE_OFF
@@ -254,10 +265,14 @@ class SearchRegionCommand(SkillCommand):
     speed_mps: float = DEFAULT_SPEED_MPS
     tolerance_m: float = DEFAULT_TOLERANCE_M
     timeout_s: float | None = None
+    avoid: tuple[Polygon, ...] = ()        # areas the lanes go round (`routing.search_path`); none: the plain lawnmower
 
     def __post_init__(self) -> None:
         if not isinstance(self.region, Region):
             raise ValueError("SEARCH_REGION needs a Region")
+        object.__setattr__(self, "avoid", tuple(self.avoid))
+        if not all(isinstance(p, Polygon) for p in self.avoid):
+            raise ValueError("SEARCH_REGION avoid must be Polygons")
         _flight_altitude(self.altitude_m)
         _positive("spacing_m", self.spacing_m, allow_none=False)
         _speed(self.speed_mps)
@@ -783,14 +798,19 @@ class SkillRunner:
 
     def _search_region(self, cmd: SearchRegionCommand, details: dict[str, Any]) -> None:
         self._require_airborne()
-        path = nav.lawnmower(cmd.region, cmd.spacing_m, cmd.altitude_m)
-        details["lanes"] = len(path) // 2
+        path = search_path(cmd.region, cmd.spacing_m, cmd.altitude_m, cmd.avoid)
+        lanes = len(nav.lawnmower(cmd.region, cmd.spacing_m, cmd.altitude_m)) // 2
+        details["lanes"] = lanes
         try:
             self._fly_waypoints(path, cmd.speed_mps, cmd.tolerance_m, cmd.timeout_s, details)
         finally:
             done = sum(1 for leg in details.get("legs", []) if leg["status"] == "success")
-            # A lane is complete when its far end is reached: the odd legs.
-            details["lanes_completed"] = done // 2
+            if not cmd.avoid:
+                # A lane is complete when its far end is reached: the odd legs.
+                details["lanes_completed"] = done // 2
+            else:
+                # Gone round something, legs are no longer two to a lane: the share of the path flown.
+                details["lanes_completed"] = min(lanes, round(lanes * done / len(path)))
             details["coverage"] = round(details["lanes_completed"] / details["lanes"], 3)
 
     def _inspect_point(self, cmd: InspectPointCommand, details: dict[str, Any]) -> None:

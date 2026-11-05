@@ -72,6 +72,7 @@ from ..agents.proposal import parse_proposal, render_proposal
 from ..control import navigation as nav
 from ..control.action_executor import SkillHandle
 from ..control.skills import (
+    command_json,
     FollowWaypointsCommand,
     GoToWaypointCommand,
     HoldPositionCommand,
@@ -409,7 +410,7 @@ class Injector:
 
 
 def _cmd(command: Any) -> dict[str, Any]:
-    return {"skill": command.skill.value, "command": asdict(command)}
+    return {"skill": command.skill.value, "command": command_json(command)}
 
 
 # ----------------------------------------------------------------- flights

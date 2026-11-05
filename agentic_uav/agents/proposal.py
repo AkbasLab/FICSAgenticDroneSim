@@ -35,12 +35,12 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import asdict, fields
+from dataclasses import fields
 from typing import Any
 
 from ..control import navigation as nav
-from ..control.skills import CONTRACTS, SkillName
-from ..core.geometry import Region
+from ..control.skills import CONTRACTS, SkillName, command_json
+from ..core.geometry import Polygon, Region
 from .decision import Decision, DecisionKind
 
 TOP_KEYS = ("decision", "skill", "parameters", "objective", "reason")
@@ -57,7 +57,7 @@ def render_proposal(decision: Decision) -> str:
     if decision.command is not None:
         cmd = decision.command
         out["skill"] = cmd.skill.value
-        out["parameters"] = asdict(cmd)          # points and regions become their own fields, by name
+        out["parameters"] = command_json(cmd)    # points and regions become their own fields, by name
     return json.dumps(out, sort_keys=True)
 
 
@@ -153,10 +153,36 @@ def _value(where: str, name: str, v: Any, problems: list[str]) -> Any:
         if name == "region":
             r = _keys(where, v, REGION_KEYS, problems)
             return None if r is None else Region(**r)
+        if name == "avoid":
+            return _areas(where, v, problems)
     except ValueError as exc:
         problems.append(f"[proposal] {where}: {_clean(exc)}")
         return None
     return _number(where, v, problems, allow_none=True)
+
+
+def _areas(where: str, v: Any, problems: list[str]) -> tuple[Polygon, ...] | None:
+    """A list of {"vertices": [[x, y], ...]}: the areas a search goes round."""
+    if not isinstance(v, list):
+        problems.append(f"[proposal] {where} is {v!r}, not a list of areas")
+        return None
+    out = []
+    for i, area in enumerate(v):
+        here = f"{where}[{i}]"
+        if not isinstance(area, dict) or set(area) != {"vertices"} or not isinstance(area["vertices"], list):
+            problems.append(f"[proposal] {here} is {area!r}, not an object with exactly vertices, a list")
+            return None
+        points = []
+        for j, p in enumerate(area["vertices"]):
+            if not isinstance(p, list) or len(p) != 2:
+                problems.append(f"[proposal] {here}.vertices[{j}] is {p!r}, not a point [x, y]")
+                return None
+            x, y = _number(f"{here}.vertices[{j}][0]", p[0], problems), _number(f"{here}.vertices[{j}][1]", p[1], problems)
+            if x is None or y is None:
+                return None
+            points.append((x, y))
+        out.append(Polygon(tuple(points)))
+    return tuple(out)
 
 
 def _clean(exc: BaseException) -> str:

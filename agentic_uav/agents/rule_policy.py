@@ -75,7 +75,7 @@ import math
 from enum import Enum
 
 from ..control import navigation as nav
-from ..control.routing import NoRouteError, grown, length, route
+from ..control.routing import NoRouteError, grown, length, route, search_path
 from ..control.scripted import ZONE_CLEARANCE_M, lane_end_overrun, lane_spacing, searched_region
 from ..control.skills import (
     DEFAULT_SPEED_MPS,
@@ -85,6 +85,7 @@ from ..control.skills import (
     SearchRegionCommand,
     TakeOffCommand,
 )
+from ..coordination.keepout import KeepOutConfig, keep_outs
 from ..core.events import Event, Trigger
 from ..core.scenario import Sector
 from .belief_state import BeliefState
@@ -157,6 +158,8 @@ class RulePolicy:
         self.search_started_at: float | None = None
         self.retries = 0
         self.gave_up: str | None = None
+        # After Phase 9's live collision: keep clear of teammates silent in the air. None: off, exactly as before.
+        self.keep_out: KeepOutConfig | None = None
 
     # ------------------------------------------------------------ decide
 
@@ -288,10 +291,32 @@ class RulePolicy:
 
     # ----------------------------------------------------------- actions
 
+    def _keep_outs(self, belief: BeliefState) -> list:
+        """The squares round teammates silent in the air, to plan round (`coordination.keepout`); none when off."""
+        if self.keep_out is None:
+            return []
+        heard = []
+        for drone in sorted(belief.team.members):
+            record = belief.teammate(drone)               # read through the belief, so the knowledge log sees it
+            if record is not None and record.report.position is not None and len(record.report.position) > 2:
+                p = record.report.position
+                heard.append((drone, p[0], p[1], p[2], record.report.at))
+        me = belief.self_
+        return [square for _, square in keep_outs(heard, me.updated_at, self.keep_out, (me.x, me.y),
+                                                  ZONE_CLEARANCE_M)]
+
+    def _obstacles(self, belief: BeliefState, avoid: list) -> list:
+        return [z.polygon for z in belief.brief.restricted_zones] + avoid
+
     def _to_sector(self, belief: BeliefState, reason: str) -> Decision:
         here = (belief.self_.x, belief.self_.y)
+        avoid = self._keep_outs(belief)
         try:
-            leg = route(here, self.lanes[0], [z.polygon for z in belief.brief.restricted_zones], ZONE_CLEARANCE_M)
+            first = self.lanes[0]
+            if avoid:                                     # the search's first point, once it goes round them
+                w = search_path(self.region, self.spacing, self.altitude_m, avoid)[0]
+                first = (w.x, w.y)
+            leg = route(here, first, self._obstacles(belief, avoid), ZONE_CLEARANCE_M)
         except NoRouteError as exc:
             self.gave_up = f"no route to {self.sector.id}: {exc}"
             return self._home(belief, self.gave_up)
@@ -305,9 +330,19 @@ class RulePolicy:
     def _search(self, belief: BeliefState, reason: str) -> Decision:
         self.stage = Stage.SEARCHING
         self.search_started_at = belief.self_.updated_at
-        self.search_path = [(belief.self_.x, belief.self_.y)] + self.lanes
+        avoid = self._keep_outs(belief)
+        if avoid:
+            try:
+                lanes = [(w.x, w.y) for w in search_path(self.region, self.spacing, self.altitude_m, avoid)]
+            except NoRouteError as exc:
+                self.gave_up = f"no way to search {self.sector.id} round a silent teammate: {exc}"
+                return self._home(belief, self.gave_up)
+            self.search_path = [(belief.self_.x, belief.self_.y)] + lanes
+        else:
+            self.search_path = [(belief.self_.x, belief.self_.y)] + self.lanes
         return Decision.start(SearchRegionCommand(region=self.region, altitude_m=self.altitude_m,
-                                                  spacing_m=self.spacing, speed_mps=self.speed_mps),
+                                                  spacing_m=self.spacing, speed_mps=self.speed_mps,
+                                                  avoid=tuple(avoid)),
                               f"search {self.sector.id}", reason)
 
     def _home(self, belief: BeliefState, reason: str) -> Decision:
@@ -316,7 +351,7 @@ class RulePolicy:
             return self._land(reason)
         self.stage = Stage.GOING_HOME
         try:
-            leg = route(here, home, [z.polygon for z in belief.brief.restricted_zones], ZONE_CLEARANCE_M)
+            leg = route(here, home, self._obstacles(belief, self._keep_outs(belief)), ZONE_CLEARANCE_M)
         except NoRouteError:
             # Too close to a zone to keep the clearance: straight home, which
             # the validation step still checks against the zone itself.

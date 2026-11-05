@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Protocol
 
-from ..control.skills import SkillCommand
+from ..control.skills import SkillCommand, command_json
 from ..core.events import Event
 from .belief_state import BeliefState
 
@@ -76,9 +76,8 @@ class Decision:
     def as_json(self) -> dict[str, Any]:
         out: dict[str, Any] = {"kind": self.kind.value, "objective": self.objective, "reason": self.reason}
         if self.command is not None:
-            from dataclasses import asdict
             out["skill"] = self.command.skill.value
-            out["command"] = asdict(self.command)
+            out["command"] = command_json(self.command)
         if self.issued_at is not None:
             out["issued_at"] = round(self.issued_at, 3)
         if self.raw is not None:

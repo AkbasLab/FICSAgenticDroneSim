@@ -44,6 +44,7 @@ from ..control.skills import (
     SkillResult,
     SkillRunner,
     TakeOffCommand,
+    command_json,
 )
 from ..core.clock import Clock, SimClock
 from ..simulator.adapter import VehicleAdapter
@@ -73,8 +74,7 @@ class SkillRecord:
     safety: bool = False                # True for the hold-and-land after a failure
 
     def as_json(self) -> dict[str, Any]:
-        from dataclasses import asdict
-        command = {k: v for k, v in asdict(self.command).items()}
+        command = command_json(self.command)
         return {"drone": self.drone, "index": self.index, "skill": self.command.skill.value,
                 "command": command, "safety": self.safety, "skipped": self.result is None,
                 "result": None if self.result is None else self.result.as_json()}
