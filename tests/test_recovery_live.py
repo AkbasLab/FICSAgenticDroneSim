@@ -290,5 +290,33 @@ class RealTimeTests(unittest.TestCase):
             shutil.rmtree(out, ignore_errors=True)
 
 
+    def test_the_script_live_with_the_keep_out_on_the_mock_in_real_time(self):
+        # The fix after the first live flight's collision: the same flight, with the guardian and the keep-out,
+        # held to its two more checks; Drone1 must keep clear of the hovering Drone2.
+        import recovery_exit
+        clock = RealClock()
+        world = MockWorld(declared=("Drone1",), clock=clock)
+        out = tempfile.mkdtemp()
+        try:
+            args = SimpleNamespace(poll_hz=None, out=out, block="rt", keep_out=True)
+            with redirect_stdout(io.StringIO()) as buffer:
+                code = recovery_exit.report_live(args, "rt", lambda: MockVehicleAdapter(world), clock)
+            text = buffer.getvalue()
+            self.assertEqual(code, 0, text[-2000:])
+            self.assertIn("**Live flight: MET** — the 9 checks", text)
+            self.assertIn("| kept_out | yes | yes |", text)
+            self.assertIn("| no_interventions | yes | yes |", text)
+        finally:
+            shutil.rmtree(out, ignore_errors=True)
+
+
+class KeepOutFlagTests(unittest.TestCase):
+    def test_keep_out_is_for_the_live_flight(self):
+        import recovery_exit
+        with redirect_stdout(io.StringIO()), self.assertRaises(SystemExit):
+            with mock.patch("sys.stderr", io.StringIO()):
+                recovery_exit.main(["--keep-out", "--out", tempfile.gettempdir()])
+
+
 if __name__ == "__main__":
     unittest.main()

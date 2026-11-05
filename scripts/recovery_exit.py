@@ -97,11 +97,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=None)
     parser.add_argument("--poll-hz", type=float, default=None)
+    parser.add_argument("--keep-out", action="store_true",
+                        help="live only: fly with the guardian and the keep-out round a silent teammate "
+                             "(the fix after the first live flight's collision), and hold the flight to it too")
     args = parser.parse_args(argv)
     if args.sim == "mock":
         for name, flag in (("port", "--port"), ("poll_hz", "--poll-hz")):
             if getattr(args, name) is not None:
                 parser.error(f"{flag} is for --sim airsim")
+        if args.keep_out:
+            parser.error("--keep-out is for --sim airsim; on the mock, scripts/keepout_check.py")
     try:
         sys.stdout.reconfigure(encoding="utf-8")
     except (AttributeError, OSError):
@@ -208,24 +213,46 @@ def report_live(args, started: str, connect, clock) -> int:
     config, health = load_allocation(), load_recovery()
     hz = DEFAULT_POLL_HZ if args.poll_hz is None else args.poll_hz
     stop = {LIVE_VICTIM: LIVE_STOP_AT_S}
+    fly, ko = {}, None
+    if getattr(args, "keep_out", False):
+        from agentic_uav.coordination.keepout import parse_keepout
+        from agentic_uav.experiments.guardian_exit import load_guardian
+        from agentic_uav.experiments.runner import load_toml
+        path = os.path.join(REPO, "configs", "keepout", "default.toml")
+        ko = parse_keepout(load_toml(path), path)
+        fly = {"guardian": load_guardian(), "keep_out": ko}
     wall = time.perf_counter()
-    live_flight = fly_recovery_live(scenario, config, health, connect(), connect, clock, stop, poll_hz=hz)
+    live_flight = fly_recovery_live(scenario, config, health, connect(), connect, clock, stop, poll_hz=hz, **fly)
     wall = time.perf_counter() - wall
     polled = observed_poll_hz(live_flight.flight.samples, live_flight.flight.poll_hz)
     tol = poll_tolerance(scenario, polled["hz"], RulePolicy().speed_mps)
     run = live_flight.as_run("live")
     checks = live_checks(run, scenario, tol)
-    ok = checks["all"]
-    twin_flights = recovery_flights(scenario, scenario.random_seed, config, health, stop_at=LIVE_STOP_AT_S)
+    twin_flights = recovery_flights(scenario, scenario.random_seed, config, health, stop_at=LIVE_STOP_AT_S, **fly)
     twin = exit_checks(twin_flights, scenario)
     twin_run = twin_flights[f"{LIVE_VICTIM} stopped"]
+    held = list(LIVE_CHECKS)
+    if ko is not None:
+        # The fix's own two, live and on the twin: no survivor into the keep-out; the guardian never needed.
+        from agentic_uav.experiments.keepout_check import passes
+        for name, r, into in (("live", run, checks), ("twin", twin_run, twin)):
+            ps = passes(r, LIVE_VICTIM, ko)
+            entered = [f"{p['survivor']} entered the keep-out round {LIVE_VICTIM}" for p in ps if p["entered"]]
+            quiet = [f"{e['drone']} {e['outcome']} at {e['at']}: {e['checks']}"
+                     for g in r.guardians.values() for e in g["log"]]
+            into["kept_out"] = {"ok": not entered, "problems": entered, "passes": ps}
+            into["no_interventions"] = {"ok": not quiet, "problems": quiet}
+        held += ["kept_out", "no_interventions"]
+    ok = all(checks[k]["ok"] for k in held)
 
     header = {"kind": "header", "t": started, "sim": "airsim", "scenario": scenario.scenario_id,
               "scenario_file": rel(scenario_path(LIVE_SCENARIO)), "allocation_manifest": rel(allocation_path()),
               "recovery_manifest": rel(recovery_path()), "allocation": config.as_json(), "health": health.as_json(),
               "network": "every message delivered (range unlimited)", "stop": stop,
               "stopped_at": live_flight.stopped, "observer": live_flight.flight.observer, "poll": polled,
-              "tolerance": tol, "checks": {k: checks[k]["ok"] for k in LIVE_CHECKS}, "live_flight_met": ok,
+              "tolerance": tol, "checks": {k: checks[k]["ok"] for k in held}, "live_flight_met": ok,
+              "keep_out": None if ko is None else ko.as_json(),
+              "guardian_limits": None if ko is None else fly["guardian"].as_json(),
               "mock_twin_all": twin["all"], "wall_s": round(wall, 2), "code": provenance()}
     out_rows = [header,
                 {**live_flight.as_json(), "set": "live", "checks": checks,
@@ -258,10 +285,17 @@ def report_live(args, started: str, connect, clock) -> int:
              f"Run {started}, `scripts/recovery_exit.py --sim airsim`, {wall:.1f} s of flight. Two rule agents told "
              f"only the team mission, every message delivered; {LIVE_VICTIM} stopped from outside at "
              f"{LIVE_STOP_AT_S:g} s (at {', '.join(f'{v:g}' for v in live_flight.stopped.values()) or '-'} s, "
-             f"as it happened); observer {live_flight.flight.observer}.", "",
+             f"as it happened); observer {live_flight.flight.observer}."
+             + ("" if ko is None else f" **With the guardian and the keep-out** ({ko.half_width_m:g} m either side of a "
+                                      f"teammate silent {ko.after_s:g} s in the air)."), "",
              f"Correct here means within **{tol['position_m']:g} m** and **{tol['battery']:g} %** of battery: {tol['why']}.",
              "", "| Check | Live | Mock twin |", "|---|---|---|"]
-    lines += [f"| {k} | {cell(checks.get(k))} | {cell(twin.get(k))} |" for k in CHECKS]
+    lines += [f"| {k} | {cell(checks.get(k))} | {cell(twin.get(k))} |" for k in CHECKS + tuple(held[len(LIVE_CHECKS):])]
+    if ko is not None:
+        lines += [f"| Closest pass to {LIVE_VICTIM} | "
+                  + "; ".join(f"{p['survivor']} {p['closest_to_true_m']} m" for p in checks["kept_out"]["passes"])
+                  + " | " + "; ".join(f"{p['survivor']} {p['closest_to_true_m']} m" for p in twin["kept_out"]["passes"])
+                  + " |"]
     lines += [f"| Division | {division(live_flight.searched)} | {division(twin_run.searched)} |",
               f"| Survivor's ladder | {ladder(live_flight.policies)} | {ladder(twin_run.policies)} |",
               f"| Survivor's roles | {roles(live_flight.policies)} | {roles(twin_run.policies)} |",
@@ -270,11 +304,11 @@ def report_live(args, started: str, connect, clock) -> int:
               f"| Contacts | {', '.join(f'{c.drone}-{c.object}' for c in live_flight.flight.contacts) or 'none'} | - |",
               "", "Determinism needs a second flight: that row is the mock twin's alone. The twin is the seed flown "
                   "with no stop and with each drone stopped, each stopped flight twice.", "",
-              f"**Live flight: {'MET' if ok else 'NOT MET'}** — the seven checks one flight can be held to"
-              + ("" if ok else "; failed: " + ", ".join(k for k in LIVE_CHECKS if not checks[k]["ok"]))
+              f"**Live flight: {'MET' if ok else 'NOT MET'}** — the {len(held)} checks one flight can be held to"
+              + ("" if ok else "; failed: " + ", ".join(k for k in held if not checks[k]["ok"]))
               + ". A live flight of the variant, not the exit. The stopped drone is left hovering: reset the "
                 "simulator before the next flight.", ""]
-    problems = [f"{k}: {p}" for k in LIVE_CHECKS for p in checks[k]["problems"]]
+    problems = [f"{k}: {p}" for k in held for p in checks[k]["problems"]]
     if problems:
         lines += ["Problems:", ""] + [f"* {p}" for p in problems[:50]] + [""]
     os.makedirs(args.out, exist_ok=True)
