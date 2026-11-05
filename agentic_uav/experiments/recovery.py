@@ -48,7 +48,7 @@ def load_recovery(name: str = "default") -> HealthConfig:
 # ------------------------------------------------------------ the team, on the mock, with a stop
 
 import threading  # noqa: E402
-from dataclasses import dataclass, field  # noqa: E402
+from dataclasses import asdict, dataclass, field  # noqa: E402
 
 from ..agents.drone_agent import DroneAgent  # noqa: E402
 from ..agents.recovery_policy import RecoveryPolicy  # noqa: E402
@@ -63,6 +63,7 @@ from ..core.scenario import Scenario  # noqa: E402
 from ..simulator.message_bus import MessageBus  # noqa: E402
 from ..simulator.mock_adapter import MockVehicleAdapter, MockWorld  # noqa: E402
 from ..simulator.observer import mock_trajectories  # noqa: E402
+from ..safety.guardian import Guardian  # noqa: E402
 from ..simulator.sensing import mock_sensors  # noqa: E402
 from .evaluation import evaluate  # noqa: E402
 from .single_agent import MAX_FLIGHT_S, MESSAGE_DELAY_S, TeamAgentRun  # noqa: E402
@@ -79,6 +80,8 @@ class RecoveryRun:
     policies: dict[str, dict[str, Any]] = field(default_factory=dict)    # each drone's policy record
     searched: dict[str, list[str]] = field(default_factory=dict)
     network: Any = None              # Phase 10: the seeded network model it flew, if any -- the judge's, never an agent's
+    guardians: dict[str, dict[str, Any]] = field(default_factory=dict)   # Phase 11: each drone's guardian record
+    executed: dict[str, list[dict[str, Any]]] = field(default_factory=dict)  # Phase 11: every skill each drone started
 
     @property
     def survivors(self) -> list[str]:
@@ -95,7 +98,8 @@ LINK_WINDOW_S = 10.0       # Phase 10: an agent on a network estimates each link
 
 def fly_recovery_on_mock(scenario: Scenario, config: AllocationConfig, health: HealthConfig,
                          label: str = "no stop", stop: dict[str, float] | None = None,
-                         range_m: float | None | str = None, network: Any = None) -> RecoveryRun:
+                         range_m: float | None | str = None, network: Any = None, guardian: Any = None,
+                         wrap_policy: Any = None, wrap_handle: Any = None) -> RecoveryRun:
     """The team told the team mission, with the recovery policy; each drone in `stop` stopped at its time.
 
     A stop is made FROM OUTSIDE, at a set time from the flight's start: the
@@ -107,6 +111,12 @@ def fly_recovery_on_mock(scenario: Scenario, config: AllocationConfig, health: H
     `network` (Phase 10): a network condition, seeded here with the flight's own
     seed, carried by the bus and cutting the base link in a partition; the
     sensing, the judge and the knowledge log's truth see it, no agent does.
+
+    `guardian` (Phase 11): the guardian's limits. Each drone then gets its own
+    `safety.Guardian`, at its own layer, as its validator and its executor
+    handle. `wrap_policy(drone, policy)` and `wrap_handle(drone, handle,
+    guardian)` let a harness put something between the agent and its policy
+    or its handle -- the exit's injections -- and are for nothing else.
     """
     stop = dict(stop or {})
     if network is not None and range_m is not None:
@@ -142,13 +152,27 @@ def fly_recovery_on_mock(scenario: Scenario, config: AllocationConfig, health: H
     barrier = threading.Barrier(len(roster))
     start = world.clock.now()
 
+    guardians: dict[str, Guardian] = {}
+    if guardian is not None:
+        guardians = {d: Guardian(brief, d, guardian, executors[d].handle(), heights[d]) for d in roster}
+
     def body(drone: str) -> None:
         with world.clock.participate():
             try:
                 barrier.wait()
-                agent = DroneAgent(brief, sensors[drone], executors[drone], policies[drone],
+                extra: dict[str, Any] = {}
+                handle: Any = executors[drone]
+                if drone in guardians:
+                    handle = guardians[drone].handle()
+                    extra["validator"] = guardians[drone].review
+                if wrap_handle is not None:
+                    handle = wrap_handle(drone, handle, guardians.get(drone))
+                policy = policies[drone] if wrap_policy is None else wrap_policy(drone, policies[drone])
+                agent = DroneAgent(brief, sensors[drone], handle, policy,
                                    comms=bus.comms(drone), coordinator=policies[drone],
-                                   link_window_s=None if model is None else LINK_WINDOW_S)
+                                   link_window_s=None if model is None else LINK_WINDOW_S, **extra)
+                if drone in guardians:
+                    guardians[drone].attach(agent.belief)
                 agents[drone] = agent
                 agent.assign_team()
                 if drone in stop:
@@ -183,7 +207,10 @@ def fly_recovery_on_mock(scenario: Scenario, config: AllocationConfig, health: H
                         {d: tuple(agents[d].trace) for d in roster if d in agents},
                         {d: agents[d].finished for d in roster if d in agents},
                         skills, start, trajectories, bus.deliveries())
-    return RecoveryRun(team, config, health, stopped, {d: policies[d].as_json() for d in roster}, searched, model)
+    executed = {d: [{"serial": e.serial, "started_at": e.started_at, "skill": e.command.skill.value,
+                     "command": asdict(e.command)} for e in executors[d].history()] for d in roster}
+    return RecoveryRun(team, config, health, stopped, {d: policies[d].as_json() for d in roster}, searched, model,
+                       {d: g.as_json() for d, g in guardians.items()}, executed)
 
 
 # ------------------------------------------------------------------- live
