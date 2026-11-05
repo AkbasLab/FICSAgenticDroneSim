@@ -54,6 +54,7 @@ from ..control.skills import (
 from ..coordination.health import Health
 from .belief_state import BeliefState
 from .decision import Decision, DecisionKind
+from .rule_policy import Stage
 
 ACTIONS = ("continue_task", "accept_task", "start_search", "go_to_waypoint", "act_as_relay", "return_home", "hold",
            "claim_task", "decline_task", "release_task", "change_role")
@@ -148,6 +149,19 @@ def check(tool: str, params: dict[str, Any], policy: Any, belief: BeliefState) -
     problems: list[str] = []
     if not me.airborne and tool != "continue_task":
         return ["the drone is on the ground: only continue_task"]
+    # What is flying now, so nothing restarts what is already under way (bench1, 2026-11-05: offered while
+    # searching, start_search was read as "keep searching" -- executed, it restarts the search from lane one).
+    running = me.current_skill
+    pursuing = held is not None and held == policy.task_id and not policy.waiting
+    if tool == "continue_task" and me.airborne and running is None:
+        problems.append("continue_task: nothing is flying now -- choose what to do next")
+    if tool == "start_search" and pursuing and policy.stage is Stage.SEARCHING and running == "SEARCH_REGION":
+        problems.append("start_search: it is already searching this task -- continue_task keeps it going; "
+                        "start_search would restart it from the first lane")
+    going = tool == "accept_task" or (tool == "go_to_waypoint" and params.get("target") == "task") or         (tool == "change_role" and params.get("new_role") == "scout")
+    if going and pursuing and policy.stage in (Stage.TO_SECTOR, Stage.SEARCHING) and running is not None:
+        problems.append(f"{tool}: it is already {'searching' if policy.stage is Stage.SEARCHING else 'on its way to'} "
+                        "this task -- continue_task keeps it going")
     if tool in ("accept_task", "start_search", "release_task"):
         if held is None:
             problems.append(f"{tool}: this drone holds no task")

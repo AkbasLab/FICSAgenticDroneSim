@@ -95,6 +95,7 @@ def build_context(belief: BeliefState, policy: Any, events: tuple[Any, ...],
     home_cost = b.hover_drain_per_s * home_m / ESTIMATE_SPEED_MPS + b.move_drain_per_m * home_m
     you = {"id": me.vehicle_id, "role": None if policy.roles is None else policy.roles.role.value,
            "task": policy.net.holding, "stage": "waiting" if policy.waiting else policy.stage.value,
+           "flying_now": me.current_skill, "objective": belief.mission.objective,
            "airborne": me.airborne, "position_m": [_r(me.x), _r(me.y)], "altitude_m": _r(me.altitude_m),
            "battery_pct": _r(me.battery), "home_distance_m": _r(home_m), "battery_to_fly_home_pct": _r(home_cost),
            "reserve_pct": b.reserve}

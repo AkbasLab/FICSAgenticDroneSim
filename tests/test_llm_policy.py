@@ -206,11 +206,29 @@ class FlightTests(unittest.TestCase):
                 self.assertEqual(c["you"]["id"], drone)
                 self.assertNotIn(drone, [m["id"] for m in c["teammates"]])
                 self.assertEqual(set(c), {"you", "mission", "tasks", "teammates", "links", "now", "memory", "actions"})
+                self.assertIn("flying_now", c["you"])
                 self.assertLessEqual(len(c["memory"]), 5)
                 for m in c["teammates"]:              # what a teammate SAID, never its private state
                     self.assertLessEqual(set(m), {"id", "health", "role", "heard_s_ago", "last_position_m", "task"})
         sizes = [len(json.dumps(c)) for ctxs in contexts.values() for c in ctxs]
         self.assertLess(max(sizes), 6000)                 # summarized, not the raw log (12.4)
+
+    def test_the_menu_never_offers_a_restart_or_an_idle(self):
+        # bench1 (2026-11-05): offered while searching, start_search was read as "keep searching" by the 70B
+        # (105 of 200) -- executed it restarts the search; and continue_task was taken with nothing flying.
+        seen = []
+
+        def keep(request):
+            seen.append(context_of(request))
+            return request["meta"]["rule_reply"]
+        self.fly(Scripted(keep))
+        offered = lambda c, tool: any(a["tool"] == tool for a in c["actions"])
+        searching = [c for c in seen if c["you"]["stage"] == "searching" and c["you"]["flying_now"] == "SEARCH_REGION"]
+        idle = [c for c in seen if c["you"]["flying_now"] is None]
+        self.assertTrue(searching and idle)
+        self.assertFalse(any(offered(c, "start_search") or offered(c, "accept_task") for c in searching))
+        self.assertTrue(all(offered(c, "continue_task") for c in searching))
+        self.assertFalse(any(offered(c, "continue_task") for c in idle))
 
     def test_the_context_is_rendered_the_same_for_the_same_state(self):
         ctx = {"you": {"id": "Drone1"}, "memory": [{"at": 5.0, "tool": "hold", "s_ago": 1.0}], "actions": []}
