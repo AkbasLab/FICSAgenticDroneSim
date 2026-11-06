@@ -94,8 +94,8 @@ model.
 
 ## Where the project is
 
-**Phases 1 to 13 are complete** (2026-10-20 to 2026-11-06), each tagged
-`phase-NN-complete` (Phase 12 as a capability). **Phase 14, the experiment runner, is next.**
+**Phases 1 to 14 are complete** (2026-10-20 to 2026-11-06), each tagged
+`phase-NN-complete` (Phase 12 as a capability). **Phase 15, the evaluation metrics, is next.**
 
 | Phase | Done | What it left |
 |---|---|---|
@@ -124,7 +124,7 @@ Objectives Checklist`; each phase also has a detail note `AUV-01` … `AUV-23`.
 | 3 · The team | 7–9 | **Complete**: Phases 7, 8 and 9 |
 | 4 · Adversity | 10–11 | **Complete** (Phases 10 and 11) |
 | 5 · Intelligence | 12 | **Complete** (Phase 12, as a capability) |
-| 6 · Apparatus | 13–16 | Phase 13 **complete** (the arms and ablations, selected by configuration); 14–16 not started |
+| 6 · Apparatus | 13–16 | Phases 13 and 14 **complete** (the arms by configuration; the batch runner and event log); 15–16 not started |
 | 7 · Science | 17–20 | Not started |
 
 The ordering is load-bearing. Deterministic decentralized coordination (arm C)
