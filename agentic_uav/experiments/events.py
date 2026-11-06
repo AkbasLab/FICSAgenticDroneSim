@@ -276,6 +276,18 @@ def _scripted(r: Any, start: float) -> list[dict[str, Any]]:
     return out
 
 
+WALL_CLOCK = ("latency_s",)     # measured on the wall clock (a model call's time): the run's, never the seed's
+
+
+def without_wall_clock(obj: Any) -> Any:
+    """`obj` with every wall-clock measurement left out: what a flight must repeat exactly (16.4)."""
+    if isinstance(obj, dict):
+        return {k: without_wall_clock(v) for k, v in obj.items() if k not in WALL_CLOCK}
+    if isinstance(obj, list):
+        return [without_wall_clock(v) for v in obj]
+    return obj
+
+
 def write_events(events: Iterable[dict[str, Any]], path: str) -> int:
     """JSON Lines, gzip-compressed, written byte-for-byte the same for the same events (mtime fixed)."""
     n = 0

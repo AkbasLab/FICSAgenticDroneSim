@@ -1,6 +1,10 @@
 # Phase 16 (AUV-15, 16.5): every test that needs no simulator, model server or cluster, on each pull request and
 # each push to SC. Tests that need CarlaAir, Vega or Ollama skip themselves when it is absent; the live AirSim
 # regression set (scripts/airsim_regression.py) is flown by hand.
+#
+# On Windows, as the project is developed and flown: the recorded goldens (tests/golden/) pin the runner's console
+# output as Windows prints it ('<OUT>\file'), and goldens are never re-recorded. The suite was also tried on Linux
+# (WSL Ubuntu, Python 3.10): only those path strings differ.
 name: tests
 
 on:
@@ -10,7 +14,7 @@ on:
 
 jobs:
   simulator-free:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4

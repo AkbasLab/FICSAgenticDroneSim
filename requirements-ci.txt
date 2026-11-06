@@ -1,4 +1,4 @@
-# What the simulator-free test suite needs, and nothing else (Phase 16, AUV-15 16.5). Python 3.10.
+# What the simulator-free test suite needs, and nothing else (Phase 16, AUV-15 16.5). Python 3.10, Windows (as CI).
 #
 #     pip install -r requirements-ci.txt
 #     pip install --no-deps --no-build-isolation airsim==1.8.1

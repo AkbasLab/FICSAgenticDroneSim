@@ -21,8 +21,8 @@ flown by `scripts/run_batch.py` as a child process with no input:
                            partitions as its profiles; a model consulted only where one decides; task messages
                            only in teams that exchange them; nothing lost to the network on perfect comms
     failures_kept          every run whose mission was not met is a completed run with every file (14.4)
-    deterministic          the batch flown again: every run's events, report and records byte-for-byte the
-                           same, its manifest the same but for when it ran
+    deterministic          the batch flown again: every run's report byte for byte, its events and records the
+                           same but for a model call's latency (wall-clock time), its manifest but for when it ran
     resumes                runs removed from the second directory and the batch resumed on it: exactly those
                            are flown again, the same, and no other run is touched
 """
@@ -38,7 +38,7 @@ from typing import Any
 from .architecture import load_architecture
 from .batch import BATCH_FILE, INDEX, read_index
 from .conditions import load_network
-from .events import EVENT_TYPES, read_events
+from .events import EVENT_TYPES, read_events, without_wall_clock
 from .experiment import PERFECT, Batch, load_failure, parse_planner
 from .experiment_run import EVENTS, MANIFEST, RECORDS, REPORT
 from .scenarios import load_scenario
@@ -197,8 +197,9 @@ def compare_batches(a: str, b: str, runs: list[str]) -> list[str]:
     for rid in runs:
         for f in (EVENTS, REPORT, RECORDS):
             fa, fb = os.path.join(a, rid, f), os.path.join(b, rid, f)
-            if os.path.isfile(fa) != os.path.isfile(fb) or (os.path.isfile(fa) and not filecmp.cmp(fa, fb,
-                                                                                                 shallow=False)):
+            if os.path.isfile(fa) != os.path.isfile(fb):
+                p.append(f"{rid}: {f} differs")
+            elif os.path.isfile(fa) and not filecmp.cmp(fa, fb, shallow=False) and                     (f == REPORT or without_wall_clock(_content(fa)) != without_wall_clock(_content(fb))):
                 p.append(f"{rid}: {f} differs")
         ma, mb = (_json(os.path.join(x, rid, MANIFEST)) for x in (a, b))
         if {k: v for k, v in ma.items() if k not in VOLATILE} != {k: v for k, v in mb.items() if k not in VOLATILE}:
@@ -211,6 +212,17 @@ def compare_batches(a: str, b: str, runs: list[str]) -> list[str]:
     if ba["batch"] != bb["batch"] or ba["source_sha256"] != bb["source_sha256"]:
         p.append("the batch files differ")
     return p
+
+
+def _content(path: str) -> Any:
+    """A run file's content: the event log's lines, or a (compressed) JSON document."""
+    import gzip
+    if path.endswith(".jsonl.gz"):
+        with gzip.open(path, "rt", encoding="utf-8") as h:
+            return [json.loads(line) for line in h]
+    opener = gzip.open if path.endswith(".gz") else io.open
+    with opener(path, "rt", encoding="utf-8") as h:
+        return json.load(h)
 
 
 def manifests_of(out_dir: str, runs: list[str]) -> dict[str, bytes]:

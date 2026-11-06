@@ -61,13 +61,15 @@ against its mock twin, flown by a person (the simulator needs a display):
 
 ## 16.4 Determinism
 
-`tests/test_determinism.py`: with the same architecture, model output and seed, the run's directory repeats byte
-for byte, and so — checked one by one — do network events, target placement, injected faults and the
+`tests/test_determinism.py`: with the same architecture, model output and seed, the run's directory repeats —
+the report and trajectories byte for byte, the events and records in everything but a model call's latency, which
+is timed on the wall clock (the run's own time, as its manifest's are; on a loaded Linux machine a replay's 0.000 s
+became 0.001 s) — and so, checked one by one, do network events, target placement, injected faults and the
 deterministic policies' decisions; a different seed changes them.
 
 | What repeats | Test |
 |---|---|
-| The whole run directory | `tests/test_determinism.py::DeterminismTests::test_every_run_directory_repeats_byte_for_byte` |
+| The whole run directory | `tests/test_determinism.py::DeterminismTests::test_every_run_directory_repeats_byte_for_byte` · `tests/test_determinism.py::DeterminismTests::test_only_the_wall_clock_is_set_aside` |
 | Network events | `tests/test_determinism.py::DeterminismTests::test_network_events_repeat` |
 | Target placement | `tests/test_determinism.py::DeterminismTests::test_target_placement_repeats` |
 | Injected faults | `tests/test_determinism.py::DeterminismTests::test_injected_faults_repeat` |
@@ -88,6 +90,10 @@ server versions). It is recorded **separately**, by this protocol, with the firs
 
 ## 16.5 Continuous integration
 
-`.github/workflows/tests.yml` runs every test above on each pull request and each push to `SC`, on Ubuntu with
-Python 3.10, from `requirements-ci.txt` (what the simulator-free tests need, and nothing else). Tests that need
+`.github/workflows/tests.yml` runs every test above on each pull request and each push to `SC`, on Windows with
+Python 3.10, from `requirements-ci.txt` (what the simulator-free tests need, and nothing else): numpy, and the
+`airsim` package with what it imports — used for its types, never a simulator — but not the OpenCV it lists and
+never imports. Windows, because the recorded goldens pin the runner's console output as Windows prints it, and
+goldens are never re-recorded; Python 3.10, because AirSim's `tornado` 4.5.3 runs on nothing newer than 3.11. Tried
+first on Linux (WSL Ubuntu, Python 3.10): the suite passes there but for those Windows path strings. Tests that need
 CarlaAir, Vega or a model server skip themselves when it is absent; the live regression set is run by hand.

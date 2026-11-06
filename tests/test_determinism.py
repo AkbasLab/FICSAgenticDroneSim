@@ -8,7 +8,8 @@ WHY THESE EXIST
 16.4: "network events repeat; target placement repeats; injected faults
 repeat; deterministic policies repeat exactly." Each is flown twice here and
 compared -- and, so that "the same" means something, a different seed is
-shown to change it. "Model output" is held fixed by replaying a recorded
+shown to change it. One thing is set aside: a model call's latency, timed on
+the wall clock, which belongs to the run as its manifest's times do. "Model output" is held fixed by replaying a recorded
 model (Phase 12's llama3.3:70b): its flight repeats exactly too. What a LIVE
 model does when asked again is residual variability, to be measured, not
 assumed away -- the protocol is in docs/TESTING.md.
@@ -24,7 +25,8 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from agentic_uav.experiments.events import read_events  # noqa: E402
+from agentic_uav.experiments.batch_exit import _content  # noqa: E402
+from agentic_uav.experiments.events import read_events, without_wall_clock  # noqa: E402
 from agentic_uav.experiments.experiment import ExperimentConfig  # noqa: E402
 from agentic_uav.experiments.experiment_run import EVENTS, RECORDS, REPORT, TRAJECTORIES, run_one  # noqa: E402
 
@@ -67,11 +69,25 @@ class DeterminismTests(unittest.TestCase):
         return [e for e in events if e["type"] in kinds]
 
     def test_every_run_directory_repeats_byte_for_byte(self):
+        # The report and trajectories byte for byte; the events and records the same in everything but a model
+        # call's latency, which is measured on the wall clock -- the run's own time, like its manifest's, which
+        # no seed reproduces (found on a loaded Linux machine: 0.000 s here, 0.001 s there).
         for key, run in self.runs.items():
-            for f in (EVENTS, REPORT, RECORDS, TRAJECTORIES):
+            for f in (REPORT, TRAJECTORIES):
                 with self.subTest(run=key, file=f):
                     self.assertTrue(filecmp.cmp(os.path.join(self.a, run.run_id, f),
                                                 os.path.join(self.b, run.run_id, f), shallow=False))
+            for f in (EVENTS, RECORDS):
+                with self.subTest(run=key, file=f):
+                    a, b = (_content(os.path.join(d, run.run_id, f)) for d in (self.a, self.b))
+                    self.assertEqual(without_wall_clock(a), without_wall_clock(b))
+
+    def test_only_the_wall_clock_is_set_aside(self):
+        events = self.events(self.a, self.runs["the 70B replayed"])
+        timed = [dict(e, latency_s=[9.9]) if e["type"] == "LLM_CALLED" else e for e in events]
+        self.assertEqual(without_wall_clock(timed), without_wall_clock(events))
+        moved = [dict(e, tool="hold") if e["type"] == "LLM_CALLED" else e for e in events]
+        self.assertNotEqual(without_wall_clock(moved), without_wall_clock(events))
 
     def test_network_events_repeat(self):
         for key in ("severe network, a stop", "partitioned network"):
