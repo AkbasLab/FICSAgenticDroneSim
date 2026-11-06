@@ -68,9 +68,11 @@ def digest(messages: list[dict[str, str]]) -> str:
 
 
 class LLMPolicy:
-    def __init__(self, inner: Any, ask: Callable[[dict[str, Any]], str], clock: Callable[[], float] = time.perf_counter) -> None:
+    def __init__(self, inner: Any, ask: Callable[[dict[str, Any]], str], clock: Callable[[], float] = time.perf_counter,
+                 memory: bool = True) -> None:
         self.inner = inner                  # the rule policy: protocol, procedure, primitives, fallback
         self.ask = ask
+        self.remember = memory              # Phase 13's ablation: off, its context never holds its own past decisions
         self._clock = clock                 # wall clock, for latency only -- never in a decision
         self.log: list[dict[str, Any]] = []
         self.memory: list[dict[str, Any]] = []
@@ -87,7 +89,7 @@ class LLMPolicy:
         shadow = copy.deepcopy(self.inner)
         rule = shadow.decide(copy.deepcopy(belief), events)
         rule_choice = rule_tool(rule, shadow)
-        context = build_context(belief, self.inner, events, self.memory)
+        context = build_context(belief, self.inner, events, self.memory)    # empty when memory is off: see below
         messages = render(context)
         replies, problems, latencies, tool, params, parsed = [], [], [], None, {}, {}
         for attempt in range(CORRECTIONS + 1):
@@ -125,8 +127,9 @@ class LLMPolicy:
         kind = "llm" if len(replies) == 1 else "corrected"
         self._record(now, kind, events, decision, context, messages, replies, latencies, tool, params, rule_choice,
                      [], parsed)
-        self.memory.append({"at": now, "tool": tool, "parameters": params,
-                            "reason_code": parsed.get("reason_code", "")})
+        if self.remember:
+            self.memory.append({"at": now, "tool": tool, "parameters": params,
+                                "reason_code": parsed.get("reason_code", "")})
         return decision
 
     def _procedural(self, belief: BeliefState, events: tuple[Event, ...], now: float) -> bool:

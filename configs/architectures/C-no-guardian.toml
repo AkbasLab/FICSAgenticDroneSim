@@ -1,0 +1,11 @@
+# Phase 13 (AUV-13): an architecture, chosen by configuration. Read strictly by
+# agentic_uav/experiments/architecture.py. Fixed 2026-11-06, before any run.
+
+[architecture]
+name = "C-no-guardian"
+description = "Ablation (H5): C without the runtime guardian -- mock only"
+team = "decentralized"
+decider = "rules"
+
+[mechanisms]
+guardian = false

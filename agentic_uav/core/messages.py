@@ -121,6 +121,8 @@ SCHEMAS: dict[MessageType, dict[str, str]] = {
     MessageType.TASK_COMPLETE: {"task_id": "text", "version": "version"},
     # Phase 9: a drone announcing its new role, and why (AUV-09, 9.1).
     MessageType.ROLE_CHANGE: {"role": "text", "previous": "text", "why": "text"},
+    # Phase 13: architecture A's base controller telling the fleet where the mission stands ("complete").
+    MessageType.MISSION_UPDATE: {"status": "text"},
 }
 
 # Fields that come all together or not at all (Phase 8: a holder's progress).
@@ -139,8 +141,9 @@ OPTIONAL_GROUPS: dict[MessageType, dict[str, str]] = {
 #                                       a decision's worth (the periodic check) and a lease
 #                                       (INTENT_UPDATE itself has no schema yet, so none is sent)
 #   target report        longer         none sent yet: TARGET_FOUND has no schema
-#   mission constraints  mission-long   none sent: the team mission comes in the brief, and
-#                                       MISSION_UPDATE has no schema
+#   mission constraints  mission-long   none sent: the team mission comes in the brief
+#   mission news         current intent Phase 13's MISSION_UPDATE ("complete", from the base
+#                                       controller): 10 s, re-sent while it matters
 #
 # A type with no schema has no lifetime: `new_message` refuses it, so none can be sent unbounded.
 #
@@ -157,6 +160,7 @@ DEFAULT_TTL_S: dict[MessageType, float] = {
     MessageType.TASK_RELEASE: 10.0,
     MessageType.TASK_COMPLETE: 10.0,
     MessageType.ROLE_CHANGE: 10.0,
+    MessageType.MISSION_UPDATE: 10.0,    # Phase 13: the base controller's "complete"
 }
 
 

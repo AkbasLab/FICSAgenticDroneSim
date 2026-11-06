@@ -56,10 +56,11 @@ class TypeTests(unittest.TestCase):
         self.assertTrue(all(t.value == t.name.lower() for t in MessageType))
 
     def test_schemas_and_lifetimes_only_for_the_types_in_use(self):
-        # Phase 7's two, and from Phase 8 the six of the contract-net; nothing else yet.
+        # Phase 7's two, from Phase 8 the six of the contract-net, Phase 9's and Phase 13's; nothing else yet.
         task = {MessageType.TASK_ANNOUNCEMENT, MessageType.TASK_BID, MessageType.TASK_AWARD, MessageType.TASK_ACCEPT,
                 MessageType.TASK_RELEASE, MessageType.TASK_COMPLETE}
         later = task | {MessageType.ROLE_CHANGE}                         # Phase 9's
+        later |= {MessageType.MISSION_UPDATE}                            # Phase 13's, the base controller's
         self.assertEqual(set(SCHEMAS), {MessageType.HEARTBEAT, MessageType.STATUS_UPDATE} | later)
         self.assertEqual(DEFAULT_TTL_S, {MessageType.HEARTBEAT: 3.0, MessageType.STATUS_UPDATE: 10.0,
                                          **{t: 10.0 for t in later}})

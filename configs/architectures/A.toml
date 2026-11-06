@@ -1,0 +1,8 @@
+# Phase 13 (AUV-13): an architecture, chosen by configuration. Read strictly by
+# agentic_uav/experiments/architecture.py. Fixed 2026-11-06, before any run.
+
+[architecture]
+name = "A"
+description = "Centralized fleet controller: one controller at the base assigns every task from the drones' delivered states"
+team = "central"
+decider = "rules"

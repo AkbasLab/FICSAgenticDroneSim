@@ -1,0 +1,8 @@
+# Phase 13 (AUV-13): an architecture, chosen by configuration. Read strictly by
+# agentic_uav/experiments/architecture.py. Fixed 2026-11-06, before any run.
+
+[architecture]
+name = "D-fallback"
+description = "Ablation: D's machinery with the model replaced by its fallback policy -- must fly C's flight"
+team = "decentralized"
+decider = "llm-fallback"

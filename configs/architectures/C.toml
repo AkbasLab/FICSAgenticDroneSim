@@ -1,0 +1,8 @@
+# Phase 13 (AUV-13): an architecture, chosen by configuration. Read strictly by
+# agentic_uav/experiments/architecture.py. Fixed 2026-11-06, before any run.
+
+[architecture]
+name = "C"
+description = "Deterministic decentralized agents: Phase 9's team -- contract-net, leases, failure ladder, roles; no LLM"
+team = "decentralized"
+decider = "rules"

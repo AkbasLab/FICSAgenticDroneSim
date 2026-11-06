@@ -1,0 +1,11 @@
+# Phase 13 (AUV-13): an architecture, chosen by configuration. Read strictly by
+# agentic_uav/experiments/architecture.py. Fixed 2026-11-06, before any run.
+
+[architecture]
+name = "D-no-memory"
+description = "Ablation: D without its own decision history in the model's context"
+team = "decentralized"
+decider = "llm"
+
+[mechanisms]
+memory = false

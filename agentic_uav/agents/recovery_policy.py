@@ -59,9 +59,12 @@ RELAY_ARRIVED_M = 2.0
 
 class RecoveryPolicy(TeamPolicy):
     def __init__(self, net: ContractNet, health: HealthConfig, altitude_m: float = DEFAULT_ALTITUDE_M,
-                 speed_mps: float = DEFAULT_SPEED_MPS, keep_out: KeepOutConfig | None = None) -> None:
+                 speed_mps: float = DEFAULT_SPEED_MPS, keep_out: KeepOutConfig | None = None,
+                 roles: bool = True) -> None:
         self._team_setup(net, altitude_m, speed_mps)
         self.keep_out = keep_out
+        # Phase 13's ablation: off, no role ever changes -- every drone stays a scout, no relay, no reserve.
+        self.roles_enabled = roles
         self.health_config = health
         self.detector: FailureDetector | None = None
         self.roles: RoleKeeper | None = None
@@ -88,7 +91,8 @@ class RecoveryPolicy(TeamPolicy):
         for n in self.net.take_news():
             self._news.append(Event(Trigger.MESSAGE, now, {"allocation": n["what"],
                                                            **{k: v for k, v in n.items() if k != "what"}}))
-        change = self.roles.update(now, self.net.holding, self.detector.in_state(Health.UNREACHABLE))
+        change = None if not self.roles_enabled else \
+            self.roles.update(now, self.net.holding, self.detector.in_state(Health.UNREACHABLE))
         if change is not None:
             out.append(Out(MessageType.ROLE_CHANGE, {"role": change.after.value, "previous": change.before.value,
                                                      "why": change.why}))
@@ -124,7 +128,7 @@ class RecoveryPolicy(TeamPolicy):
 
     def _nothing_open(self, belief: BeliefState, reason: str) -> Decision:
         """Nothing open for it. A reserve stays while teammates still work and it could still help them."""
-        why = self._still_useful(belief)
+        why = self._still_useful(belief) if self.roles_enabled else None
         if why is None:
             return super()._nothing_open(belief, reason)
         self.waiting = True

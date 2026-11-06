@@ -119,9 +119,10 @@ def _key(value: float, who: str) -> tuple[float, str]:
 
 
 class ContractNet:
-    def __init__(self, owner: str, tasks: Iterable[MissionTask], config: AllocationConfig) -> None:
+    def __init__(self, owner: str, tasks: Iterable[MissionTask], config: AllocationConfig, leases: bool = True) -> None:
         self.owner = owner
         self.config = config
+        self.leases = leases                # Phase 13's ablation: off, a silent holder's task never returns
         self.book = TaskBook(owner, tasks)
         self.bids: dict[tuple[str, int], dict[str, tuple[float, float]]] = {}   # bidder -> (value, sent), eligible
         self.my_bids: dict[tuple[str, int], Bid] = {}
@@ -271,7 +272,8 @@ class ContractNet:
 
     def tick(self, now: float, bid_fn: Callable[[MissionTask], Bid], progress: float = 0.0) -> list[Out]:
         out = self._settle_all(now)
-        out += self._leases(now)
+        if self.leases:
+            out += self._leases(now)
         if self.holding is None and not self.done:
             out += self._bid(now, bid_fn)
             if self.round_started_at is not None and now >= self.round_started_at + self.config.bid_window_s - EPS:

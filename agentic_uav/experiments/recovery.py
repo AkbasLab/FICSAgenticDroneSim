@@ -63,7 +63,13 @@ from ..core.scenario import Scenario  # noqa: E402
 from ..simulator.message_bus import MessageBus  # noqa: E402
 from ..simulator.mock_adapter import MockVehicleAdapter, MockWorld  # noqa: E402
 from ..simulator.observer import mock_trajectories  # noqa: E402
+from ..agents.follower_policy import FollowerPolicy  # noqa: E402
+from ..agents.independent_policy import IndependentPolicy, initial_division  # noqa: E402
+from ..coordination.central import BASE_ID, CentralController  # noqa: E402
+from ..core.messages import new_message  # noqa: E402
 from ..safety.guardian import Guardian  # noqa: E402
+
+BASE_TICK_S = 0.5            # Phase 13: architecture A's controller decides as often as an agent does
 from ..simulator.sensing import mock_sensors  # noqa: E402
 from .evaluation import evaluate  # noqa: E402
 from .single_agent import MAX_FLIGHT_S, MESSAGE_DELAY_S, TeamAgentRun  # noqa: E402
@@ -82,6 +88,8 @@ class RecoveryRun:
     network: Any = None              # Phase 10: the seeded network model it flew, if any -- the judge's, never an agent's
     guardians: dict[str, dict[str, Any]] = field(default_factory=dict)   # Phase 11: each drone's guardian record
     executed: dict[str, list[dict[str, Any]]] = field(default_factory=dict)  # Phase 11: every skill each drone started
+    controller: dict[str, Any] | None = None   # Phase 13: architecture A's base controller, its record
+    team_kind: str = "decentralized"           # Phase 13: decentralized (C, D) | independent (B) | central (A)
 
     @property
     def survivors(self) -> list[str]:
@@ -99,7 +107,9 @@ LINK_WINDOW_S = 10.0       # Phase 10: an agent on a network estimates each link
 def fly_recovery_on_mock(scenario: Scenario, config: AllocationConfig, health: HealthConfig,
                          label: str = "no stop", stop: dict[str, float] | None = None,
                          range_m: float | None | str = None, network: Any = None, guardian: Any = None,
-                         wrap_policy: Any = None, wrap_handle: Any = None, keep_out: Any = None) -> RecoveryRun:
+                         wrap_policy: Any = None, wrap_handle: Any = None, keep_out: Any = None,
+                         team: str = "decentralized", leases: bool = True, roles: bool = True,
+                         link_inputs: bool = False) -> RecoveryRun:
     """The team told the team mission, with the recovery policy; each drone in `stop` stopped at its time.
 
     A stop is made FROM OUTSIDE, at a set time from the flight's start: the
@@ -120,7 +130,20 @@ def fly_recovery_on_mock(scenario: Scenario, config: AllocationConfig, health: H
 
     `keep_out` (after Phase 9's live collision): a `KeepOutConfig`. Every policy
     then plans round teammates silent in the air, and every guardian checks it.
+
+    Phase 13 -- one harness for every architecture (AUV-13). `team`:
+    "decentralized" (C, and D with an LLM `wrap_policy`): the recovery team, as
+    ever; "independent" (B): each drone a `RulePolicy` given its task from
+    `initial_division`, talking but never coordinating; "central" (A): each
+    drone a `FollowerPolicy`, and a `CentralController` at the base, a
+    participant on the bus and on the clock. The ablations: `leases` off (no
+    task returns from a silent holder), `roles` off (every drone a scout),
+    `link_inputs` on (each drone keeps its link estimates, as D's context shows
+    them, even on Phase 9's network). Everything else -- world, skills,
+    sensing, bus, guardian, keep-out, judge -- is the same for every team.
     """
+    if team not in ("decentralized", "independent", "central"):
+        raise ValueError(f"no team kind {team!r}")
     stop = dict(stop or {})
     if network is not None and range_m is not None:
         raise ValueError("with a network model, range is the model's: pass range_m=None")
@@ -142,18 +165,33 @@ def fly_recovery_on_mock(scenario: Scenario, config: AllocationConfig, health: H
         return (p.x, p.y, world.ground_z - p.z)
 
     reach = scenario.network.communication_range_m if range_m == "scenario" else range_m
-    if model is None:
-        bus = MessageBus(roster, world.clock, where, reach, mission_id=scenario.scenario_id, delay_s=MESSAGE_DELAY_S)
-    else:
-        bus = MessageBus(roster, world.clock, where, None, mission_id=scenario.scenario_id, network=model)
     brief = scenario.brief()
-    policies = {d: RecoveryPolicy(ContractNet(d, tasks_from_brief(brief), config), health, altitude_m=heights[d],
-                                  keep_out=keep_out) for d in roster}
+    on_bus = roster + ([BASE_ID] if team == "central" else [])
+
+    def placed(name: str) -> tuple[float, float, float]:
+        return (brief.base.x, brief.base.y, 0.0) if name == BASE_ID else where(name)
+
+    if model is None:
+        bus = MessageBus(on_bus, world.clock, placed, reach, mission_id=scenario.scenario_id, delay_s=MESSAGE_DELAY_S)
+    else:
+        bus = MessageBus(on_bus, world.clock, placed, None, mission_id=scenario.scenario_id, network=model)
+    controller = None
+    if team == "decentralized":
+        policies = {d: RecoveryPolicy(ContractNet(d, tasks_from_brief(brief), config, leases=leases), health,
+                                      altitude_m=heights[d], keep_out=keep_out, roles=roles) for d in roster}
+    elif team == "independent":
+        division = initial_division(brief, config, heights)
+        policies = {d: IndependentPolicy(division.get(d), altitude_m=heights[d], keep_out=keep_out) for d in roster}
+    else:
+        policies = {d: FollowerPolicy(altitude_m=heights[d], keep_out=keep_out) for d in roster}
+        controller = CentralController(brief, tuple(roster), config, health, heights, reassign=leases)
     agents: dict[str, DroneAgent] = {}
     stopped: dict[str, float] = {}
     errors: dict[str, BaseException] = {}
-    barrier = threading.Barrier(len(roster))
+    barrier = threading.Barrier(len(roster) + (1 if controller is not None else 0))
     start = world.clock.now()
+    ended: list[str] = []
+    ended_lock = threading.Lock()
 
     guardians: dict[str, Guardian] = {}
     if guardian is not None:
@@ -171,9 +209,10 @@ def fly_recovery_on_mock(scenario: Scenario, config: AllocationConfig, health: H
                 if wrap_handle is not None:
                     handle = wrap_handle(drone, handle, guardians.get(drone))
                 policy = policies[drone] if wrap_policy is None else wrap_policy(drone, policies[drone])
-                agent = DroneAgent(brief, sensors[drone], handle, policy,
-                                   comms=bus.comms(drone), coordinator=policies[drone],
-                                   link_window_s=None if model is None else LINK_WINDOW_S, **extra)
+                agent = DroneAgent(brief, sensors[drone], handle, policy, comms=bus.comms(drone),
+                                   coordinator=policies[drone],
+                                   link_window_s=None if model is None and not link_inputs else LINK_WINDOW_S,
+                                   **extra)
                 if drone in guardians:
                     guardians[drone].attach(agent.belief)
                 agents[drone] = agent
@@ -187,8 +226,36 @@ def fly_recovery_on_mock(scenario: Scenario, config: AllocationConfig, health: H
                     agent.run(max_s=MAX_FLIGHT_S)
             except BaseException as exc:          # recorded, never silent
                 errors[drone] = exc
+            finally:
+                with ended_lock:
+                    ended.append(drone)
+
+    def base_body() -> None:
+        """Architecture A's controller, ticking at the base until every drone's agent has ended."""
+        comms = bus.comms(BASE_ID)
+        sequence = 0
+        with world.clock.participate():
+            try:
+                barrier.wait()
+                controller.start = start
+                while True:
+                    now = world.clock.now()
+                    for m in comms.receive_available():
+                        controller.receive(m, now)
+                    with ended_lock:
+                        if len(ended) == len(roster):
+                            return
+                    for out in controller.tick(now):
+                        sequence += 1
+                        comms.send(new_message(out.kind, BASE_ID, out.to, scenario.scenario_id, now, sequence,
+                                               out.payload, ttl_s=out.ttl_s))
+                    world.clock.sleep_after_others(BASE_TICK_S)
+            except BaseException as exc:          # recorded, never silent
+                errors[BASE_ID] = exc
 
     threads = [threading.Thread(target=body, args=(d,), name=f"{d}-agent") for d in roster]
+    if controller is not None:
+        threads.append(threading.Thread(target=base_body, name="base-controller"))
     for t in threads:
         t.start()
     for t in threads:
@@ -205,15 +272,16 @@ def fly_recovery_on_mock(scenario: Scenario, config: AllocationConfig, health: H
                         (e.result.status.value if e.result is not None else "error"))
                        for e in executors[d].history()) for d in roster}
     searched = {d: list(policies[d].completed) for d in roster}
-    team = TeamAgentRun(label, scenario.random_seed, {d: ", ".join(searched[d]) or None for d in roster}, report,
+    team_run = TeamAgentRun(label, scenario.random_seed, {d: ", ".join(searched[d]) or None for d in roster}, report,
                         # In roster order, not the order the threads happened to run in.
                         {d: tuple(agents[d].trace) for d in roster if d in agents},
                         {d: agents[d].finished for d in roster if d in agents},
                         skills, start, trajectories, bus.deliveries())
     executed = {d: [{"serial": e.serial, "started_at": e.started_at, "skill": e.command.skill.value,
                      "command": command_json(e.command)} for e in executors[d].history()] for d in roster}
-    return RecoveryRun(team, config, health, stopped, {d: policies[d].as_json() for d in roster}, searched, model,
-                       {d: g.as_json() for d, g in guardians.items()}, executed)
+    return RecoveryRun(team_run, config, health, stopped, {d: policies[d].as_json() for d in roster}, searched, model,
+                       {d: g.as_json() for d, g in guardians.items()}, executed,
+                       None if controller is None else controller.as_json(), team)
 
 
 # ------------------------------------------------------------------- live
