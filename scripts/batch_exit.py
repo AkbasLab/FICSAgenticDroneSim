@@ -75,6 +75,7 @@ def main(argv: list[str] | None = None) -> int:
     except (AttributeError, OSError):
         pass
     started = time.strftime("%Y-%m-%dT%H:%M:%S")
+    code = provenance()                  # before anything is written into the repository
     wall = time.perf_counter()
     batch = load_batch(BATCH)
     ids = [r.run_id for r in batch.runs]
@@ -122,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
               "first": first, "second": second, "kept": None if kept_dir is None else repo_rel(kept_dir),
               "resumed": [batch.runs[i - 1].run_id for i in RESUMED], "exit_criterion_met": ok, "checks": checks,
               "completed": sum(r["status"] == "completed" for r in rows), "met": sum(bool(r.get("met")) for r in rows),
-              "wall_s": round(wall, 1), "code": provenance()}
+              "wall_s": round(wall, 1), "code": code}
     with io.open(os.path.join(args.out, stem + ".jsonl"), "w", encoding="utf-8", newline="\n") as h:
         h.write(json.dumps(header, default=str) + "\n")
         for r in rows:
