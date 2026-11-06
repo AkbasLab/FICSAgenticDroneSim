@@ -145,7 +145,7 @@ class RunTests(unittest.TestCase):
         row = R.run_one(run, self.out)
         self.assertEqual((row["status"], row["met"]), ("completed", True))
         self.assertEqual(sorted(os.listdir(os.path.join(self.out, run.run_id))),
-                         sorted([R.MANIFEST, R.REPORT, R.EVENTS, R.RECORDS]))
+                         sorted([R.MANIFEST, R.REPORT, R.EVENTS, R.RECORDS, R.TRAJECTORIES]))
         m = self.read(run, R.MANIFEST)
         self.assertEqual(manifest_problems(m), [])
         self.assertEqual(m["config"], run.as_json())
@@ -259,6 +259,21 @@ class EventTests(unittest.TestCase):
         i = next(k for k in range(1, len(ev) - 1) if ev[k]["t"] < ev[k + 1]["t"])
         swapped[i], swapped[i + 1] = swapped[i + 1], swapped[i]
         self.assertIn("events not in time order", well_formed(swapped, rep))
+
+    def test_messages_carry_their_size_and_a_digest_of_what_they_say(self):
+        for key in self.runs:
+            for e in self.events(key):
+                if e["type"] == "MESSAGE_SENT":
+                    self.assertIsInstance(e["bytes"], int)
+                    self.assertGreater(e["bytes"], 0)
+                    self.assertEqual(len(e["payload_digest"]), 16)
+
+    def test_the_digest_is_of_what_is_said(self):
+        # A's base re-sends an award until the drone confirms it: the same thing said again, the same digest.
+        awards = [e for e in self.events("central") if e["type"] == "MESSAGE_SENT" and e["drone"] == "base"
+                  and e["message_type"] == "task_award"]
+        self.assertGreater(len(awards), len({e["payload_digest"] for e in awards}))
+        self.assertEqual(len({e["message_id"] for e in awards}), len(awards))
 
     def test_skills_each_end_once(self):
         for key in self.runs:

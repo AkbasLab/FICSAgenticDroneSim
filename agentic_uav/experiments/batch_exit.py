@@ -132,6 +132,9 @@ def well_formed(events: list[dict[str, Any]], report: dict[str, Any]) -> list[st
     if skills("SKILL_STARTED") != skills("SKILL_COMPLETED"):
         p.append("a skill started without its end, or ended without its start")
     sent = [e["message_id"] for e in events if e["type"] == "MESSAGE_SENT"]
+    if any(not isinstance(e["bytes"], int) or isinstance(e["bytes"], bool) or e["bytes"] <= 0
+           for e in events if e["type"] == "MESSAGE_SENT"):
+        p.append("a message whose size is not a positive number of bytes")
     if len(sent) != len(set(sent)):
         p.append("a message sent twice")
     stray = {e["message_id"] for e in events if e["type"] in ("MESSAGE_RECEIVED", "MESSAGE_DROPPED")} - set(sent)

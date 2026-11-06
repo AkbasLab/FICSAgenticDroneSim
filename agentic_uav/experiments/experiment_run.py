@@ -13,6 +13,8 @@ A run's directory holds:
     events.jsonl.gz    the 19-type event log (`events.py`)
     records.json.gz    the raw records: each drone's policy, guardian and model logs, skills started, the base
                        controller's log -- what a failure taxonomy needs beyond the events
+    trajectories.json.gz  each drone's flown knots [t, x, y, altitude_m, airborne] (Phase 15: what coordination
+                       efficiency is measured from, on the judge's own grid)
 
 14.4: NOTHING IS DISCARDED. A mission not met is a completed run like any
 other. A run that raises is caught: its manifest records "crashed", the error
@@ -35,12 +37,13 @@ from typing import Any
 
 from .architecture import fly_architecture, load_architecture
 from .conditions import load_network
-from .events import flight_events, write_events
+from .events import LOG_VERSION, flight_events, write_events
 from .experiment import (PERFECT, ExperimentConfig, injection_named, load_failure, parse_planner, replay_label,
                          replay_records)
 from .provenance import REPO_ROOT, file_digest, provenance
 
 MANIFEST, REPORT, EVENTS, RECORDS = "manifest.json", "report.json", "events.jsonl.gz", "records.json.gz"
+TRAJECTORIES = "trajectories.json.gz"
 KEEPOUT = os.path.join(REPO_ROOT, "configs", "keepout", "default.toml")
 SHARED = {"allocation": ("configs", "allocation", "default.toml"), "recovery": ("configs", "recovery", "default.toml"),
           "guardian": ("configs", "guardian", "default.toml"), "keep_out": ("configs", "keepout", "default.toml")}
@@ -179,6 +182,12 @@ def _records(flight: Any, injection_record: dict | None) -> dict[str, Any]:
             "llm": flight.llm, "injection": injection_record}
 
 
+def _trajectories(flight: Any) -> dict[str, list[list[Any]]]:
+    r = flight.run
+    trajs = r.trajectories if getattr(r, "team", None) is None else r.team.trajectories
+    return {d: [[k.t, k.x, k.y, k.altitude_m, bool(k.airborne)] for k in t.knots] for d, t in sorted(trajs.items())}
+
+
 def run_one(run: ExperimentConfig, out_root: str, endpoint: str | None = None) -> dict[str, Any]:
     """Fly `run` into `out_root/<run_id>/`, unless it is already complete there. Never raises for the run's sake."""
     run_dir = os.path.join(out_root, run.run_id)
@@ -188,7 +197,7 @@ def run_one(run: ExperimentConfig, out_root: str, endpoint: str | None = None) -
     started = time.strftime("%Y-%m-%dT%H:%M:%S")
     wall = time.perf_counter()
     manifest: dict[str, Any] = {
-        "run_id": run.run_id, "config": run.as_json(),
+        "run_id": run.run_id, "config": run.as_json(), "event_log_version": LOG_VERSION,
         "files": {role: {"path": _rel(p), "sha256": file_digest(p)} for role, p in
                   {**run.files(), **{k: os.path.join(REPO_ROOT, *v) for k, v in SHARED.items()}}.items()},
         "code": provenance(), "software": software(), "started": started}
@@ -202,7 +211,8 @@ def run_one(run: ExperimentConfig, out_root: str, endpoint: str | None = None) -
         report = _report(flight)
         _write_json(os.path.join(run_dir, REPORT), report)
         _write_gz_json(os.path.join(run_dir, RECORDS), _records(flight, record))
-        written = [EVENTS, REPORT, RECORDS]
+        _write_gz_json(os.path.join(run_dir, TRAJECTORIES), _trajectories(flight))
+        written = [EVENTS, REPORT, RECORDS, TRAJECTORIES]
         rep = report["report"]
         outcome = {"met": report["met"], "success": rep["success"], "completion_s": rep["completion_s"], "events": n}
         status = "completed"

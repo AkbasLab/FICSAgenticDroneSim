@@ -17,7 +17,8 @@ simulated clock), `type`, `drone` (or null), and what that type carries.
     OBSERVATION_RECEIVED  at each decision: what the drone's own sensing said (position, battery, airborne)
     BELIEF_UPDATED        at each decision: the belief it decided on (a digest; teammates known; link state)
     DECISION_PROPOSED     each decision: kind, objective, reason, what triggered it
-    MESSAGE_SENT          each message, once: id, type, recipients, bytes, lifetime
+    MESSAGE_SENT          each message, once: id, type, recipients, bytes, lifetime, and a digest of its payload
+                          (Phase 15, log version 2: so a message repeating another can be told apart)
     MESSAGE_RECEIVED      each delivery read: id, recipient, delay
     MESSAGE_DROPPED       each delivery not read: id, recipient, why (lost, rate_limited, partitioned,
                           out_of_range, expired; or never_read -- still waiting when its recipient stopped)
@@ -51,6 +52,8 @@ from typing import Any, Iterable
 
 from ..core.messages import MessageType
 
+LOG_VERSION = 2            # 1: Phase 14; 2: MESSAGE_SENT carries payload_digest, and its bytes as a number (Phase 15;
+                           # version 1 wrote the method's name where the byte count belonged)
 EVENT_TYPES = (
     "MISSION_STARTED", "OBSERVATION_RECEIVED", "BELIEF_UPDATED",
     "MESSAGE_SENT", "MESSAGE_DROPPED", "MESSAGE_RECEIVED",
@@ -158,7 +161,7 @@ def _messages(team: Any, start: float) -> list[dict[str, Any]]:
             seen.add(m.message_id)
             out.append(_ev(dl.sent_at - start, "MESSAGE_SENT", m.sender_id, message_id=m.message_id,
                            message_type=m.message_type.value, recipients=list(m.recipient_ids),
-                           bytes=m.size_bytes, ttl_s=m.time_to_live_s))
+                           bytes=m.size_bytes(), ttl_s=m.time_to_live_s, payload_digest=_digest(m.payload)))
             p = m.payload
             if m.message_type is MessageType.TASK_ANNOUNCEMENT:
                 out.append(_ev(dl.sent_at - start, "TASK_ANNOUNCED", m.sender_id, task=p["task_id"],
