@@ -127,6 +127,13 @@ stopped completes in 395–547 s over seeds 1–5, where on a perfect network ev
 | 2026-11-06 | **An injection needs the guardian** | Without it the unsafe command flies 600 m out: an experiment to choose deliberately, not by accident |
 | 2026-11-06 | **Commit, push and tag at the end without asking again** | The user's instruction, given during step 5 |
 
+## Found after the close
+
+* **2026-11-06, by Phase 15:** the event log's `MESSAGE_SENT.bytes` held the text of a method's name
+  (`m.size_bytes` written, not called), in every run including this phase's run of record. The well-formed check
+  did not look at the field's type. Fixed in Phase 15 (event log version 2), with the check extended; a
+  version-1 log's sizes score as "not available". This phase's record is kept as it was flown.
+
 ## Open questions
 
 1. **Live CarlaAir runs through the runner** — the AirSim confirmation subset of Phase 18 — wait for Phase 16–17.

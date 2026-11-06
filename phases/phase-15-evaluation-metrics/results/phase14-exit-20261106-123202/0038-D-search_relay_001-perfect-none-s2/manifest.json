@@ -1,0 +1,92 @@
+{
+ "code": {
+  "agent": "open_loop_agent.py",
+  "agent_sha256": "28d05b1f1599ced5",
+  "agentic_uav_sha256": "15fdc1e18b8ed308",
+  "commit": "50c5efd",
+  "dirty": false,
+  "ollama_endpoint": "http://127.0.0.1:11434",
+  "python": "3.10.21"
+ },
+ "config": {
+  "architecture": "D",
+  "experiment_id": "replay",
+  "failure": "none",
+  "index": 38,
+  "network": "perfect",
+  "planner": "replay:phases/phase-12-llm-agent-policy/results/llm-exit-20261105-150453-exit.jsonl",
+  "run_id": "0038-D-search_relay_001-perfect-none-s2",
+  "scenario": "search_relay_001",
+  "seed": 2,
+  "team_size": 4
+ },
+ "error": null,
+ "event_log_version": 2,
+ "files": {
+  "allocation": {
+   "path": "configs/allocation/default.toml",
+   "sha256": "d2495f2cc39c6687"
+  },
+  "architecture": {
+   "path": "configs/architectures/D.toml",
+   "sha256": "480f4c57f9ec25be"
+  },
+  "failure": {
+   "path": "configs/failures/none.toml",
+   "sha256": "018491d84c0b41ab"
+  },
+  "guardian": {
+   "path": "configs/guardian/default.toml",
+   "sha256": "7fddc9efd53362fc"
+  },
+  "keep_out": {
+   "path": "configs/keepout/default.toml",
+   "sha256": "dc9d9368b6a732b2"
+  },
+  "recovery": {
+   "path": "configs/recovery/default.toml",
+   "sha256": "f75e8c1f45ac0b3f"
+  },
+  "replay_record": {
+   "path": "phases/phase-12-llm-agent-policy/results/llm-exit-20261105-150453-exit.jsonl",
+   "sha256": "46bd9cafb5765848"
+  },
+  "scenario": {
+   "path": "configs/scenarios/search_relay_001.toml",
+   "sha256": "aafbb0738a4874a5"
+  }
+ },
+ "files_written": [
+  "events.jsonl.gz",
+  "report.json",
+  "records.json.gz",
+  "trajectories.json.gz",
+  "manifest.json"
+ ],
+ "finished": "2026-11-06T12:32:27",
+ "model": {
+  "model": null,
+  "planner": "replay:phases/phase-12-llm-agent-policy/results/llm-exit-20261105-150453-exit.jsonl",
+  "replayed_flight": [
+   2,
+   "no stop"
+  ]
+ },
+ "outcome": {
+  "completion_s": 199.1,
+  "events": 5144,
+  "met": true,
+  "success": true
+ },
+ "run_id": "0038-D-search_relay_001-perfect-none-s2",
+ "software": {
+  "airsim": "1.8.1",
+  "numpy": "2.2.6",
+  "ollama": "0.6.2",
+  "platform": "Windows-10-10.0.26300-SP0",
+  "python": "3.10.21"
+ },
+ "started": "2026-11-06T12:32:22",
+ "status": "completed",
+ "wall_s": 4.599
+}

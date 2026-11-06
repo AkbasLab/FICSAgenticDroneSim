@@ -1,0 +1,67 @@
+{
+ "absent": {
+  "D12.tokens": {
+   "kind": "not recorded",
+   "why": "the model client does not record tokens yet (planned for Phase 17)"
+  },
+  "P3.continuity_retention": {
+   "kind": "not available",
+   "why": "no nominal twin in the batch"
+  }
+ },
+ "config": {
+  "architecture": "D-no-leases",
+  "experiment_id": "ablations",
+  "failure": "drone1-at-60s",
+  "index": 18,
+  "network": "severe",
+  "planner": "echo",
+  "run_id": "0018-D-no-leases-search_relay_001-severe-drone1-at-60s-s2",
+  "scenario": "search_relay_001",
+  "seed": 2,
+  "team_size": 4
+ },
+ "definitions_sha256": "d722ba2b3379f179c9a2a8e500a49be21e66a7a7cc231f0f5e058d4d56f7663c",
+ "metrics_version": 1,
+ "run_id": "0018-D-no-leases-search_relay_001-severe-drone1-at-60s-s2",
+ "values": {
+  "CE.coordination_efficiency": 0.6189513257953349,
+  "CE.total_cells": 35111,
+  "CE.unique_cells": 21732,
+  "D1.area_searched_pct": 84.89,
+  "D10.llm_calls": 87,
+  "D11.fallback_use": 0,
+  "D13.battery_used_pct": 208.03500000000003,
+  "D14.distance_m": 3257.753,
+  "D15.conflicting_claims": 2,
+  "D2.redundant_searches": 1,
+  "D3.task_reassignments": 3,
+  "D4.orphaned_tasks": 1,
+  "D5.role_changes": 16,
+  "D6.role_oscillations": 6,
+  "D7.stale_message_decisions": 0,
+  "D8.invalid_llm_outputs": 0,
+  "D9.llm_latency_p50_s": 0.0,
+  "D9.llm_latency_p95_s": 0.0,
+  "P1.coverage": 0.8489,
+  "P1.mission_score": 0.9496333333333333,
+  "P1.safe_return": 1.0,
+  "P1.success": false,
+  "P1.target_detection": 1.0,
+  "P2.censored": true,
+  "P2.completion_s": 900.0,
+  "P4.censored": true,
+  "P4.recovery_s": 684.1,
+  "P5.collisions": 0,
+  "P5.emergency_fallbacks": 0,
+  "P5.guardian_interventions": 0,
+  "P5.separation_violations": 0,
+  "P5.unsafe_proposals": 0,
+  "P5.zone_entries": 0,
+  "P6.bytes": 1030046,
+  "P6.duplicates": 0,
+  "P6.expired": 3,
+  "P6.messages": 2920,
+  "P6.messages_per_completed_task": 973.3333333333334
+ }
+}

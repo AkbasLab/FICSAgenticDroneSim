@@ -1,0 +1,80 @@
+{
+ "absent": {
+  "D10.llm_calls": {
+   "kind": "not applicable",
+   "why": "no model decides in this run"
+  },
+  "D11.fallback_use": {
+   "kind": "not applicable",
+   "why": "no model decides in this run"
+  },
+  "D12.tokens": {
+   "kind": "not applicable",
+   "why": "no model decides in this run"
+  },
+  "D8.invalid_llm_outputs": {
+   "kind": "not applicable",
+   "why": "no model decides in this run"
+  },
+  "D9.llm_latency_p50_s": {
+   "kind": "not applicable",
+   "why": "no model decides in this run"
+  },
+  "D9.llm_latency_p95_s": {
+   "kind": "not applicable",
+   "why": "no model decides in this run"
+  }
+ },
+ "config": {
+  "architecture": "A",
+  "experiment_id": "arms",
+  "failure": "drone1-at-60s",
+  "index": 4,
+  "network": "severe",
+  "planner": "none",
+  "run_id": "0004-A-search_relay_001-severe-drone1-at-60s-s1",
+  "scenario": "search_relay_001",
+  "seed": 1,
+  "team_size": 4
+ },
+ "definitions_sha256": "d722ba2b3379f179c9a2a8e500a49be21e66a7a7cc231f0f5e058d4d56f7663c",
+ "metrics_version": 1,
+ "run_id": "0004-A-search_relay_001-severe-drone1-at-60s-s1",
+ "twin": "0001-A-search_relay_001-nominal-none-s1",
+ "values": {
+  "CE.coordination_efficiency": 0.6151801823767494,
+  "CE.total_cells": 41014,
+  "CE.unique_cells": 25231,
+  "D1.area_searched_pct": 98.56,
+  "D13.battery_used_pct": 244.05,
+  "D14.distance_m": 5833.25,
+  "D15.conflicting_claims": 0,
+  "D2.redundant_searches": 4,
+  "D3.task_reassignments": 2,
+  "D4.orphaned_tasks": 1,
+  "D5.role_changes": 0,
+  "D6.role_oscillations": 0,
+  "D7.stale_message_decisions": 3,
+  "P1.coverage": 0.9856,
+  "P1.mission_score": 0.9952,
+  "P1.safe_return": 1.0,
+  "P1.success": true,
+  "P1.target_detection": 1.0,
+  "P2.censored": false,
+  "P2.completion_s": 702.1,
+  "P3.continuity_retention": 0.9952663510900727,
+  "P4.censored": false,
+  "P4.recovery_s": 59.4,
+  "P5.collisions": 0,
+  "P5.emergency_fallbacks": 0,
+  "P5.guardian_interventions": 0,
+  "P5.separation_violations": 0,
+  "P5.unsafe_proposals": 0,
+  "P5.zone_entries": 0,
+  "P6.bytes": 1013946,
+  "P6.duplicates": 108,
+  "P6.expired": 8,
+  "P6.messages": 3031,
+  "P6.messages_per_completed_task": 757.75
+ }
+}
