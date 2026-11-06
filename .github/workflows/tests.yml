@@ -1,0 +1,25 @@
+# Phase 16 (AUV-15, 16.5): every test that needs no simulator, model server or cluster, on each pull request and
+# each push to SC. Tests that need CarlaAir, Vega or Ollama skip themselves when it is absent; the live AirSim
+# regression set (scripts/airsim_regression.py) is flown by hand.
+name: tests
+
+on:
+  push:
+    branches: [SC]
+  pull_request:
+
+jobs:
+  simulator-free:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install what the tests need
+        run: |
+          python -m pip install -r requirements-ci.txt
+          python -m pip install --no-deps --no-build-isolation airsim==1.8.1
+      - name: Run the suite
+        run: python -m unittest discover -s tests -p "test_*.py"

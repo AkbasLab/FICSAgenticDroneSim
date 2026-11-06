@@ -121,6 +121,18 @@ class DeliberatingTests(unittest.TestCase):
         self.assertEqual([c for n in self.wire.nets.values() for c in n.corrections], [])
         self.assertEqual(self.wire.sent_of(MessageType.TASK_RELEASE), [])
 
+    def test_a_holder_never_gives_its_own_task_away_by_its_own_lease(self):
+        # A holder renews its own lease by reporting; only a teammate's lease can run out in its book. Paused
+        # for longer than a lease (its ticks stopped), on its next tick it still holds its task and announces
+        # nothing of it -- were it to, a drone would take its own task from itself.
+        net = self.wire.nets["Drone1"]
+        mine = net.holding
+        self.assertIsNotNone(mine)
+        later = self.wire.now + DELIBERATING.lease_s + 5.0
+        outs = net.tick(later, self.wire.bid_fn("Drone1"))
+        self.assertEqual(net.holding, mine)
+        self.assertFalse([o for o in outs if o.kind is MessageType.TASK_ANNOUNCEMENT and o.payload["task_id"] == mine])
+
     def test_every_claim_made_on_every_bid_for_it(self):
         for d, net in self.wire.nets.items():
             (made,) = net.claims_made
