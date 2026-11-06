@@ -131,8 +131,13 @@ def _fallback_only(request: dict[str, Any]) -> str:
 
 def fly_architecture(arch: Architecture, scenario: Any, seed: int, alloc: Any, health: Any, limits: Any,
                      keep_out: Any, stop: dict[str, float] | None = None, network: Any = None,
-                     ask: Any = None, label: str | None = None) -> Flight:
-    """One flight of `arch`, seed `seed`, through the one harness."""
+                     ask: Any = None, label: str | None = None, wrap_policy: Any = None,
+                     wrap_handle: Any = None) -> Flight:
+    """One flight of `arch`, seed `seed`, through the one harness.
+
+    `wrap_policy(drone, policy)` and `wrap_handle(drone, handle, guardian)` (Phase 14) are the harness's own
+    hooks, passed through for a failure made from outside -- Phase 11's injections. A policy hook wraps the
+    drone's whole policy, the model's included, as the outermost layer."""
     sc = dataclasses.replace(scenario, random_seed=seed)
     label = label or ("no stop" if not stop else f"{next(iter(stop))} stopped")
     if arch.team == "scripted":
@@ -143,16 +148,17 @@ def fly_architecture(arch: Architecture, scenario: Any, seed: int, alloc: Any, h
     if arch.decider == "llm" and ask is None:
         raise ValueError(f"{arch.name}: a model decides -- give `ask` (the pinned model, an echo or a replay)")
     policies: dict[str, LLMPolicy] = {}
-    wrap = None
+    wrap = wrap_policy
     if arch.decider != "rules":
         model = ask if arch.decider == "llm" else _fallback_only
 
-        def wrap(drone: str, inner: Any) -> LLMPolicy:
+        def wrap(drone: str, inner: Any) -> Any:
             policies[drone] = LLMPolicy(inner, model, memory=arch.memory)
-            return policies[drone]
+            return policies[drone] if wrap_policy is None else wrap_policy(drone, policies[drone])
 
     run: RecoveryRun = fly_recovery_on_mock(
         sc, alloc, health, label, stop, network=None if arch.perfect_comms else network,
         guardian=limits if arch.guardian else None, keep_out=keep_out if arch.keep_out else None,
-        wrap_policy=wrap, team=arch.team, leases=arch.leases, roles=arch.roles, link_inputs=arch.link_inputs)
+        wrap_policy=wrap, wrap_handle=wrap_handle, team=arch.team, leases=arch.leases, roles=arch.roles,
+        link_inputs=arch.link_inputs)
     return Flight(arch, run, {d: p.as_json() for d, p in sorted(policies.items())})

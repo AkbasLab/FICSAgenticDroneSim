@@ -1,0 +1,6 @@
+# Phase 14's failure factor: an unsafe proposal. Phase 11's injection "rule-fence-far": at 40 s Drone1's own
+# decision is replaced by "go 600 m out along y", which the guardian must reject (geofence). Needs the guardian.
+[failure]
+name = "unsafe-proposal"
+description = "Drone1's decision at 40 s replaced by one 600 m outside the fence (Phase 11's rule-fence-far)"
+injection = "rule-fence-far"

@@ -1,0 +1,7 @@
+# Phase 14's failure factor: Phase 9's stop. Drone1's agent stops deciding and talking at 60 s from the flight's
+# start; its running skill is aborted and it holds where it is (a companion computer dying while the autopilot
+# holds). Made from outside: no agent code knows of it.
+[failure]
+name = "drone1-at-60s"
+description = "Drone1 stopped at 60 s"
+stop = { Drone1 = 60.0 }

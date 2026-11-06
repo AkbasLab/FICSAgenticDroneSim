@@ -1,0 +1,90 @@
+# Phase 14's exit batch (AUV-14): "a batch command executes a list of scenario configurations without manual
+# prompts and produces one complete result directory per run". Chosen so that, between them, the runs make every
+# one of the 19 event types happen in a real flight: every arm; nominal, severe and partitioned networks; a stop and
+# an unsafe proposal; both team sizes; a model by the echo and replayed from Phase 12's 70B. On the mock; no Vega.
+# Fixed 2026-11-06, before any run of it. Not an experiment: Phase 17 chooses those.
+
+[batch]
+id = "phase14-exit"
+description = "Phase 14's exit: every arm, three networks, three failure profiles, both team sizes, echo and replay"
+
+[[experiment]]
+id = "arms"
+architecture = ["A", "B", "C", "D"]
+scenario = "search_relay_001"
+team_size = 4
+network = ["nominal", "severe"]
+failure = ["none", "drone1-at-60s"]
+seed = 1
+planner = "echo"
+
+[[experiment]]
+id = "ablations"
+architecture = ["D-no-memory", "D-no-leases", "D-no-roles", "D-perfect-comms", "D-fallback", "D-no-guardian",
+                "C-link-inputs", "C-no-guardian"]
+scenario = "search_relay_001"
+team_size = 4
+network = "severe"
+failure = "drone1-at-60s"
+seed = 2
+planner = "echo"
+
+[[experiment]]
+id = "historical"
+architecture = "E"
+scenario = "search_relay_001"
+team_size = 4
+network = "perfect"
+failure = "none"
+seed = "1-2"
+planner = "none"
+
+[[experiment]]
+id = "pair"
+architecture = ["A", "C", "D"]
+scenario = "search_pair_001"
+team_size = 2
+network = "nominal"
+failure = ["none", "drone1-at-60s"]
+seed = 1
+planner = "echo"
+
+[[experiment]]
+id = "partition"
+architecture = ["C", "D"]
+scenario = "search_relay_001"
+team_size = 4
+network = "partitioned"
+failure = "none"
+seed = 1
+planner = "echo"
+
+[[experiment]]
+id = "unsafe"
+architecture = ["C", "D"]
+scenario = "search_relay_001"
+team_size = 4
+network = "nominal"
+failure = "unsafe-proposal"
+seed = 1
+planner = "echo"
+
+[[experiment]]
+id = "replay"
+architecture = "D"
+scenario = "search_relay_001"
+team_size = 4
+network = "perfect"
+failure = ["none", "drone1-at-60s"]
+seed = "1-2"
+planner = "replay:phases/phase-12-llm-agent-policy/results/llm-exit-20261105-150453-exit.jsonl"
+
+[[experiment]]
+id = "seeds"
+architecture = "C"
+scenario = "search_relay_001"
+team_size = 4
+network = "severe"
+failure = "drone1-at-60s"
+seed = "3-5"
+planner = "none"

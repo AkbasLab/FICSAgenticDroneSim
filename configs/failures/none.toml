@@ -1,0 +1,4 @@
+# Phase 14's failure factor: nothing goes wrong.
+[failure]
+name = "none"
+description = "No drone stopped, nothing injected"
