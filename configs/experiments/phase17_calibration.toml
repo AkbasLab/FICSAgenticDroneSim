@@ -1,0 +1,26 @@
+# Phase 17's calibration sweep (AUV-16 17.3), on the mock: which communication levels are meaningful, by the rule
+# pre-registered in docs/CONDITIONS.md (version 1, committed before this file was run). Development seeds 1-20 only.
+
+[batch]
+id = "phase17-calibration"
+description = "A, B, C on 2 and 4 drones, every communication level, no failure and Drone1 stopped, seeds 1-20"
+
+[[experiment]]
+id = "pair"
+architecture = ["A", "B", "C"]
+scenario = "search_pair_001"
+team_size = 2
+network = ["nominal", "moderate", "severe"]
+failure = ["none", "drone1-at-60s"]
+seed = "1-20"
+planner = "none"
+
+[[experiment]]
+id = "four"
+architecture = ["A", "B", "C"]
+scenario = "search_relay_001"
+team_size = 4
+network = ["nominal", "moderate", "severe", "partitioned"]
+failure = ["none", "drone1-at-60s"]
+seed = "1-20"
+planner = "none"
