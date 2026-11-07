@@ -109,17 +109,22 @@ NARRATE = None
 #: fired first. With the fleet flying in parallel, as it does in CARLA-Air, the
 #: survivors were back on their pads before the lost drone was declared failed,
 #: and its sector was never searched.
-#: Off by default for now, so mock runs and every reported result are exactly
-#: as before; `scenario_manager.for_simulator` switches it on for --airsim runs.
-#: Whether it should become the default everywhere is pending review.
-STAND_BY_FOR_TEAMMATES = False
+#: On everywhere since the pre-Phase-18 review. The Phase 17 idle wait only
+#: covers work that is *open*; a sector still held by a teammate that has just
+#: died is not open until that teammate is presumed lost, so a lone survivor of
+#: a 2-drone team saw "nothing for me" and landed with three-quarters of the
+#: mission unsearched (development run, partitioned, one failure). Standing by
+#: for work held elsewhere is what closes that gap, on the mock as in the sim.
+STAND_BY_FOR_TEAMMATES = True
 #: Every status update also carries the tasks this agent knows are complete, so
 #: a "task complete" message lost to the network is corrected by the next
 #: heartbeat instead of never. Without it, under 10% loss in the simulator,
 #: drones stood by for minutes waiting on sectors a teammate had already
-#: finished - and a lapsed lease could send a drone to re-fly one. Off on the
-#: mock for now; `scenario_manager.for_simulator` switches it on.
-GOSSIP_COMPLETIONS = False
+#: finished - and a lapsed lease could send a drone to re-fly one.
+#: On everywhere since the pre-Phase-18 review: once idle drones waited in
+#: simulated time (Phase 17), the mock showed the same failure - a completion
+#: lost to 5% loss let a lease lapse and a teammate re-fly a finished sector.
+GOSSIP_COMPLETIONS = True
 
 #: How long a standing-by agent waits before giving up and landing anyway,
 #: as a multiple of the task lease. A holder that goes silent loses its lease
@@ -137,6 +142,12 @@ class PersistentAgent:
         self.vehicle_id = vehicle_id
         self.adapter = adapter
         self.executor = SkillExecutor(adapter)
+        # Heartbeats between the legs of a long skill. Without them a drone in
+        # a 70 s sweep is silent for 70 s, which forced liveness to be stamped
+        # at *receipt* - and that made a teammate that died mid-sweep look
+        # alive for another sweep's length (Phase 18 development run).
+        self.executor.on_leg = self._leg_heartbeat
+        self._last_heartbeat_at = None
         self.policy = policy or SearchAgentPolicy()
         # Phase 11: the deterministic runtime-safety guardian, with its own log
         # kept separate from the decision log so agent reliability and guardian
@@ -153,6 +164,8 @@ class PersistentAgent:
         self.sensor = sensor
         # Names the agent is briefed on - used only to ask "what don't I know?".
         self.roster = roster or []
+        if allocator is not None and hasattr(allocator, "roster"):
+            allocator.roster = [v for v in self.roster if v != vehicle_id]
         self.sector_ids = sector_ids or []
 
         # The agent's only channel to its teammates: send + receive_available.
@@ -306,7 +319,10 @@ class PersistentAgent:
             self.log.finish(rec, objective=objective.value)
             self._announce(MessageType.TASK_COMPLETE,
                            {"task_id": getattr(self.task, "task_id", None),
-                            "targets": list(b.detections)})
+                            "targets": list(b.detections),
+                            # landed and out of the mission: teammates stop
+                            # waiting for this drone's bids
+                            "finished": True})
             self.finished = True
             return False
 
@@ -317,7 +333,7 @@ class PersistentAgent:
             self.log.finish(rec, objective=objective.value,
                             outcome="bidding" if waiting else "no_work")
             if waiting:
-                if STAND_BY_FOR_TEAMMATES:
+                if STAND_BY_FOR_TEAMMATES and not self._simulated_clock():
                     # real time: let the bid window actually pass instead of
                     # re-deciding thousands of times while it does
                     import time as _time
@@ -715,7 +731,11 @@ class PersistentAgent:
         messages = self.link.receive_available(now=b.now)
         for m in messages:
             if self.health is not None:
-                self.health.note_heard(m.sender_id, b.now)
+                # Liveness is evidence of when the peer *spoke*, not when we
+                # read it. Safe now that busy drones heartbeat between legs.
+                spoke = getattr(m, "timestamp", None)
+                self.health.note_heard(
+                    m.sender_id, b.now if spoke is None else min(spoke, b.now))
             if self.comms is not None:
                 self.comms.observe(m, b.now)
             self._apply_message(b, m)
@@ -768,21 +788,42 @@ class PersistentAgent:
         for m in messages:
             self._message_log.mark_influential(m.message_id, self.vehicle_id)
 
-    def _announce(self, message_type, payload=None, recipients=None, ttl_s=30.0):
+    def _announce(self, message_type, payload=None, recipients=None, ttl_s=30.0,
+                  at=None, position=None):
         if self.link is None:
             return None
         b = self.belief
-        body = {"position": _to_list(b.position),
+        body = {"position": _to_list(position if position is not None else b.position),
                 "battery_frac": round(b.battery_frac, 3)}
         body.update(payload or {})
         return self.link.send(message_type, payload=body, recipients=recipients,
-                              now=b.now, mission_id=b.mission.mission_id,
-                              ttl_s=ttl_s)
+                              now=b.now if at is None else at,
+                              mission_id=b.mission.mission_id, ttl_s=ttl_s)
+
+    def _leg_heartbeat(self, vehicle_id):
+        """A heartbeat from inside a skill, stamped with the time it is sent,
+        at most once per heartbeat interval."""
+        if self.link is None or self.stopped:
+            return
+        now = self._now()
+        interval = getattr(self.health, "interval", None) or 8.0
+        if self._last_heartbeat_at is not None and now - self._last_heartbeat_at < interval:
+            return
+        self._last_heartbeat_at = now
+        try:
+            pos = self.adapter.get_position(self.vehicle_id)
+        except Exception:                                       # noqa: BLE001
+            pos = None
+        self._announce(MessageType.HEARTBEAT, {"status": "ok", "in_skill": True},
+                       ttl_s=90.0, at=now, position=pos)
 
     def _heartbeat(self):
         """Cheap liveness + state share, sent after each action."""
         b = self.belief
-        self._announce(MessageType.HEARTBEAT, {"status": "ok"}, ttl_s=90.0)
+        # stamped with the time the action ended, not when the step began
+        now = max(self._now(), b.now)
+        self._last_heartbeat_at = now
+        self._announce(MessageType.HEARTBEAT, {"status": "ok"}, ttl_s=90.0, at=now)
         status = {
             "status": "ok",
             "task": b.self_.current_task,
@@ -794,7 +835,7 @@ class PersistentAgent:
             status["completed"] = sorted(
                 t.task_id for t in self.allocator.board.all()
                 if t.status is TaskStatus.COMPLETE)
-        self._announce(MessageType.STATUS_UPDATE, status, ttl_s=180.0)
+        self._announce(MessageType.STATUS_UPDATE, status, ttl_s=180.0, at=now)
 
     # --- helpers ---
 

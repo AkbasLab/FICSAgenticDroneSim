@@ -280,8 +280,14 @@ def test_a_partition_divides_the_team():
 def test_delayed_claims_conflict_and_resolve():
     """High latency makes two drones claim the same sector before either hears
     the other. The rules then have to pick the same winner on both sides."""
+    # 30 s, half the presumed-lost threshold (4 x 15 s heartbeat). This used
+    # to be 60 s - exactly at the threshold - which only worked while liveness
+    # was stamped at receipt. Since Phase 18 it is stamped at send time, so a
+    # message 60 s old says a peer *was* alive 60 s ago and nothing more:
+    # every drone presumed every other lost and the mission became a free for
+    # all. Phase 17's calibration classes that latency as useless anyway.
     profile = dataclasses.replace(cc.condition("nominal"),
-                                  latency_ms_mean=60_000.0,
+                                  latency_ms_mean=30_000.0,
                                   latency_ms_jitter=0.0)
     agents, tasks, bus, _t = team(scenario(), network=profile)
     run_team(agents, tasks, bus)
@@ -397,22 +403,33 @@ def test_relay_takeover_is_only_reachable_at_component_level():
     check("the decision names the drone it is covering for",
           "Drone3" in decision.reason, decision.reason)
 
-    # (b) and in an assembled run the spare has already landed
+    # (b) and in an assembled run the spare has already landed. Which drone of
+    # the cut-off half becomes the relay depends on bidding order (it changed
+    # when allocation started waiting for every rostered teammate's bid), so it
+    # is found from a first run rather than assumed.
     sc3 = scenario(sectors=3)                 # four drones, three sectors
     profile = cc.partitioned(group_a=("Drone1", "Drone2"),
                              group_b=("Drone3", "Drone4"),
                              start_s=5.0, end_s=600.0, base_side="a")
     agents, tasks, bus, _t = team(sc3, network=profile)
-    run_team_with_faults(agents, tasks, bus, stop_at={"Drone3": 30.0})
+    run_team_with_faults(agents, tasks, bus)
+    relays = [a.vehicle_id for a in agents
+              if "relay" in [h[2] for h in a.roles.history]]
+    check("the relay role was held before the failure", relays, "nobody relayed")
+    if not relays:
+        return
+    relay_id = relays[0]
+    spare_id = next(v for v in ("Drone3", "Drone4") if v != relay_id)
 
-    spare = next(a for a in agents if a.vehicle_id == "Drone4")
-    relay = next(a for a in agents if a.vehicle_id == "Drone3")
-    check("the relay role was held before the failure",
-          "relay" in [h[2] for h in relay.roles.history],
-          f"{relay.roles.history}")
-    check("the spare drone has landed rather than standing by",
-          spare.report().landed, "the spare was still airborne - "
-          "the lifecycle may have changed, so revisit the gap")
+    agents, tasks, bus, _t = team(sc3, network=profile)
+    run_team_with_faults(agents, tasks, bus, stop_at={relay_id: 30.0})
+    spare = next(a for a in agents if a.vehicle_id == spare_id)
+    # Since stand-by became the default the spare waits on its pad rather than
+    # landing - but it is still not airborne, so it still cannot relay.
+    check("the spare drone is on the ground, not standing by in the air",
+          not spare.belief.airborne or spare.report().landed,
+          "the spare was still airborne - the lifecycle may have changed, so "
+          "revisit the gap")
     check("so no surviving drone takes over the relay role",
           "relay" not in [h[2] for h in spare.roles.history],
           f"{spare.roles.history} - takeover now happens, update this test")

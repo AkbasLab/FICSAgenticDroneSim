@@ -1,18 +1,18 @@
 {
  "fingerprint": {
-  "design": "19c7a53e339c3842",
+  "design": "1d6bc8796e5e976b",
   "metrics": "460d71eeb86f37b2",
-  "networks": "8476d922079b2d79",
+  "networks": "896214a3727d10e6",
   "prompts": "d4471bb58e1c9a4b",
   "scenarios": "f988835d0e907ea7",
   "seeds": "444ffdaa7ff0dd49",
-  "task_rules": "b2746690fd7414c8"
+  "task_rules": "4c91b3e8b2fce2ae"
  },
- "frozen_at": "2026-11-03T14:56:36",
+ "frozen_at": "2026-11-07T14:37:40",
  "groups": {
   "design": {
    "sources": {
-    "agentic_uav/experiments/architectures.py": "3e1e1ebabfbfa9aa",
+    "agentic_uav/experiments/architectures.py": "4b9242e09173417d",
     "agentic_uav/experiments/factorial.py": "29122b9c79c863d1",
     "agentic_uav/experiments/pilot.py": "044b05bc938b4958",
     "configs/experiments/exclusion_criteria.yaml": "1ebbb83d744f4d53",
@@ -36,7 +36,7 @@
    "final_profiles": {
     "final_moderate": "final_moderate: latency 150\u00b150ms, loss 10%",
     "final_nominal": "final_nominal: latency 150\u00b150ms, loss 0%",
-    "final_severe": "final_severe: latency 150\u00b150ms, loss 60%"
+    "final_severe": "final_severe: latency 150\u00b150ms, loss 50%"
    },
    "message_ttls": {
     "heartbeat": 90.0,
@@ -56,7 +56,7 @@
    "sources": {
     "agentic_uav/coordination/comms_conditions.py": "f8f7f79bd83ba5fb",
     "agentic_uav/coordination/network_model.py": "c60e334bb26480c1",
-    "configs/networks/final_profiles.yaml": "38c7290069deaf45"
+    "configs/networks/final_profiles.yaml": "79a09abc0876b242"
    }
   },
   "prompts": {
@@ -185,13 +185,13 @@
   },
   "task_rules": {
    "agent_waiting": {
-    "GOSSIP_COMPLETIONS": false,
+    "GOSSIP_COMPLETIONS": true,
     "GROUND_WAIT_S": 1.0,
     "IDLE_WAIT_S": 2.0,
     "MAX_GROUND_WAITS": 60,
     "MAX_IDLE_ROUNDS": 3,
     "MAX_IDLE_WAITS": 30,
-    "STAND_BY_FOR_TEAMMATES": false,
+    "STAND_BY_FOR_TEAMMATES": true,
     "STAND_BY_LEASES": 2.0
    },
    "bid_limits": {
@@ -219,13 +219,16 @@
     "LEG_TIMEOUT": 600.0
    },
    "sources": {
-    "agentic_uav/agents/persistent_agent.py": "4427ca332155b47e",
+    "agentic_uav/agents/persistent_agent.py": "1289b01c305233b7",
     "agentic_uav/agents/safety_guardian.py": "ab4187f6f9188cd4",
     "agentic_uav/agents/search_policy.py": "804f4de67be8d7dd",
+    "agentic_uav/control/skill_executor.py": "de240967167cc1aa",
     "agentic_uav/coordination/bidding.py": "78c6de5dd1fa421e",
-    "agentic_uav/coordination/role_manager.py": "010973714f2fb782",
+    "agentic_uav/coordination/fleet_controller.py": "923bda375a3722f7",
+    "agentic_uav/coordination/message_bus.py": "8330c1511b98f87b",
+    "agentic_uav/coordination/role_manager.py": "87a735a55ad8e9a9",
     "agentic_uav/coordination/roles.py": "d4379ef51838a476",
-    "agentic_uav/coordination/task_allocator.py": "8c2711917c528e3e",
+    "agentic_uav/coordination/task_allocator.py": "a9d486e1a7467f78",
     "agentic_uav/coordination/tasks.py": "39449c2441f0305e"
    }
   }
@@ -255,6 +258,32 @@
     "task_rules": "b2746690fd7414c8"
    },
    "reason": "Phase 18: common-random-number network streams (per_link, opt-in), the team-sized temporary partition (controller on the base side), the seeded scenario family and its splits, mid-skill faults, every-attempt LLM transcripts, and the predeclared exclusion criteria and factorial designs. Default (shared-stream) behaviour is unchanged, so Phase 10-17 results stay reproducible."
+  },
+  {
+   "at": "2026-11-07T14:37:34",
+   "fingerprint": {
+    "design": "1d6bc8796e5e976b",
+    "metrics": "460d71eeb86f37b2",
+    "networks": "896214a3727d10e6",
+    "prompts": "d4471bb58e1c9a4b",
+    "scenarios": "f988835d0e907ea7",
+    "seeds": "444ffdaa7ff0dd49",
+    "task_rules": "60a9fb768bca233d"
+   },
+   "reason": "Pre-run review before the first held-out Phase 18 run (no held-out result exists yet). Liveness: heartbeats between sweep legs and liveness stamped at send time; messages delivered on each recipient's own clock, flushed at run end. Allocation: wait for every rostered, not-finished teammate's bid (first-mover fix); landed drones excluded. Defaults: completion gossip and stand-by on everywhere. Roles: no relay without a live teammate. Centralized controller: repeats unacknowledged awards and the completion release, learns completions from status, heartbeats fill clock jumps. Re-calibrated: final_severe 60% -> 50% loss (contiguous usable band)."
+  },
+  {
+   "at": "2026-11-07T14:37:40",
+   "fingerprint": {
+    "design": "1d6bc8796e5e976b",
+    "metrics": "460d71eeb86f37b2",
+    "networks": "896214a3727d10e6",
+    "prompts": "d4471bb58e1c9a4b",
+    "scenarios": "f988835d0e907ea7",
+    "seeds": "444ffdaa7ff0dd49",
+    "task_rules": "4c91b3e8b2fce2ae"
+   },
+   "reason": "Pre-run review, part 2: the message bus, the centralized controller and the skill executor are now frozen too - each was changed in this review and each decides results."
   }
  ]
 }

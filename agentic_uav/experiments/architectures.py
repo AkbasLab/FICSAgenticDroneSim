@@ -470,6 +470,8 @@ def run(built: BuiltRun, max_total_steps=600, stop_at=None,
         if not alive:
             active.remove(agent)
 
+    if hasattr(built.bus, "flush"):
+        built.bus.flush()
     return _measure(built, total, stopped=stopped, tracks=_tracks(agents),
                     hit_step_cap=bool(active) and total >= max_total_steps,
                     step_cap=max_total_steps)
@@ -495,7 +497,8 @@ def _interrupt(agent, bus, fault, snap):
     kept = []
     for item in getattr(bus, "_pending", []):
         at, recipient, message, entry = item
-        if id(message) not in snap["pending"] and getattr(message, "sender_id", None) == vid:
+        if id(message) not in snap["pending"] and getattr(message, "sender_id", None) == vid \
+                and float(getattr(message, "timestamp", fault)) >= fault:
             entry.dropped = True
             entry.drop_reason = "sender_failed"
             continue

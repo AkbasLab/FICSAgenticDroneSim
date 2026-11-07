@@ -11,7 +11,7 @@ final_moderate:
   latency_ms_jitter: 50.0
   packet_loss_probability: 0.1
 final_severe:
-  calibrated_from: loss60
+  calibrated_from: loss50
   latency_ms_mean: 150.0
   latency_ms_jitter: 50.0
-  packet_loss_probability: 0.6
+  packet_loss_probability: 0.5

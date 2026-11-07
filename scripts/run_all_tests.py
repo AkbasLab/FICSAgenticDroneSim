@@ -25,7 +25,7 @@ SUITES = [
     ("6",   "Belief state + truth split", "tests/test_belief_state.py", 11),
     ("7",   "Message protocol",          "tests/test_messaging.py", 14),
     ("8",   "Decentralized allocation",  "tests/test_allocation.py", 22),
-    ("9",   "Roles + failure recovery",  "tests/test_roles_recovery.py", 22),
+    ("9",   "Roles + failure recovery",  "tests/test_roles_recovery.py", 23),
     ("10",  "Degraded comms model",      "tests/test_network.py", 30),
     ("11",  "Runtime-safety guardian",   "tests/test_guardian.py", 45),
     ("12",  "LLM agent policy",          "tests/test_llm_policy.py", 60),
@@ -37,8 +37,8 @@ SUITES = [
     ("B",   "Guardrail benchmark",       "tests/test_guardrail_benchmark.py", 100),
     ("3-12", "AirSim code path (fake sim)", "tests/test_airsim_path.py", 20),
     ("16",  "AirSim regression missions", "tests/test_airsim_regression.py", 5),
-    ("17",  "Pilots, calibration, freeze", "tests/test_pilot.py", 57),
-    ("18",  "Factorial experiment",       "tests/test_factorial.py", 57),
+    ("17",  "Pilots, calibration, freeze", "tests/test_pilot.py", 56),
+    ("18",  "Factorial experiment",       "tests/test_factorial.py", 74),
 ]
 
 DEMOS = [

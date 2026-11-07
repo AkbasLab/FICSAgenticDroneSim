@@ -224,15 +224,20 @@ def run_team_with_faults(agents, tasks, bus, stop_at=None,
         total += 1
 
         deadline = stop_at.get(agent.vehicle_id)
-        if deadline is not None and agent.belief.now >= deadline and not agent.stopped:
+        # adapter clock, not the belief clock, which lags a whole skill (the
+        # same correction architectures.run received in Phase 17)
+        from .architectures import _clock
+        if deadline is not None and _clock(agent) >= deadline and not agent.stopped:
             agent.stopped = True
-            stopped_at[agent.vehicle_id] = agent.belief.now
+            stopped_at[agent.vehicle_id] = _clock(agent)
             active.remove(agent)
             continue
 
         if not agent.step():
             active.remove(agent)
 
+    if hasattr(bus, "flush"):
+        bus.flush()
     report = TeamRunReport(
         agents={a.vehicle_id: a.report() for a in agents},
         message_stats=bus.stats(), message_log=bus.log, bus=bus,
@@ -299,6 +304,8 @@ def run_team_threaded(agents, tasks, bus, stop_at=None) -> TeamRunReport:
     for t in threads:
         t.join()
 
+    if hasattr(bus, "flush"):
+        bus.flush()
     report = TeamRunReport(
         agents={a.vehicle_id: a.report() for a in agents},
         message_stats=bus.stats(), message_log=bus.log, bus=bus,

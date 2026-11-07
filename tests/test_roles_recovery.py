@@ -77,8 +77,20 @@ def _belief(vehicle_id="Drone1", battery=1.0, base_reachable=True):
 
 def test_agent_becomes_relay_when_base_is_unreachable():
     rm = RoleManager("Drone1")
-    d = rm.decide(_belief(base_reachable=False), open_task_count=4)
+    b = _belief(base_reachable=False)
+    b.receive_teammate_report("Drone2", role="scout", sent_at=0.0)
+    d = rm.decide(b, open_task_count=4)
     assert d.role is Role.RELAY, d.reason
+
+
+def test_no_relay_for_nobody():
+    """A drone cut off from base with no teammate believed alive has nobody to
+    relay for, so it keeps searching. Before this rule the lone survivor of a
+    partitioned 2-drone team turned relay, dropped search and landed with the
+    mission three-quarters unsearched."""
+    rm = RoleManager("Drone1")
+    d = rm.decide(_belief(base_reachable=False), open_task_count=4)
+    assert d.role is Role.SCOUT, d.reason
 
 
 def test_agent_scouts_when_there_is_work():
@@ -305,6 +317,7 @@ if __name__ == "__main__":
          test_relay_stops_bidding_on_search_work),
         ("becomes relay when base unreachable",
          test_agent_becomes_relay_when_base_is_unreachable),
+        ("no relay for nobody", test_no_relay_for_nobody),
         ("scouts when there is work", test_agent_scouts_when_there_is_work),
         ("reserves when out of work", test_agent_reserves_when_out_of_work),
         ("low battery forces reserve", test_low_battery_forces_reserve_not_scout),

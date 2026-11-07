@@ -177,25 +177,76 @@ under `_excluded_attempts/` as evidence.
 A cell needs **18 of its 20** replications valid. `cells.csv` reports every
 cell against that, and the runner exits non-zero if any cell falls short.
 
-## What the development run already shows
+## The pre-run review (done before any held-out run)
 
-These come from 192 runs with the scripted planner, so they are not results.
-They are things to know before the real run:
+The development run (192 runs, scripted planner) was used to settle every open
+question before the first held-out run seals the configuration. No held-out
+result existed when any of this changed. Each change is recorded as a refreeze
+reason in `configs/frozen/freeze.json`, has a test, and has an entry in the
+defect-injection catalogue (now 30/30 caught).
 
-- **B at 2 drones always misses half the mission.** It starts with one sector
-  per drone and never renegotiates. The 2-drone B cells are failures by
-  construction, which is correct for B.
-- **A struggles under loss and partition.** Moderate loss: 619 ± 454 s.
-  Partition: 992 s and 42% success; drones cut off from the controller wait for
-  orders. This may be a real property of centralization, or it may need a look
-  at how A's drones behave when they lose the controller. Look at the timelines
-  before the held-out run.
-- **Detecting a teammate's death can be late.** Liveness is stamped when a
-  message is *read*, not when it was *sent*. A drone in a 70 s sweep reads its
-  inbox only at the end, so a heartbeat sent at 3 s counts as "heard at 76 s".
-  In one D run this made a dead teammate look alive until every survivor had
-  gone home, and its sector was never flown. Stamping liveness at send time
-  instead breaks five existing tests: live drones send no heartbeat during a
-  sweep, so they would look dead too. The proper fix is heartbeats between
-  sweep legs, which is the open item from Phase 9. It changes task rules, so it
-  needs a decision and a refreeze before the held-out run.
+**Late detection of a dead teammate: fixed in three parts.**
+
+1. **Heartbeats between sweep legs.** A drone in a 70 s sweep was silent for
+   70 s. It now sends one between legs, at most one per heartbeat interval.
+2. **Liveness is stamped when a message was sent, not when it was read.**
+   Before, a busy drone read its inbox only at the end of a sweep, so a dead
+   teammate looked alive for another sweep's length. This is safe now that busy
+   drones heartbeat.
+3. **Messages are delivered on the recipient's own clock.** Before, whichever
+   drone read its mail first, often one far ahead on the simulated clock,
+   pushed everyone's due mail into their inboxes. Teammates then read a
+   heartbeat stamped 163 s at 115 s. At the end of a run, mail still in flight
+   is flushed at its scheduled time, so messages sent to a drone that has
+   landed still count as delivered.
+
+**First-mover allocation: fixed.** A drone now waits for a bid from every
+rostered teammate it believes is alive, not just the ones it has heard from.
+At t = 0 nobody has been heard, so the first drone to step used to claim
+before anyone else had bid. Teammates that announce they have landed for good
+are no longer waited for, and their old bids no longer win.
+
+**The simulator-only behaviours: now on everywhere.** The development run
+showed the mock needed them too.
+
+- **Completion gossip.** A lost completion message let a lease lapse, and a
+  teammate re-flew a finished sector.
+- **Standing by for a teammate's unfinished work.** The heartbeat interval
+  stays 8 s on the mock and 30 s in CARLA-Air. Those are different clocks,
+  not different rules.
+
+**Relay for nobody: fixed.** A drone cut off from base takes the relay role
+only if a teammate it believes is alive needs relaying. Before, the lone
+survivor of a partitioned 2-drone team turned relay, stopped searching, and
+landed with three-quarters of the mission unsearched.
+
+**The centralized controller under partition: three bugs, not a property of
+centralization.**
+
+| bug | effect | fix |
+|---|---|---|
+| A completion lost to the partition was never re-learned | the controller believed sectors were still being flown | completions are now read from each drone's status |
+| The release was sent once | drones cut off when it went out never heard it | it repeats every heartbeat interval |
+| A lost award was never repeated | that sector went unsearched while the fleet held for orders | awards repeat until the drone's status shows it holds the task |
+
+Separately, the controller's heartbeats now cover every interval its clock
+jumps over. A drone still behind on the clock no longer sees a silent
+controller.
+
+Effect in the development run:
+
+- **A, partitioned:** 992 s and 42% success before; ~330 s and 100% after.
+- **C and D:** 100% mission success in every network and failure condition.
+- **B:** still fails whenever it has more sectors than drones, as it should.
+
+**Re-calibration.** With these fixes the network matters less to the
+decentralized agents, so `scripts/calibrate_comms.py` was rerun:
+
+- `final_nominal` and `final_moderate` are unchanged (0% and 10% loss).
+- `final_severe` moved from **60% to 50%** loss. At 60%, coordination now
+  saturates.
+- Selection now takes the harshest level of the **contiguous** usable band.
+  At 70% one sample passed again after 60% failed, which with ten seeds is
+  noise.
+
+**Still true:** B at 2 drones misses half the mission by construction.

@@ -52,7 +52,12 @@ RULE_SOURCES = {
                    "agentic_uav/coordination/role_manager.py",
                    "agentic_uav/agents/persistent_agent.py",
                    "agentic_uav/agents/search_policy.py",
-                   "agentic_uav/agents/safety_guardian.py"],
+                   "agentic_uav/agents/safety_guardian.py",
+                   # added in the pre-run review: how messages are delivered,
+                   # how the centralized controller behaves, how skills report
+                   "agentic_uav/coordination/message_bus.py",
+                   "agentic_uav/coordination/fleet_controller.py",
+                   "agentic_uav/control/skill_executor.py"],
     "metrics": ["agentic_uav/experiments/evaluation.py",
                 "agentic_uav/experiments/metrics.py"],
     "networks": ["agentic_uav/coordination/network_model.py",

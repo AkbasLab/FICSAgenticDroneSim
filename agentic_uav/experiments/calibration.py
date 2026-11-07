@@ -21,8 +21,9 @@ A level is rejected when it is:
                information, so no statistic could be computed from them
 
 Everything else is *usable*. The final moderate level is the mildest usable
-level on the loss axis and the final severe level the harshest, so the two are
-as far apart as the usable band allows while both stay meaningful.
+level on the loss axis and the final severe level the harshest level of the
+contiguous usable band above it, so the two are as far apart as the band
+allows while both stay meaningful.
 
 "Clean success" here means every sector searched, every surviving drone landed
 at home, and no sector flown twice.
@@ -218,8 +219,20 @@ def select(results: List[LevelResult]) -> Dict[str, Any]:
     """Final levels from the loss axis: nominal, the mildest usable level and
     the harshest usable level."""
     loss = sorted((r for r in results if r.level.axis == "loss"), key=lambda r: r.level.x)
-    usable = [r for r in loss if r.usable and r.level.x > 0]
     base = loss[0] if loss else None
+    # The usable band is contiguous: from the mildest usable level up to the
+    # first level that is rejected. A level that passes again further up (one
+    # that is usable at 70% after 60% was not) is noise in ten seeds, not a
+    # place where communication starts working again.
+    usable, started = [], False
+    for r in loss:
+        if r.level.x <= 0:
+            continue
+        if r.usable:
+            usable.append(r)
+            started = True
+        elif started:
+            break
     out = {"nominal": base, "moderate": usable[0] if usable else None,
            "severe": usable[-1] if len(usable) > 1 else None,
            "usable_band": [r.level.name for r in usable]}

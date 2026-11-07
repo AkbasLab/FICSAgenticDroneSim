@@ -227,7 +227,13 @@ class MessageBus:
     def _receive(self, vehicle_id, now) -> List[AgentMessage]:
       """Hand over the messages that have arrived for this agent by `now`."""
       with self._lock:
-        self._deliver_due(now)
+        # Only this recipient's messages, judged by this recipient's clock.
+        # Delivering everyone's due messages on whichever agent happened to
+        # read first let a drone far ahead on the simulated clock push its
+        # teammates' future mail into their inboxes early; they then read a
+        # heartbeat stamped t=163 s at t=115 s and recorded it as heard at
+        # 115 s (found while fixing liveness before the Phase 18 run).
+        self._deliver_due(now, recipient=vehicle_id)
         inbox = self._inboxes.get(vehicle_id, [])
         ready, keep = [], []
         for m in inbox:
@@ -237,20 +243,38 @@ class MessageBus:
         self._inboxes[vehicle_id] = keep
         return ready
 
-    def _deliver_due(self, now):
+    def _deliver_due(self, now, recipient=None):
+        """Move messages whose delivery time has come into their inboxes - for
+        one recipient if given (the normal case), otherwise for everyone."""
         still_pending = []
-        for (at, recipient, message, entry) in self._pending:
-            if at <= now:
+        for (at, rcpt, message, entry) in self._pending:
+            if at <= now and (recipient is None or rcpt == recipient):
                 if message.expired(now):
                     entry.dropped = True
                     entry.drop_reason = "expired_before_delivery"
                     continue
-                self._inboxes.setdefault(recipient, []).append(message)
+                self._inboxes.setdefault(rcpt, []).append(message)
                 entry.delivered = True
                 entry.actual_delivery_at = now
             else:
-                still_pending.append((at, recipient, message, entry))
+                still_pending.append((at, rcpt, message, entry))
         self._pending = still_pending
+
+    def flush(self):
+        """End of run: let everything still in flight arrive at its scheduled
+        time. A message to a drone that has finished or died still reaches its
+        radio; nobody reads it. Without this, delivery statistics counted every
+        message sent to a landed drone as lost once delivery became
+        per-recipient."""
+        with self._lock:
+            for (at, rcpt, message, entry) in self._pending:
+                if message.expired(at):
+                    entry.dropped = True
+                    entry.drop_reason = "expired_before_delivery"
+                    continue
+                entry.delivered = True
+                entry.actual_delivery_at = at
+            self._pending = []
 
     # --- simulation-side introspection (evaluator only, never an agent) ---
 

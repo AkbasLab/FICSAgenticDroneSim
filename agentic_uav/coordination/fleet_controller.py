@@ -82,6 +82,7 @@ class FleetRecord:
     position: Optional[Position3D] = None
     battery_frac: float = 1.0
     current_task: Optional[str] = None
+    reported_task: Optional[str] = None     # what the drone's last status says it holds
     searched: List[str] = field(default_factory=list)
     landed: bool = False
 
@@ -154,26 +155,75 @@ class FleetController:
         self._heartbeat(now)
         changed = self._reclaim_from_lost(now)
         changed = self._assign(now) or changed
+        self._repeat_unacknowledged_awards(now)
         return self._announce_completion(now) or changed
+
+    def _repeat_unacknowledged_awards(self, now):
+        """Resend an assignment the drone's own status does not show it holding.
+
+        An award is one message. Lost under 10% loss, the drone never learned
+        of its sector; it kept reporting in, so the controller never presumed
+        it lost and never reassigned the work, and that sector went unsearched
+        while the fleet held for orders until the step cap (Phase 18
+        development run, moderate loss). Repeated once per heartbeat interval
+        until the drone's status names the task."""
+        sent = getattr(self, "_award_sent_at", None)
+        if sent is None:
+            sent = self._award_sent_at = {}
+        for t in self.board.all():
+            if t.status not in (TaskStatus.CLAIMED, TaskStatus.IN_PROGRESS):
+                continue
+            rec = self.fleet.get(t.assigned_agent)
+            if rec is None or rec.landed or rec.reported_task == t.task_id:
+                continue
+            last = sent.setdefault(t.task_id, now)
+            if now - last < self.heartbeat_s:
+                continue
+            sent[t.task_id] = now
+            self.link.send(MessageType.TASK_AWARD,
+                           payload={"task": t.to_payload(),
+                                    "bid": t.winning_bid, "repeat": True},
+                           recipients=[t.assigned_agent], now=now,
+                           mission_id=self.mission_id)
 
     def _heartbeat(self, now):
         """Periodic "still here". Subject to loss like every other message, so a
         partitioned drone still stops hearing it and still falls back."""
         if now - self._last_heartbeat_s < self.heartbeat_s:
             return
-        self._last_heartbeat_s = now
-        self.link.send(MessageType.HEARTBEAT, payload={"status": "ok"},
-                       now=now, mission_id=self.mission_id)
+        # On the stepped simulator the controller's clock can jump a whole
+        # skill at once (it runs at the fleet's leading edge). Sending one
+        # heartbeat at the new time left a gap the length of that skill, and a
+        # drone still back in that gap saw a silent controller and fell back to
+        # self-assigning work. Heartbeats are emitted at every interval the
+        # clock passed over, each stamped with its own time.
+        if self._last_heartbeat_s < -1e8:
+            stamps = [now]
+        else:
+            stamps, t = [], self._last_heartbeat_s + self.heartbeat_s
+            while t <= now + 1e-9:
+                stamps.append(t)
+                t += self.heartbeat_s
+        for t in stamps:
+            self.link.send(MessageType.HEARTBEAT, payload={"status": "ok"},
+                           now=t, mission_id=self.mission_id)
+        self._last_heartbeat_s = stamps[-1]
 
     def _announce_completion(self, now):
         """Tell the fleet when there is nothing left, so drones come home
         instead of waiting out the fallback timer and self-assigning."""
-        if self._announced_complete:
-            return False
         if any(t.status is not TaskStatus.COMPLETE for t in self.board.all()):
             return False
+        # Repeated every heartbeat interval rather than sent once: a single
+        # announcement made while part of the fleet was partitioned off never
+        # reached it, and those drones held for orders until the step cap.
+        last = getattr(self, "_completion_sent_at", None)
+        if last is not None and now - last < self.heartbeat_s:
+            return False
+        self._completion_sent_at = now
+        if not self._announced_complete:
+            self._log(now, "all tasks complete; releasing the fleet")
         self._announced_complete = True
-        self._log(now, "all tasks complete; releasing the fleet")
         self.link.send(MessageType.MISSION_UPDATE,
                        payload={"status": "complete"}, now=now,
                        mission_id=self.mission_id)
@@ -194,6 +244,21 @@ class FleetController:
                 rec.battery_frac = float(p["battery_frac"])
             if p.get("searched"):
                 rec.searched = list(p["searched"])
+            if m.message_type is MessageType.STATUS_UPDATE:
+                rec.reported_task = p.get("task")
+            # A drone's status carries the sectors it has searched and the tasks
+            # it knows are complete. Using them repairs a TASK_COMPLETE that was
+            # lost on the way (Phase 18 development run: completions sent
+            # during a partition never arrived, so the controller believed two
+            # sectors were still being flown for the rest of the mission and
+            # never released the fleet).
+            done = set(p.get("completed") or []) | {
+                f"SEARCH_SECTOR_{sid}" for sid in (p.get("searched") or [])}
+            for tid in done:
+                t = self.board.get(tid)
+                if t is not None and t.status is not TaskStatus.COMPLETE:
+                    t.status = TaskStatus.COMPLETE
+                    self._log(now, f"{tid} complete (learned from {m.sender_id}'s status)")
             if m.message_type is MessageType.TASK_COMPLETE:
                 tid = p.get("task_id")
                 t = self.board.get(tid) if tid else None
@@ -296,12 +361,26 @@ class FleetController:
         busy = {t.assigned_agent for t in self.board.all()
                 if t.assigned_agent and t.status not in (TaskStatus.COMPLETE,
                                                          TaskStatus.FAILED)}
+        resend = getattr(self, "_release_sent_at", None)
+        if resend is None:
+            resend = self._release_sent_at = {}
         for rec in self.fleet.values():
             vid = rec.vehicle_id
-            if vid in busy or vid in just_assigned or vid in self._released:
+            if vid in busy or vid in just_assigned:
                 continue
-            self._released.add(vid)
-            self._log(now, f"no work for {vid}; released")
+            if vid in self._released:
+                # Repeated, not sent once. A single release lost to the network
+                # (or sent while the drone was cut off by a partition) left that
+                # drone holding position for orders until the step cap - every
+                # 4-drone partitioned run of A hovered to ~1,270 s and nobody
+                # landed (Phase 18 development run). Resent once per controller
+                # heartbeat interval until the drone stops reporting.
+                if now - resend.get(vid, -1e9) < self.heartbeat_s:
+                    continue
+            else:
+                self._released.add(vid)
+                self._log(now, f"no work for {vid}; released")
+            resend[vid] = now
             self.link.send(MessageType.MISSION_UPDATE,
                            payload={"status": "no_work"}, recipients=[vid],
                            now=now, mission_id=self.mission_id)

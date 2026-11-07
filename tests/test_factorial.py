@@ -429,6 +429,129 @@ def test_the_runner_end_to_end_and_resumes():
         shutil.rmtree(out, ignore_errors=True)
 
 
+# --- the pre-run review: fixes made before any held-out run ------------------
+
+def _dev_run(key, seed, net, fault=True, n=4):
+    from agentic_uav.experiments import architectures as arch
+    from agentic_uav.simulator.mock_adapter import MockVehicleAdapter
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    from run_llm_agents import sensible_model
+    from agentic_uav.agents.llm_backends import ScriptedBackend
+    sc = sf.generate("development", seed, n)
+    b = arch.build(key, sc, lambda v: MockVehicleAdapter(0.0), condition=net, seed=seed,
+                   backend=ScriptedBackend(default=sensible_model) if key == "D" else None,
+                   heartbeat_interval_s=8.0, crn=True)
+    r = arch.run(b, stop_at=sf.fault_of(sc) if fault else {}, interrupt_skills=True)
+    return b, r
+
+
+def test_busy_drones_heartbeat_inside_a_sweep():
+    b, r = _dev_run("C", 1, "final_nominal", fault=False)
+    sweeps = {}
+    for e in b.bus.log.entries:
+        if e.message_type == "heartbeat":
+            sweeps.setdefault(e.sender_id, set()).add(round(e.created_at, 1))
+    d1 = sorted(sweeps["Drone1"])
+    gaps = [b_ - a for a, b_ in zip(d1, d1[1:])]
+    check("a drone heartbeats while it sweeps - no 70 s silence",
+          max(gaps) < 20.0, f"largest gap {max(gaps):.1f}s")
+
+
+def test_a_teammate_that_dies_mid_sweep_is_noticed_in_time():
+    # the case that exposed it: D, seed 1, one failure at 63.5 s, nominal comms
+    b, r = _dev_run("D", 1, "final_nominal")
+    check("its sector is reclaimed and flown", r.coverage == 1.0, r.coverage)
+    b, r = _dev_run("C", 1, "final_nominal")
+    check("(and by the deterministic agents too)", r.coverage == 1.0, r.coverage)
+
+
+def test_messages_arrive_on_the_recipients_clock():
+    from agentic_uav.coordination.message_bus import MessageBus
+    bus = MessageBus(latency_s=0.5)
+    a, bb = bus.register("A"), bus.register("B")
+    a.send(MessageType.HEARTBEAT, payload={}, recipients=["B"], now=100.0)
+    a.receive_available(now=200.0)               # a teammate far ahead reads its mail
+    check("a message is not handed over before its delivery time",
+          bb.receive_available(now=50.0) == [])
+    got = bb.receive_available(now=101.0)
+    check("and is handed over once the recipient's clock reaches it", len(got) == 1)
+    entry = [e for e in bus.log.entries if e.recipient_id == "B"][0]
+    check("its delivery time is the recipient's", abs(entry.actual_delivery_at - 101.0) < 1e-9)
+    bus2 = MessageBus(latency_s=0.5)
+    x, _y = bus2.register("X"), bus2.register("Y")
+    x.send(MessageType.HEARTBEAT, payload={}, recipients=["Y"], now=10.0)
+    bus2.flush()
+    check("mail to a drone that never reads again still counts as delivered",
+          bus2.stats().get("delivered") == 1, bus2.stats())
+
+
+def test_allocation_waits_for_every_rostered_teammate():
+    b, r = _dev_run("C", 2, "final_nominal", fault=False)
+    for a in b.agents:
+        for t in a.allocator.board.all():
+            if t.assigned_agent == a.vehicle_id and t.status.value == "complete":
+                heard = set(a.allocator.bids.get(t.task_id, {})) | {a.vehicle_id}
+                if len(heard) < 2:
+                    check("a claim is made only after rival bids are in", False,
+                          (a.vehicle_id, t.task_id, heard))
+                    return
+    check("a claim is made only after rival bids are in", True)
+    # The rule itself, at the moment of claiming. At t = 0 nobody has been
+    # heard from, so counting only *heard* teammates let the first drone to
+    # step claim with nobody else's bid in.
+    from agentic_uav.agents.belief_state import BeliefState
+    from agentic_uav.coordination.bidding import Bid
+    from agentic_uav.coordination.task_allocator import TaskAllocator
+    from agentic_uav.coordination.tasks import MissionTask, TaskBoard, TaskType
+    from agentic_uav.core.models import Position3D
+
+    def fresh():
+        t = MissionTask("SEARCH_SECTOR_S1", TaskType.SEARCH_SECTOR,
+                        required_capabilities={"search"})
+        al = TaskAllocator("Drone1", TaskBoard([t]))
+        al.roster = ["Drone2", "Drone3"]
+        al.bids[t.task_id] = {"Drone1": Bid("Drone1", t.task_id, 0.1)}
+        al.bid_opened_at[t.task_id] = 0.0
+        b = BeliefState("Drone1", Position3D(0, 0, 0), battery_total_s=900.0)
+        return t, al, b
+    t, al, b = fresh()
+    b.observe(Position3D(0, 0, 0), 1.0)
+    check("nobody claims at t = 0 with rostered teammates' bids missing",
+          al._claim_best([t], b) is False)                  # noqa: SLF001
+    al.bids[t.task_id]["Drone2"] = Bid("Drone2", t.task_id, 0.5)
+    al.bids[t.task_id]["Drone3"] = Bid("Drone3", t.task_id, 0.6)
+    check("and claims once every rostered teammate has bid", al._claim_best([t], b) is True)  # noqa: SLF001
+    t, al, b = fresh()
+    al.finished_peers.update({"Drone2", "Drone3"})
+    b.observe(Position3D(0, 0, 0), 1.0)
+    check("teammates that have landed for good are not waited for",
+          al._claim_best([t], b) is True)                   # noqa: SLF001
+
+
+def test_the_defaults_after_review():
+    from agentic_uav.agents import persistent_agent as pa
+    check("completion gossip is on everywhere", pa.GOSSIP_COMPLETIONS is True)
+    check("standing by for a teammate's unfinished work is on everywhere",
+          pa.STAND_BY_FOR_TEAMMATES is True)
+
+
+def test_the_centralized_controller_recovers_lost_messages():
+    # moderate loss, seed 3: the award for S4 was lost and nobody ever flew it
+    b, r = _dev_run("A", 3, "final_moderate", fault=False)
+    check("a lost award is repeated until the drone holds it", r.coverage == 1.0, r.coverage)
+    check("and the fleet lands instead of holding to the step cap",
+          not r.hit_step_cap and r.all_landed, (r.hit_step_cap, r.all_landed))
+    b, r = _dev_run("A", 1, "final_partitioned", fault=False)
+    check("a completion lost to a partition is learned from the drone's status",
+          not r.hit_step_cap and r.all_landed, (r.hit_step_cap, r.all_landed))
+    hb = sorted(e.created_at for e in b.bus.log.entries
+                if e.sender_id == "FleetController" and e.message_type == "heartbeat"
+                and e.recipient_id == "Drone1")
+    gaps = [y - x for x, y in zip(hb, hb[1:])]
+    check("controller heartbeats have no gap longer than an interval",
+          max(gaps) <= 15.0 + 1e-6, f"largest gap {max(gaps):.1f}s")
+
+
 def main():
     for fn in [v for k, v in sorted(globals().items()) if k.startswith("test_")]:
         try:

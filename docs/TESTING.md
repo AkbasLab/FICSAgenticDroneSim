@@ -393,7 +393,7 @@ to a real invariant, applied to a throwaway copy of the repository; the
 simulator-free suites run against the damaged copy, and the defect counts as
 caught only if a suite fails.
 
-**25 of 25 caught**: eleven written up front, across allocation, communication, roles, belief and safety; five first found by flying in CARLA-Air; four found by the Phase 17 pilot timelines (see `docs/PILOT.md`); and five that would break the Phase 18 experiment's guarantees (see `docs/FACTORIAL.md`):
+**30 of 30 caught**: eleven written up front, across allocation, communication, roles, belief and safety; five first found by flying in CARLA-Air; four found by the Phase 17 pilot timelines (see `docs/PILOT.md`); and five that would break the Phase 18 experiment's guarantees (see `docs/FACTORIAL.md`):
 
 | Defect | Breaks |
 |---|---|
@@ -422,6 +422,11 @@ caught only if a suite fails.
 | `interrupted_sweep_still_credited` | a drone that fails mid-sweep is still credited with the sweep |
 | `exclusion_by_outcome` | a run with a poor outcome is excluded |
 | `held_out_seal_not_checked` | held-out runs continue after the prompt or rules changed |
+| `no_heartbeat_inside_a_sweep` | a sweeping drone is silent for 70 s, so liveness must be guessed |
+| `mail_delivered_on_the_readers_clock` | a drone far ahead on the clock pushes teammates' future mail into their inboxes |
+| `first_mover_allocation` | the first drone to step claims before anyone else has bid |
+| `relay_for_nobody` | a drone with no live teammate turns relay, stops searching and lands |
+| `controller_award_sent_once` | a lost assignment is never repeated; its sector is never searched |
 
 The last five were each invisible to the suite when they were found - they
 appeared only in real simulator runs - and each is now caught by the fake

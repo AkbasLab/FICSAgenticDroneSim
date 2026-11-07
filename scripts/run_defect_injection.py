@@ -264,6 +264,46 @@ DEFECTS = [
      "        if False:",
      "held-out runs continue after the prompt or rules were changed",
      ["tests/test_factorial.py"]),
+
+    # --- the pre-run review (before the first held-out run) -------------------
+    ("no_heartbeat_inside_a_sweep", "communication",
+     "agentic_uav/agents/persistent_agent.py",
+     "        self.executor.on_leg = self._leg_heartbeat\n",
+     "        self.executor.on_leg = None\n",
+     "a drone in a 70 s sweep is silent for 70 s, so liveness has to be "
+     "guessed from when messages are read",
+     ["tests/test_factorial.py"]),
+
+    ("mail_delivered_on_the_readers_clock", "communication",
+     "agentic_uav/coordination/message_bus.py",
+     "        self._deliver_due(now, recipient=vehicle_id)",
+     "        self._deliver_due(now)",
+     "a drone far ahead on the clock pushes its teammates' future mail into "
+     "their inboxes early",
+     ["tests/test_factorial.py"]),
+
+    ("first_mover_allocation", "coordination",
+     "agentic_uav/coordination/task_allocator.py",
+     "            if window_open and known_peers and not expected <= rivals_heard:",
+     "            if False:",
+     "the first drone to step claims before anyone else has bid",
+     ["tests/test_factorial.py"]),
+
+    ("relay_for_nobody", "roles",
+     "agentic_uav/coordination/role_manager.py",
+     "                and alive_peers:",
+     "                and True:",
+     "a drone with no live teammate takes the relay role, stops searching "
+     "and lands",
+     ["tests/test_roles_recovery.py"]),
+
+    ("controller_award_sent_once", "coordination",
+     "agentic_uav/coordination/fleet_controller.py",
+     "        self._repeat_unacknowledged_awards(now)\n",
+     "",
+     "a lost assignment is never repeated; its sector goes unsearched while "
+     "the fleet holds for orders",
+     ["tests/test_factorial.py"]),
 ]
 
 

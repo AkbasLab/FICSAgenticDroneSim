@@ -66,8 +66,14 @@ class RoleManager:
         comms = belief.communication
         battery_ok = belief.battery_frac > self.battery_floor
 
-        # 1. keeping the team connected outranks searching
-        if not comms.base_reachable and not self._someone_is_relaying(belief):
+        # 1. keeping the team connected outranks searching - but only if there
+        #    is a teammate still believed alive to keep connected. Found before
+        #    the Phase 18 held-out run: the lone survivor of a partitioned
+        #    2-drone team took the relay role, which drops search, and landed
+        #    with three-quarters of the mission unsearched - relaying for nobody.
+        alive_peers = [v for v in belief.team.teammates if self._alive(v)]
+        if not comms.base_reachable and not self._someone_is_relaying(belief) \
+                and alive_peers:
             return Role.RELAY, "base unreachable and no relay active"
 
         # 2. the relay went quiet - if we are spare, cover it

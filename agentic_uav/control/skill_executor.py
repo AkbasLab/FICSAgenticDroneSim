@@ -139,6 +139,10 @@ class SkillExecutor:
                                               leg_timeout)
             last = out
             reached = out.final_position.distance_to(wp) <= command.tolerance_m
+            # Phase 18 pre-run fix: let the agent say it is alive between legs
+            # of a long skill (see PersistentAgent._leg_heartbeat)
+            if getattr(self, "on_leg", None) is not None:
+                self.on_leg(vehicle_id)
             if PROGRESS is not None:
                 took = self._now(vehicle_id) - leg_started
                 state = "reached" if reached else (

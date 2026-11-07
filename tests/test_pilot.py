@@ -338,12 +338,19 @@ def test_defect_1_a_dead_drones_bid_does_not_block_the_survivor():
 
 
 def test_defect_2_a_fault_lands_on_the_adapter_clock():
-    b, r = _team("D", 2, "nominal")
-    d2 = next(a for a in b.agents if a.vehicle_id == "Drone2")
-    swept = [x for x in d2.belief.local_map.searched_regions if x.by_vehicle == "Drone2"]
-    check("a drone stopped at t = 1 s sweeps nothing", not swept,
-          [x.region_id for x in swept])
-    check("so nothing is duplicated", r.duplicated_sectors == 0, r.duplicated_sectors)
+    # Stopped at 10 s, after take-off, while flying to its sector. Its belief
+    # clock still reads the start of that leg (~5 s), so a kill judged on the
+    # belief clock lets it fly one more skill - the whole 70 s sweep.
+    # (C only: the agentic policy's search skill includes the transit, so for
+    # D a kill at 10 s is already inside the sweep - that case is the
+    # mid-skill interruption tested in test_factorial.py.)
+    for key in ("C",):
+        b, r = _team(key, 4, "nominal", faults={"Drone2": 10.0})
+        d2 = next(a for a in b.agents if a.vehicle_id == "Drone2")
+        swept = [x for x in d2.belief.local_map.searched_regions
+                 if x.by_vehicle == "Drone2"]
+        check(f"{key}: a drone stopped at t = 10 s, on its way out, sweeps nothing",
+              not swept, [x.region_id for x in swept])
 
 
 def test_defect_3_a_grounded_drone_waits_for_its_bids():

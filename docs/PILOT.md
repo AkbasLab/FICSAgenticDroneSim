@@ -127,6 +127,12 @@ twice.
 
 ![calibration](figures/comms_calibration.png)
 
+> **Updated before the Phase 18 held-out run:** the calibration was rerun after
+> the pre-run review fixed liveness, allocation and the centralized controller
+> (see `docs/FACTORIAL.md`). `final_severe` is now **50%** loss - at 60%
+> coordination now saturates - and the usable band is taken as contiguous. The
+> table below is the Phase 17 calibration as it stood.
+
 ### The final levels, and why each is meaningful
 
 | level | profile | why |

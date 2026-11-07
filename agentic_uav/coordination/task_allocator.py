@@ -83,6 +83,11 @@ class TaskAllocator:
         # highest task version this agent has ever seen, per task - feeds the
         # Lamport bump so our claims are ordered against everyone else's
         self.seen_version: Dict[str, int] = {}
+        # The teammates the mission says exist (set by the agent from its
+        # briefing). Used to know how many rival bids to wait for.
+        self.roster: List[str] = []
+        # teammates that announced they have landed for good
+        self.finished_peers = set()
 
     # --- helpers ---
 
@@ -220,6 +225,8 @@ class TaskAllocator:
                 changed = True
 
         elif t is MessageType.TASK_COMPLETE:
+            if p.get("finished"):
+                self.finished_peers.add(msg.sender_id)
             tid = p.get("task_id")
             local = self.board.get(tid)
             if local is not None and local.status is not TaskStatus.COMPLETE:
@@ -370,8 +377,18 @@ class TaskAllocator:
             # are the only drone that could possibly take it
             window_open = (now - self.bid_opened_at.get(t.task_id, now)
                            < self.bid_window_s)
-            known_peers = len(belief.team.teammates)
-            if window_open and known_peers and len(heard) <= known_peers:
+            # Wait for a bid from every teammate believed alive, not only the
+            # ones heard from so far. Counting only the heard ones let the first
+            # drone to step claim before anyone else had bid - at t = 0 nobody
+            # has been heard, so allocation went in step order rather than by
+            # cost (the first-mover problem found while recording Phase 8).
+            lost = (set(self.health.failed_peers()) if self.health else set()) \
+                | self.finished_peers
+            expected = ({p for p in self.roster if p != self.vehicle_id} - lost
+                        if self.roster else set(belief.team.teammates))
+            known_peers = len(expected)
+            rivals_heard = {v for v in heard if v != self.vehicle_id}
+            if window_open and known_peers and not expected <= rivals_heard:
                 continue
 
             # A bid from a drone that has since taken on work is stale. Leaving
@@ -385,7 +402,8 @@ class TaskAllocator:
             # pilot: a drone killed one second in had bid on a sector a hair
             # better than the survivor, was never "busy" again, and so out-bid
             # it for the rest of the mission - the sector was never flown.
-            lost = set(self.health.failed_peers()) if self.health else set()
+            lost = (set(self.health.failed_peers()) if self.health else set()) \
+                | self.finished_peers
             live = [b for b in heard.values()
                     if b.vehicle_id == self.vehicle_id
                     or (b.vehicle_id not in lost

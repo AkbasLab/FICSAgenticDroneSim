@@ -835,6 +835,10 @@ python scripts/run_factorial.py configs/experiments/factorial_main.yaml         
   build recorded. Gemini is a secondary design on the same seeds.
 - **Every model decision saved**, every attempt included: input, raw and parsed
   output, validation result, action, fallback.
+- **Pre-run review:** before any held-out run, the development run was used to fix
+  late failure detection, first-mover allocation, a relay rule that left a lone
+  drone idle, and three message-loss bugs in the centralized controller; stand-by
+  and completion gossip became defaults; severe was re-calibrated to 50% loss.
 - **Exclusions are technical and predeclared:** infrastructure error,
   incomplete logs, configuration mismatch, model unreachable. A test makes every
   outcome absurd and checks no verdict changes. An excluded run is retried on
@@ -844,7 +848,7 @@ python scripts/run_factorial.py configs/experiments/factorial_main.yaml         
 
 ## Testing
 
-692 tests and 20 demos (`python scripts/run_all_tests.py`), none of which need a
+709 tests and 20 demos (`python scripts/run_all_tests.py`), none of which need a
 simulator, GPU or API key.
 
 | Suite | Tests | Covers |
@@ -869,7 +873,7 @@ simulator, GPU or API key.
 | `test_airsim_regression.py` | 5 | the five 16.3 regression missions (fake simulator, or `--real`) |
 | `test_guardrail_benchmark.py` | 100 | TRA / GBR / MVL harness across models |
 | `test_pilot.py` | 57 | pilot matrix, timelines, log audit, calibration rules, freeze, the four pilot defects |
-| `test_factorial.py` | 57 | common random numbers, splits and the held-out seal, saved decisions, technical-only exclusions |
+| `test_factorial.py` | 74 | common random numbers, splits and the held-out seal, saved decisions, technical-only exclusions |
 
 ---
 
