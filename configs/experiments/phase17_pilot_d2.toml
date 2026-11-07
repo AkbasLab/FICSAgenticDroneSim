@@ -1,0 +1,30 @@
+# Phase 17's pilot matrix, D re-flown after the two defects the first pilot's timelines found (AUV-16 17.2):
+# start_search searched from where the drone was, across a silent teammate's keep-out (fixed: it goes in by the
+# rule team's route); and a drone sent home after "stand by" landed into a loop of holds on the ground (fixed: going
+# home is not waiting). C is not re-flown: neither fix is on its path, and its 40 runs reproduce exactly on the
+# fixed code (phases/phase-17-pilot-experiments/README.md). The same cells, levels and seeds as phase17_pilot.toml;
+# D decides with the pinned llama3.3:70b (configs/llm/default.toml), on a Vega GPU node against Ollama on the node.
+
+[batch]
+id = "phase17-pilot-d2"
+description = "D (live 70B) re-flown on the fixed code: 2 and 4 drones, nominal and the calibrated degraded level, no failure and Drone1 stopped, seeds 1-5"
+
+[[experiment]]
+id = "pair"
+architecture = "D"
+scenario = "search_pair_001"
+team_size = 2
+network = ["nominal", "moderate"]
+failure = ["none", "drone1-at-60s"]
+seed = "1-5"
+planner = "llm:default"
+
+[[experiment]]
+id = "four"
+architecture = "D"
+scenario = "search_relay_001"
+team_size = 4
+network = ["nominal", "severe"]
+failure = ["none", "drone1-at-60s"]
+seed = "1-5"
+planner = "llm:default"

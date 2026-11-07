@@ -13,7 +13,7 @@ Python or AirSim calls." These are AUV-12's fifteen, and one more:
               contract-net), so Architectures C and D differ only in who chooses:
                 continue_task   carry on with what is flying (added: most events change nothing)
                 accept_task     go and do the task the protocol has given this drone
-                start_search    search the task's sector now
+                start_search    search the task's sector now (reached first, round keep-outs, as the rule does)
                 go_to_waypoint  target "task" | "home" | "relay_point" -- symbolic, never coordinates
                 act_as_relay    hold half way between the base and an unreachable teammate
                 return_home     give the task back and fly home
@@ -223,7 +223,10 @@ def execute(tool: str, params: dict[str, Any], policy: Any, belief: BeliefState,
     if tool == "start_search":
         policy._take(belief)
         policy.waiting = False
-        return policy._search(belief, reason)
+        # In by the rule team's own way: the search from here when the way to its first lane is clear, else a
+        # route round what it avoids first (Phase 17 pilots, 2026-11-06: searched from where the drone was, the
+        # first leg crossed a silent teammate's keep-out, the guardian refused it, and the drone went home).
+        return policy._to_sector(belief, reason)
     if tool in ("return_home",) or (tool == "go_to_waypoint" and params["target"] == "home"):
         policy.gave_up = reason
         return policy._giving_back(belief, lambda: policy._home(belief, reason))

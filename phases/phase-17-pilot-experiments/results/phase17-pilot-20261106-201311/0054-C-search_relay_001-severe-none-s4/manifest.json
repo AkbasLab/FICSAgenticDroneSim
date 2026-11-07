@@ -1,0 +1,87 @@
+{
+ "code": {
+  "agent": "open_loop_agent.py",
+  "agent_sha256": "28d05b1f1599ced5",
+  "agentic_uav_sha256": "346be7c66d1f1a62",
+  "commit": "cfb4d0e",
+  "dirty": false,
+  "ollama_endpoint": "http://127.0.0.1:11434",
+  "python": "3.11.7"
+ },
+ "config": {
+  "architecture": "C",
+  "experiment_id": "four",
+  "failure": "none",
+  "index": 54,
+  "network": "severe",
+  "planner": "none",
+  "run_id": "0054-C-search_relay_001-severe-none-s4",
+  "scenario": "search_relay_001",
+  "seed": 4,
+  "team_size": 4
+ },
+ "error": null,
+ "event_log_version": 2,
+ "files": {
+  "allocation": {
+   "path": "configs/allocation/default.toml",
+   "sha256": "d2495f2cc39c6687"
+  },
+  "architecture": {
+   "path": "configs/architectures/C.toml",
+   "sha256": "506080f0ebde68af"
+  },
+  "failure": {
+   "path": "configs/failures/none.toml",
+   "sha256": "018491d84c0b41ab"
+  },
+  "guardian": {
+   "path": "configs/guardian/default.toml",
+   "sha256": "7fddc9efd53362fc"
+  },
+  "keep_out": {
+   "path": "configs/keepout/default.toml",
+   "sha256": "dc9d9368b6a732b2"
+  },
+  "network": {
+   "path": "configs/network/severe.toml",
+   "sha256": "4a4570a85ffacd39"
+  },
+  "recovery": {
+   "path": "configs/recovery/default.toml",
+   "sha256": "f75e8c1f45ac0b3f"
+  },
+  "scenario": {
+   "path": "configs/scenarios/search_relay_001.toml",
+   "sha256": "aafbb0738a4874a5"
+  }
+ },
+ "files_written": [
+  "events.jsonl.gz",
+  "report.json",
+  "records.json.gz",
+  "trajectories.json.gz",
+  "manifest.json"
+ ],
+ "finished": "2026-11-06T20:46:25",
+ "model": {
+  "planner": "none"
+ },
+ "outcome": {
+  "completion_s": 539.2,
+  "events": 10713,
+  "met": true,
+  "success": true
+ },
+ "run_id": "0054-C-search_relay_001-severe-none-s4",
+ "software": {
+  "airsim": null,
+  "numpy": "2.2.6",
+  "ollama": "0.6.2",
+  "platform": "Linux-4.18.0-553.134.1.el8_10.x86_64-x86_64-with-glibc2.28",
+  "python": "3.11.7"
+ },
+ "started": "2026-11-06T20:46:20",
+ "status": "completed",
+ "wall_s": 4.567
+}

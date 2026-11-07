@@ -235,6 +235,11 @@ class TeamPolicy(RulePolicy):
     def _giving_back(self, belief: BeliefState, react) -> Decision:
         """Phase 5's reaction; and if that sends it home with a task in hand, give the task back."""
         decision = react()
+        if self.stage in (Stage.GOING_HOME, Stage.LANDING, Stage.DONE):
+            # Going home is not waiting for a task: left set (a "stand by" before), the landing's success took it
+            # back to "wait for a task", a hold on the ground that fails, a landing retried -- every half second
+            # to the deadline (Phase 17 pilot run 0027, 2026-11-06).
+            self.waiting = False
         if self.stage in (Stage.GOING_HOME, Stage.LANDING, Stage.DONE) and self.net.holding is not None:
             self._outbox += self.net.release(belief.self_.updated_at, self.gave_up or "going home")
             self.task_id = None
