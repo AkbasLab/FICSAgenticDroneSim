@@ -1,0 +1,21 @@
+# What a batch needs on a Vega GPU node (Phase 17): the mock flights, the metrics, and the pinned model through
+# Ollama's client. Python 3.10. No simulator, no airsim, no OpenCV. Pins as requirements.txt.
+#
+#     pip install -r requirements-vega.txt          # on the LOGIN node: compute nodes have no internet
+
+numpy==2.2.6
+tomli==2.4.1; python_version < "3.11"
+ollama==0.6.2
+httpx==0.28.1
+httpcore==1.0.9
+h11==0.16.0
+anyio==4.15.1
+sniffio==1.3.1
+idna==3.19
+certifi==2026.7.22
+pydantic==2.13.5
+pydantic_core==2.46.5
+annotated-types==0.8.0
+typing_extensions==4.16.0
+typing-inspection==0.4.4
+exceptiongroup==1.3.1

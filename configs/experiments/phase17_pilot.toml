@@ -1,0 +1,28 @@
+# Phase 17's pilot matrix (AUV-16 17.1): C and D, two team sizes, nominal and each size's degraded level as chosen by
+# docs/CONDITIONS.md's pre-registered rule (calibration 2026-11-06: 2 drones moderate, 4 drones severe), no failure
+# and Drone1 stopped, development seeds 1-5. D decides with the pinned llama3.3:70b (configs/llm/default.toml), run
+# on a Vega GPU node against Ollama on the same node. Pilots debug the methodology; they are not results.
+
+[batch]
+id = "phase17-pilot"
+description = "C and D (live 70B), 2 and 4 drones, nominal and the calibrated degraded level, no failure and Drone1 stopped, seeds 1-5"
+
+[[experiment]]
+id = "pair"
+architecture = ["C", "D"]
+scenario = "search_pair_001"
+team_size = 2
+network = ["nominal", "moderate"]
+failure = ["none", "drone1-at-60s"]
+seed = "1-5"
+planner = "llm:default"
+
+[[experiment]]
+id = "four"
+architecture = ["C", "D"]
+scenario = "search_relay_001"
+team_size = 4
+network = ["nominal", "severe"]
+failure = ["none", "drone1-at-60s"]
+seed = "1-5"
+planner = "llm:default"

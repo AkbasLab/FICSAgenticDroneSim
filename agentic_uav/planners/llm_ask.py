@@ -7,7 +7,8 @@
 
 Each is a callable taking the policy's request -- {"messages": [...], "meta": {...}} -- and returning
 the reply's text, or raising (a timeout, an unreachable server, a reply not on record). `meta` is never
-sent to a model: it carries the rule's own answer, for the echo alone.
+sent to a model: it carries the rule's own answer, for the echo alone -- and, back from a real model,
+the tokens the server counted for the call (`meta["tokens"]`, prompt + reply; Phase 17, metric D12).
 
 ONE CALL AT A TIME (12.7). The four drones' agents ask from their own threads. A server that batches
 concurrent requests can give a prompt a different answer than it gives it alone, so the calls are
@@ -52,6 +53,9 @@ class OllamaAsk:
         with self._lock:
             response = self.client.chat(model=self.model, messages=request["messages"], format=reply_schema(),
                                         options=self.options)
+        counted = [response["prompt_eval_count"], response["eval_count"]]
+        if any(n is not None for n in counted):
+            request.setdefault("meta", {})["tokens"] = sum(n for n in counted if n is not None)
         return response["message"]["content"]
 
 

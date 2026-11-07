@@ -47,6 +47,30 @@ this version; a sweep over loss rates would be a version 2 of this file, dated, 
 
 **Phase 18's communication factor** takes every level found meaningful here, plus `nominal`.
 
+## Results — 2026-11-06 (the rule above, version 1, unchanged)
+
+The sweep: 840 runs (`configs/experiments/phase17_calibration.toml`), at commit `e44eaaf`; the rule's file sha256 `363c0cbffd3a3dac`; the record `phases/phase-17-pilot-experiments/results/calibration-20261106-193951.json`.
+
+| Team | Level | Not easy | Not hard | Distinguishable | Useful (delivery) | Meaningful |
+|---|---|---|---|---|---|---|
+| 2 | moderate | yes | yes | yes | yes (67.5 %) | yes |
+| 2 | severe | yes | yes | yes | **no** (49.5 %) | **no** |
+| 4 | moderate | yes | yes | yes | yes (75.2 %) | yes |
+| 4 | partitioned | yes | yes | yes | yes (70.3 %) | yes |
+| 4 | severe | yes | yes | yes | yes (56.9 %) | yes |
+
+**Chosen.**
+* The pilots' degraded level: **2 drones `moderate`**, **4 drones `severe`**.
+* Phase 18's communication levels: 2 drones `nominal`, `moderate`; 4 drones `nominal`, `moderate`, `partitioned`, `severe`.
+
+**Why each is meaningful.** Every chosen level separates the architectures when a drone is lost: independent
+agents (B) lose the mission in every seed while the central controller (A) and the decentralized team (C) recover
+it, at a cost in time that grows with the degradation (4 drones, Drone1 stopped, median: A 308 s nominal, 428 s
+severe; C 309 s, 494 s); and
+each still delivers most messages (57–75 %). **Why 2-drone `severe` is not:** it delivers 49.5 % of messages,
+under the rule's 50 % line for communication still being useful — by half a point, and the rule, fixed before the
+sweep, stands. The separation so far comes from B; whether C and D separate is the pilots' question.
+
 ## Versions
 
 | Version | Date | What |

@@ -92,16 +92,20 @@ class LLMPolicy:
         context = build_context(belief, self.inner, events, self.memory)    # empty when memory is off: see below
         messages = render(context)
         replies, problems, latencies, tool, params, parsed = [], [], [], None, {}, {}
+        tokens: list[int] = []
         for attempt in range(CORRECTIONS + 1):
             started = self._clock()
+            request = {"messages": messages, "meta": {"rule_reply": reply_for(*rule_choice),
+                                                      "drone": belief.self_.vehicle_id}}
             try:
-                raw = self.ask({"messages": messages, "meta": {"rule_reply": reply_for(*rule_choice),
-                                                               "drone": belief.self_.vehicle_id}})
+                raw = self.ask(request)
             except Exception as exc:          # no reply at all: a timeout, the server gone -- recorded, then fallback
                 latencies.append(round(self._clock() - started, 3))
                 problems = [f"no reply: {exc!r}"]
                 break
             latencies.append(round(self._clock() - started, 3))
+            if isinstance(request["meta"].get("tokens"), int):       # counted by a real server (D12)
+                tokens.append(request["meta"]["tokens"])
             replies.append(raw)
             tool, params, problems = parse_reply(raw)
             if not problems and tool is not None:
@@ -116,7 +120,7 @@ class LLMPolicy:
         if problems:
             decision = self.inner.decide(belief, events)
             self._record(now, "fallback", events, decision, context, messages, replies, latencies, None, {},
-                         rule_choice, problems)
+                         rule_choice, problems, tokens=tokens)
             return decision
         reason = f"LLM {parsed.get('reason_code', '')}".strip()
         if (tool, params) == rule_choice or (tool == rule_choice[0] and _same(params, rule_choice[1])):
@@ -126,7 +130,7 @@ class LLMPolicy:
             self._after(belief)
         kind = "llm" if len(replies) == 1 else "corrected"
         self._record(now, kind, events, decision, context, messages, replies, latencies, tool, params, rule_choice,
-                     [], parsed)
+                     [], parsed, tokens=tokens)
         if self.remember:
             self.memory.append({"at": now, "tool": tool, "parameters": params,
                                 "reason_code": parsed.get("reason_code", "")})
@@ -165,7 +169,8 @@ class LLMPolicy:
                 context: dict[str, Any] | None = None, messages: list[dict[str, str]] | None = None,
                 replies: list[str] | None = None, latencies: list[float] | None = None, tool: str | None = None,
                 params: dict[str, Any] | None = None, rule_choice: tuple[str, dict[str, Any]] | None = None,
-                problems: list[str] | None = None, parsed: dict[str, Any] | None = None) -> None:
+                problems: list[str] | None = None, parsed: dict[str, Any] | None = None,
+                tokens: list[int] | None = None) -> None:
         self._last = (now, kind)
         entry: dict[str, Any] = {"at": round(now, 3), "kind": kind, "events": [e.trigger.value for e in events],
                                  "decision": decision.as_json()}
@@ -176,6 +181,8 @@ class LLMPolicy:
                          agreed=tool is not None and rule_choice is not None and tool == rule_choice[0]
                          and _same(params or {}, rule_choice[1]),
                          problems=problems or [])
+            if tokens:                         # only where a server counted them: echo and replay records unchanged
+                entry["tokens"] = sum(tokens)
             if parsed:
                 entry.update(assessment=parsed.get("situation_assessment"), confidence=parsed.get("confidence"),
                              reason_code=parsed.get("reason_code"), outgoing_messages=parsed.get("outgoing_messages"))

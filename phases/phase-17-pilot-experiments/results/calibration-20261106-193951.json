@@ -1,0 +1,587 @@
+{
+ "t": "2026-11-06T19:33:25",
+ "batch_dir": "D:\\Research\\Adi-MLOpsGit\\Drone Agentic AI\\runs\\experiments\\phase17-calibration-20261106-193326",
+ "runs": 840,
+ "rule_sha256": "363c0cbffd3a3dac",
+ "metrics_sha256": "d722ba2b3379f179c9a2a8e500a49be21e66a7a7cc231f0f5e058d4d56f7663c",
+ "code": {
+  "commit": "e44eaaf",
+  "dirty": false,
+  "agent": "open_loop_agent.py",
+  "agent_sha256": "28d05b1f1599ced5",
+  "agentic_uav_sha256": "585e507edd2a66ea",
+  "python": "3.10.21",
+  "ollama_endpoint": "http://127.0.0.1:11434"
+ },
+ "version": 1,
+ "levels": {
+  "2": {
+   "moderate": {
+    "meaningful": true,
+    "checks": {
+     "not_trivially_easy": true,
+     "not_trivially_hard": true,
+     "distinguishable": true,
+     "communication_useful": true
+    },
+    "delivery_rate": 0.6751,
+    "why_not_easy": [
+     "B, drone1-at-60s: success 0.00"
+    ],
+    "signal": [
+     "drone1-at-60s, A vs B: success 1.00 vs 0.00",
+     "drone1-at-60s, A vs B: median 285.2 vs 900.0 s, interquartile ranges apart",
+     "drone1-at-60s, A vs B: retention 1.000 vs 0.779",
+     "drone1-at-60s, B vs C: success 0.00 vs 1.00",
+     "drone1-at-60s, B vs C: median 900.0 vs 283.7 s, interquartile ranges apart",
+     "drone1-at-60s, B vs C: retention 0.779 vs 1.000"
+    ]
+   },
+   "severe": {
+    "meaningful": false,
+    "checks": {
+     "not_trivially_easy": true,
+     "not_trivially_hard": true,
+     "distinguishable": true,
+     "communication_useful": false
+    },
+    "delivery_rate": 0.4954,
+    "why_not_easy": [
+     "A, drone1-at-60s: median 413.5 s against 284.7 s nominal",
+     "B, drone1-at-60s: success 0.00",
+     "A, none: median 279.9 s against 161.1 s nominal",
+     "C, none: median 283.9 s against 160.6 s nominal"
+    ],
+    "signal": [
+     "drone1-at-60s, A vs B: success 0.95 vs 0.00",
+     "drone1-at-60s, A vs B: median 413.5 vs 900.0 s, interquartile ranges apart",
+     "drone1-at-60s, A vs B: retention 0.970 vs 0.779",
+     "drone1-at-60s, A vs C: median 413.5 vs 287.2 s, interquartile ranges apart",
+     "drone1-at-60s, B vs C: success 0.00 vs 1.00",
+     "drone1-at-60s, B vs C: median 900.0 vs 287.2 s, interquartile ranges apart",
+     "drone1-at-60s, B vs C: retention 0.779 vs 1.000",
+     "none, A vs B: median 279.9 vs 155.5 s, interquartile ranges apart",
+     "none, B vs C: median 155.5 vs 283.9 s, interquartile ranges apart"
+    ]
+   }
+  },
+  "4": {
+   "moderate": {
+    "meaningful": true,
+    "checks": {
+     "not_trivially_easy": true,
+     "not_trivially_hard": true,
+     "distinguishable": true,
+     "communication_useful": true
+    },
+    "delivery_rate": 0.7524,
+    "why_not_easy": [
+     "B, drone1-at-60s: success 0.00",
+     "C, none: median 307.7 s against 194.1 s nominal"
+    ],
+    "signal": [
+     "drone1-at-60s, A vs B: success 1.00 vs 0.00",
+     "drone1-at-60s, A vs B: median 309.2 vs 900.0 s, interquartile ranges apart",
+     "drone1-at-60s, A vs B: retention 0.999 vs 0.916",
+     "drone1-at-60s, B vs C: success 0.00 vs 1.00",
+     "drone1-at-60s, B vs C: median 900.0 vs 311.9 s, interquartile ranges apart",
+     "drone1-at-60s, B vs C: retention 0.916 vs 0.998",
+     "none, B vs C: median 188.0 vs 307.7 s, interquartile ranges apart"
+    ]
+   },
+   "partitioned": {
+    "meaningful": true,
+    "checks": {
+     "not_trivially_easy": true,
+     "not_trivially_hard": true,
+     "distinguishable": true,
+     "communication_useful": true
+    },
+    "delivery_rate": 0.703,
+    "why_not_easy": [
+     "A, drone1-at-60s: median 424.6 s against 308.2 s nominal",
+     "B, drone1-at-60s: success 0.00",
+     "C, drone1-at-60s: median 432.9 s against 309.1 s nominal",
+     "A, none: median 330.0 s against 192.1 s nominal",
+     "C, none: median 313.8 s against 194.1 s nominal"
+    ],
+    "signal": [
+     "drone1-at-60s, A vs B: success 1.00 vs 0.00",
+     "drone1-at-60s, A vs B: median 424.6 vs 900.0 s, interquartile ranges apart",
+     "drone1-at-60s, A vs B: retention 0.998 vs 0.916",
+     "drone1-at-60s, B vs C: success 0.00 vs 1.00",
+     "drone1-at-60s, B vs C: median 900.0 vs 432.9 s, interquartile ranges apart",
+     "drone1-at-60s, B vs C: retention 0.916 vs 0.999",
+     "none, A vs B: median 330.0 vs 188.0 s, interquartile ranges apart",
+     "none, B vs C: median 188.0 vs 313.8 s, interquartile ranges apart"
+    ]
+   },
+   "severe": {
+    "meaningful": true,
+    "checks": {
+     "not_trivially_easy": true,
+     "not_trivially_hard": true,
+     "distinguishable": true,
+     "communication_useful": true
+    },
+    "delivery_rate": 0.5687,
+    "why_not_easy": [
+     "A, drone1-at-60s: median 428.4 s against 308.2 s nominal",
+     "B, drone1-at-60s: success 0.00",
+     "C, drone1-at-60s: median 494.2 s against 309.1 s nominal",
+     "A, none: median 367.4 s against 192.1 s nominal",
+     "C, none: median 510.9 s against 194.1 s nominal"
+    ],
+    "signal": [
+     "drone1-at-60s, A vs B: success 1.00 vs 0.00",
+     "drone1-at-60s, A vs B: median 428.4 vs 900.0 s, interquartile ranges apart",
+     "drone1-at-60s, A vs B: retention 0.999 vs 0.916",
+     "drone1-at-60s, B vs C: success 0.00 vs 1.00",
+     "drone1-at-60s, B vs C: median 900.0 vs 494.2 s, interquartile ranges apart",
+     "drone1-at-60s, B vs C: retention 0.916 vs 0.999",
+     "none, A vs B: median 367.4 vs 188.0 s, interquartile ranges apart",
+     "none, A vs C: median 367.4 vs 510.9 s, interquartile ranges apart",
+     "none, B vs C: median 188.0 vs 510.9 s, interquartile ranges apart"
+    ]
+   }
+  }
+ },
+ "pilot": {
+  "2": "moderate",
+  "4": "severe"
+ },
+ "phase18": {
+  "2": [
+   "nominal",
+   "moderate"
+  ],
+  "4": [
+   "nominal",
+   "moderate",
+   "partitioned",
+   "severe"
+  ]
+ },
+ "stats": {
+  "2|moderate|drone1-at-60s|A": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 285.2,
+   "iqr_s": [
+    284.7,
+    403.2
+   ],
+   "p3": 1.0000650130026005
+  },
+  "2|moderate|drone1-at-60s|B": {
+   "runs": 20,
+   "success": 0.0,
+   "median_s": 900.0,
+   "iqr_s": [
+    900.0,
+    900.0
+   ],
+   "p3": 0.779255851170234
+  },
+  "2|moderate|drone1-at-60s|C": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 283.7,
+   "iqr_s": [
+    283.7,
+    283.7
+   ],
+   "p3": 1.000058345002334
+  },
+  "2|moderate|none|A": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 161.1,
+   "iqr_s": [
+    161.1,
+    189.725
+   ],
+   "p3": 1.0000083350003335
+  },
+  "2|moderate|none|B": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 155.5,
+   "iqr_s": [
+    155.5,
+    155.5
+   ],
+   "p3": 1.0
+  },
+  "2|moderate|none|C": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 160.6,
+   "iqr_s": [
+    160.6,
+    160.6
+   ],
+   "p3": 1.0000033340001333
+  },
+  "2|nominal|drone1-at-60s|A": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 284.7,
+   "iqr_s": [
+    284.7,
+    284.7
+   ],
+   "p3": 1.0000666800026672
+  },
+  "2|nominal|drone1-at-60s|B": {
+   "runs": 20,
+   "success": 0.0,
+   "median_s": 900.0,
+   "iqr_s": [
+    900.0,
+    900.0
+   ],
+   "p3": 0.779255851170234
+  },
+  "2|nominal|drone1-at-60s|C": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 283.7,
+   "iqr_s": [
+    283.7,
+    283.7
+   ],
+   "p3": 1.0000666800026672
+  },
+  "2|nominal|none|A": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 161.1,
+   "iqr_s": [
+    161.1,
+    161.1
+   ],
+   "p3": null
+  },
+  "2|nominal|none|B": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 155.5,
+   "iqr_s": [
+    155.5,
+    155.5
+   ],
+   "p3": null
+  },
+  "2|nominal|none|C": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 160.6,
+   "iqr_s": [
+    160.6,
+    160.6
+   ],
+   "p3": null
+  },
+  "2|severe|drone1-at-60s|A": {
+   "runs": 20,
+   "success": 0.95,
+   "median_s": 413.5,
+   "iqr_s": [
+    288.7,
+    516.075
+   ],
+   "p3": 0.9698039607921582
+  },
+  "2|severe|drone1-at-60s|B": {
+   "runs": 20,
+   "success": 0.0,
+   "median_s": 900.0,
+   "iqr_s": [
+    900.0,
+    900.0
+   ],
+   "p3": 0.779255851170234
+  },
+  "2|severe|drone1-at-60s|C": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 287.2,
+   "iqr_s": [
+    283.7,
+    288.425
+   ],
+   "p3": 1.0000500100020004
+  },
+  "2|severe|none|A": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 279.9,
+   "iqr_s": [
+    163.17499999999998,
+    314.75
+   ],
+   "p3": 1.0000200040008003
+  },
+  "2|severe|none|B": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 155.5,
+   "iqr_s": [
+    155.5,
+    155.5
+   ],
+   "p3": 1.0
+  },
+  "2|severe|none|C": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 283.85,
+   "iqr_s": [
+    277.27500000000003,
+    302.09999999999997
+   ],
+   "p3": 1.0000250050010002
+  },
+  "4|moderate|drone1-at-60s|A": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 309.2,
+   "iqr_s": [
+    308.2,
+    317.725
+   ],
+   "p3": 0.9985349023268218
+  },
+  "4|moderate|drone1-at-60s|B": {
+   "runs": 20,
+   "success": 0.0,
+   "median_s": 900.0,
+   "iqr_s": [
+    900.0,
+    900.0
+   ],
+   "p3": 0.9155277018467898
+  },
+  "4|moderate|drone1-at-60s|C": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 311.9,
+   "iqr_s": [
+    309.1,
+    433.1
+   ],
+   "p3": 0.9984365624374959
+  },
+  "4|moderate|none|A": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 192.1,
+   "iqr_s": [
+    192.1,
+    298.0
+   ],
+   "p3": 1.0
+  },
+  "4|moderate|none|B": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 188.0,
+   "iqr_s": [
+    188.0,
+    188.0
+   ],
+   "p3": 1.0
+  },
+  "4|moderate|none|C": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 307.7,
+   "iqr_s": [
+    194.1,
+    323.2
+   ],
+   "p3": 1.0
+  },
+  "4|nominal|drone1-at-60s|A": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 308.2,
+   "iqr_s": [
+    308.2,
+    308.2
+   ],
+   "p3": 0.9983998933262217
+  },
+  "4|nominal|drone1-at-60s|B": {
+   "runs": 20,
+   "success": 0.0,
+   "median_s": 900.0,
+   "iqr_s": [
+    900.0,
+    900.0
+   ],
+   "p3": 0.9155277018467898
+  },
+  "4|nominal|drone1-at-60s|C": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 309.1,
+   "iqr_s": [
+    309.1,
+    309.1
+   ],
+   "p3": 0.9983998933262217
+  },
+  "4|nominal|none|A": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 192.1,
+   "iqr_s": [
+    192.1,
+    192.1
+   ],
+   "p3": null
+  },
+  "4|nominal|none|B": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 188.0,
+   "iqr_s": [
+    188.0,
+    188.0
+   ],
+   "p3": null
+  },
+  "4|nominal|none|C": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 194.1,
+   "iqr_s": [
+    194.1,
+    194.1
+   ],
+   "p3": null
+  },
+  "4|partitioned|drone1-at-60s|A": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 424.6,
+   "iqr_s": [
+    424.6,
+    424.6
+   ],
+   "p3": 0.9984665644376293
+  },
+  "4|partitioned|drone1-at-60s|B": {
+   "runs": 20,
+   "success": 0.0,
+   "median_s": 900.0,
+   "iqr_s": [
+    900.0,
+    900.0
+   ],
+   "p3": 0.9155277018467898
+  },
+  "4|partitioned|drone1-at-60s|C": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 432.9,
+   "iqr_s": [
+    432.9,
+    432.9
+   ],
+   "p3": 0.9986332422161478
+  },
+  "4|partitioned|none|A": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 330.0,
+   "iqr_s": [
+    330.0,
+    330.0
+   ],
+   "p3": 1.0000333355557038
+  },
+  "4|partitioned|none|B": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 188.0,
+   "iqr_s": [
+    188.0,
+    188.0
+   ],
+   "p3": 1.0
+  },
+  "4|partitioned|none|C": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 313.8,
+   "iqr_s": [
+    313.8,
+    313.8
+   ],
+   "p3": 1.0000333355557038
+  },
+  "4|severe|drone1-at-60s|A": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 428.35,
+   "iqr_s": [
+    321.575,
+    449.45000000000005
+   ],
+   "p3": 0.9991066071071405
+  },
+  "4|severe|drone1-at-60s|B": {
+   "runs": 20,
+   "success": 0.0,
+   "median_s": 900.0,
+   "iqr_s": [
+    900.0,
+    900.0
+   ],
+   "p3": 0.9155277018467898
+  },
+  "4|severe|drone1-at-60s|C": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 494.25,
+   "iqr_s": [
+    436.375,
+    548.2750000000001
+   ],
+   "p3": 0.9993249549969999
+  },
+  "4|severe|none|A": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 367.35,
+   "iqr_s": [
+    319.67499999999995,
+    454.6
+   ],
+   "p3": 1.0
+  },
+  "4|severe|none|B": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 188.0,
+   "iqr_s": [
+    188.0,
+    188.0
+   ],
+   "p3": 1.0
+  },
+  "4|severe|none|C": {
+   "runs": 20,
+   "success": 1.0,
+   "median_s": 510.85,
+   "iqr_s": [
+    458.90000000000003,
+    548.975
+   ],
+   "p3": 1.0000050003333556
+  }
+ }
+}
