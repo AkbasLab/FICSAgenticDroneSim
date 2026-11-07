@@ -190,11 +190,19 @@ class OllamaBackend:
     provider = "ollama"
 
     def __init__(self, model=DEFAULT_OLLAMA_MODEL, temperature=0.0,
-                 num_gpu=0, seed=0, schema=None, host=None):
+                 num_gpu=None, seed=0, schema=None, host=None):
         import ollama                                  # lazy: not needed to import
         self._client = ollama.Client(host=host) if host else ollama
         self.model = model
         self.temperature = temperature
+        # GPU layers. 0 (CPU only) by default, to leave the card to CARLA-Air.
+        # Mock-only runs - the Phase 18 factorial - have no simulator on the
+        # card, so set AGENTIC_UAV_NUM_GPU=all (Ollama decides, normally the
+        # whole model on the GPU) or a layer count. Recorded in the model card.
+        if num_gpu is None:
+            env = os.environ.get("AGENTIC_UAV_NUM_GPU", "0").strip().lower()
+            num_gpu = None if env in ("all", "auto", "") else int(env)
+            num_gpu = 0 if env == "" else num_gpu
         self.num_gpu = num_gpu
         self.seed = seed
         self._schema = schema
@@ -202,10 +210,13 @@ class OllamaBackend:
     def card(self):
         return ModelCard(provider="ollama", model=self.model,
                          temperature=self.temperature, seed=self.seed,
-                         extra={"num_gpu": self.num_gpu})
+                         extra={"num_gpu": "all" if self.num_gpu is None
+                                else self.num_gpu})
 
     def complete(self, system, user, timeout_s=None, schema=None, **_):
-        options = {"temperature": self.temperature, "num_gpu": self.num_gpu}
+        options = {"temperature": self.temperature}
+        if self.num_gpu is not None:
+            options["num_gpu"] = self.num_gpu
         if self.seed is not None:
             options["seed"] = self.seed
         try:
