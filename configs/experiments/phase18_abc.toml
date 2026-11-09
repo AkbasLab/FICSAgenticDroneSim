@@ -1,0 +1,28 @@
+# Phase 18, the main factorial (AUV-16 18): A, B and C, every cell, on the mock (the laptop).
+# The 20 TEST seeds of configs/seeds/heldout.toml, in order -- held out until now; reserves only by docs/EXCLUSIONS.md.
+# Common random numbers (18.1): for a seed every architecture gets the same targets, start, fault and message fates.
+# The code and configs are frozen (configs/frozen.toml); docs/EXCLUSIONS.md says what may be set aside, before any run.
+
+[batch]
+id = "phase18-abc"
+description = "A, B, C: 2 drones nominal and moderate, 4 drones nominal, moderate, partitioned, severe; no failure and Drone1 stopped; the 20 held-out test seeds"
+
+[[experiment]]
+id = "pair"
+architecture = ["A", "B", "C"]
+scenario = "search_pair_001"
+team_size = 2
+network = ["nominal", "moderate"]
+failure = ["none", "drone1-at-60s"]
+seed = [343699, 280070, 458535, 821103, 442986, 605891, 312883, 674924, 657750, 8139, 388194, 545599, 634176, 679573, 747877, 640554, 43505, 541297, 720295, 825940]
+planner = "none"
+
+[[experiment]]
+id = "four"
+architecture = ["A", "B", "C"]
+scenario = "search_relay_001"
+team_size = 4
+network = ["nominal", "moderate", "partitioned", "severe"]
+failure = ["none", "drone1-at-60s"]
+seed = [343699, 280070, 458535, 821103, 442986, 605891, 312883, 674924, 657750, 8139, 388194, 545599, 634176, 679573, 747877, 640554, 43505, 541297, 720295, 825940]
+planner = "none"

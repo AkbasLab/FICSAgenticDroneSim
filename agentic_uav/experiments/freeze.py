@@ -21,6 +21,7 @@ freeze's scope with its SHA-256, a date and a note. The scope:
                                  rules' settings -- all but configs/experiments/ (the batches still to be written)
     docs/METRICS.md              the metric definitions
     docs/CONDITIONS.md           the calibration rule and the levels it chose
+    docs/EXCLUSIONS.md           Phase 18's exclusion, replacement and completeness rules (from version 3)
 
 `check` recomputes the digests and says what changed, was added or removed
 since the latest version; tests/test_freeze.py runs it in every suite and in
@@ -39,7 +40,7 @@ import re
 from typing import Any
 
 FROZEN = "configs/frozen.toml"
-SCOPE = ("agentic_uav", "configs", "docs/METRICS.md", "docs/CONDITIONS.md")
+SCOPE = ("agentic_uav", "configs", "docs/METRICS.md", "docs/CONDITIONS.md", "docs/EXCLUSIONS.md")
 EXCLUDED = ("configs/experiments", "configs/frozen.toml")
 COMMAND = 'python scripts/freeze.py --note "what changed and why"'
 
@@ -50,8 +51,8 @@ HEADER = '''# The freeze (AUV-16 17.4): every file that decides how the drones f
 #
 #     python scripts/freeze.py --note "what changed and why"
 #
-# Scope: agentic_uav/, configs/ (not configs/experiments/), docs/METRICS.md, docs/CONDITIONS.md. Digests are of the
-# file with LF line endings. See agentic_uav/experiments/freeze.py.
+# Scope: agentic_uav/, configs/ (not configs/experiments/), docs/METRICS.md, docs/CONDITIONS.md, docs/EXCLUSIONS.md.
+# Digests are of the file with LF line endings. See agentic_uav/experiments/freeze.py.
 '''
 
 
