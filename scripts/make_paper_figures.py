@@ -566,6 +566,100 @@ def fig_architectures():
     save(fig, "fig7_architecture_comparison")
 
 
+# --- Figures 8 and 9: the Phase 18 factorial result -----------------------
+
+
+def _factorial(design="main_v1"):
+    return load(f"factorial_{design}")
+
+
+def fig_factorial_heatmaps(design="main_v1", name="fig8_factorial_heatmaps"):
+    """Mission success (colour) and mean mission time (text), Taner-style:
+    architecture x network and architecture x failure, for 2 and 4 drones."""
+    data = _factorial(design)
+    cells = data["cells"]
+    archs = [a for a in ["A", "B", "C", "D", "DV2"] if any(c["architecture"] == a
+                                                          for c in cells)]
+    names = {"A": "A\ncentralized", "B": "B\nindependent", "C": "C\ndecentralized",
+             "D": "D\nagentic (llama)", "DV2": "DV2\nagentic,\nphase tools"}
+    nets = ["final_nominal", "final_moderate", "final_severe", "final_partitioned"]
+    fails = ["none", "one_failure"]
+
+    def agg(a, n, field, value):
+        rs = [c for c in cells if c["architecture"] == a and c["team_size"] == n
+              and c[field] == value]
+        runs = sum(c["n"] for c in rs)
+        ok = sum(c["successes"] for c in rs)
+        t = sum(c["time_mean_s"] * c["n"] for c in rs) / runs
+        return ok / runs, t
+
+    fig, axes = plt.subplots(2, 2, figsize=(WIDE, 4.6),
+                             gridspec_kw={"height_ratios": [4, 2.2]})
+    cmap = plt.get_cmap("Blues")
+    for col, n in enumerate((2, 4)):
+        for row, (field, values, labels) in enumerate((
+                ("network", nets, ["nominal", "moderate", "severe", "partitioned"]),
+                ("failure", fails, ["no failure", "one failure"]))):
+            ax = axes[row][col]
+            grid = [[agg(a, n, field, v) for a in archs] for v in values]
+            ax.imshow([[g[0] for g in r] for r in grid], cmap=cmap, vmin=0, vmax=1,
+                      aspect="auto")
+            for i, r in enumerate(grid):
+                for j, (sr, t) in enumerate(r):
+                    ax.text(j, i, f"{sr:.0%}\n{t:.0f} s", ha="center", va="center",
+                            fontsize=6.4, color="white" if sr > 0.55 else "black")
+            ax.set_yticks(range(len(values)))
+            ax.set_yticklabels(labels, fontsize=6.8)
+            ax.set_xticks(range(len(archs)))
+            ax.set_xticklabels([names[a] for a in archs] if row == 1 else [],
+                               fontsize=6.4)
+            ax.tick_params(length=0)
+            for sp in ax.spines.values():
+                sp.set_visible(False)
+            if row == 0:
+                ax.set_title(f"{n} drones", fontsize=8)
+    fig.text(0.5, -0.01, "mission success (shade and %) and mean mission time; "
+             f"{data['runs']} held-out runs, 20 common seeds per cell, llama3.1:8b",
+             ha="center", fontsize=6.2, color=GREY)
+    fig.tight_layout()
+    save(fig, name)
+
+
+def fig_llm_behaviour():
+    """What the agentic architecture's model chose, and what it cost."""
+    L = _factorial()["llm"]
+    tools = L["tools"]
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(WIDE, 2.2),
+                                   gridspec_kw={"width_ratios": [1.6, 1]})
+    names = list(tools)
+    vals = [tools[t] for t in names]
+    ax1.barh(range(len(names)), vals, color=[ORANGE if t == "start_search" else BLUE
+                                             for t in names], zorder=2)
+    ax1.set_yticks(range(len(names)))
+    ax1.set_yticklabels(names, fontsize=6.8)
+    ax1.invert_yaxis()
+    ax1.set_xscale("log")
+    for i, v in enumerate(vals):
+        ax1.text(v * 1.08, i, str(v), va="center", fontsize=6.2)
+    ax1.set_xlabel("model decisions (log scale)")
+    ax1.set_title(f"{L['start_search_share']:.1%} of {L['model_decisions']} decisions "
+                  f"were start_search", fontsize=8)
+    ok_r, n_r = L["success_if_ever_reported"]
+    ok_n, n_n = L["success_if_never_reported"]
+    rates = [ok_r / n_r, ok_n / n_n]
+    ax2.bar([0, 1], rates, color=[GREEN, RED], width=0.6, zorder=2)
+    for i, (r, nn) in enumerate(zip(rates, (n_r, n_n))):
+        ax2.text(i, r + 0.03, f"{r:.0%}\n(n={nn})", ha="center", fontsize=6.4)
+    ax2.set_xticks([0, 1])
+    ax2.set_xticklabels(["reported a sector\ncomplete at least once",
+                         "never reported"], fontsize=6.6)
+    ax2.set_ylim(0, 1.15)
+    ax2.set_ylabel("mission success")
+    ax2.set_title("Runs where the model moved on", fontsize=8)
+    fig.tight_layout()
+    save(fig, "fig9_llm_agent_behaviour")
+
+
 FIGURES = [
     ("fig1_architecture", fig_architecture),
     ("fig1_architecture_plain", fig_architecture_plain),
@@ -575,7 +669,13 @@ FIGURES = [
     ("fig5_llm_failure_taxonomy", fig_llm_failures),
     ("fig6_bid_collapse", fig_bid_collapse),
     ("fig7_architecture_comparison", fig_architectures),
+    ("fig8_factorial_heatmaps", fig_factorial_heatmaps),
+    ("fig9_llm_agent_behaviour", fig_llm_behaviour),
 ]
+
+if os.path.exists(os.path.join(DATA, "factorial_main_v2.json")):
+    FIGURES.append(("fig10_factorial_main_v2",
+                    lambda: fig_factorial_heatmaps("main_v2", "fig10_factorial_main_v2")))
 
 
 def main():

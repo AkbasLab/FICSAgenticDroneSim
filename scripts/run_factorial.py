@@ -32,6 +32,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from agentic_uav.experiments import architectures as arch
 from agentic_uav.experiments import factorial as fx
 from agentic_uav.experiments.experiment_runner import ROOT, run_experiment
 from agentic_uav.experiments.freeze import fingerprint, snapshot
@@ -61,9 +62,9 @@ def main():
         configs = [c for c in configs if args.only in c.experiment_id]
 
     planner = str(design.get("planner", "scripted"))
-    n_d = sum(1 for c in configs if c.architecture_key == "D")
+    n_d = sum(1 for c in configs if arch.spec(c.architecture_key).policy == "llm")
     calls = sum(MODEL_CALLS_PER_D_RUN.get(c.team_size, 30) for c in configs
-                if c.architecture_key == "D")
+                if arch.spec(c.architecture_key).policy == "llm")
     per_call = SECONDS_PER_MODEL_CALL.get(planner, SECONDS_PER_MODEL_CALL["default"])
     est = len(configs) * SECONDS_PER_MOCK_RUN + calls * per_call
     print(f"Design {design['design_id']} ({design['split']} split), stage {args.stage}: "

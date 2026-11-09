@@ -889,6 +889,10 @@ simulator, GPU or API key.
   the known failure modes when the simulator is involved.
 - **[`docs/FACTORIAL.md`](docs/FACTORIAL.md)** — Phase 18: the factorial design,
   common random numbers, splits and the held-out seal, and the predeclared exclusions.
+- **[`docs/RESULTS_main_v1.md`](docs/RESULTS_main_v1.md)** — the first held-out
+  results, and why the agentic agent D failed.
+- **[`docs/FOLLOWUP_DV2.md`](docs/FOLLOWUP_DV2.md)** — the disclosed follow-up: DV2
+  (D with task-phase tools), design `main_v2` on fresh held-out seeds, and how to run it.
 - **[`docs/PILOT.md`](docs/PILOT.md)** — Phase 17: what the pilots found, the
   calibrated communication levels and why each is meaningful, and what is frozen.
 - **[`docs/METRICS.md`](docs/METRICS.md)** — every reported metric, its written

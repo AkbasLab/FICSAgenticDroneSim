@@ -217,8 +217,8 @@ DEFECTS = [
 
     ("idle_rounds_take_no_time", "coordination",
      "agentic_uav/agents/persistent_agent.py",
-     "                    and self._idle_rounds <= MAX_IDLE_WAITS:",
-     "                    and False:",
+     "                        and self._idle_rounds <= MAX_IDLE_WAITS:",
+     "                        and False:",
      "an idle drone's waiting rounds take no simulated time, so it lands "
      "before a failed teammate can be noticed and its sector freed",
      ["tests/test_pilot.py", "tests/test_integration.py"]),
@@ -304,6 +304,38 @@ DEFECTS = [
      "a lost assignment is never repeated; its sector goes unsearched while "
      "the fleet holds for orders",
      ["tests/test_factorial.py"]),
+
+    # --- follow-up: DV2, the task-phase tool set -----------------------------
+    ("phase_check_off", "agent tools",
+     "agentic_uav/agents/llm_policy.py",
+     "        if self.toolset != \"v2\":\n            return\n",
+     "        return\n",
+     "DV2 accepts start_search on a sector it has already searched, so the "
+     "main_v1 re-sweep failure comes straight back",
+     ["tests/test_dv2.py"]),
+
+    ("completion_tool_not_offered", "agent tools",
+     "agentic_uav/agents/llm_tools.py",
+     "    \"v2\": TOOLS + (REPORT_COMPLETE,),",
+     "    \"v2\": TOOLS,",
+     "the v2 tool set silently lacks report_task_complete, so DV2 is just D",
+     ["tests/test_dv2.py"]),
+
+    ("airborne_exit", "lifecycle",
+     "agentic_uav/agents/persistent_agent.py",
+     "            if self._airborne_holding_task(b):",
+     "            if False:",
+     "a drone holding a task with nothing new to react to leaves its loop in "
+     "the air (main_v1's 4.7 s runs)",
+     ["tests/test_dv2.py"]),
+
+    ("seeds_reused_across_designs", "experiment design",
+     "agentic_uav/experiments/factorial.py",
+     "        clash = sorted(mine & set(used))",
+     "        clash = []",
+     "a follow-up design may be evaluated on held-out seeds an earlier result "
+     "was already produced from",
+     ["tests/test_dv2.py"]),
 ]
 
 

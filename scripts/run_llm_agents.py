@@ -75,6 +75,10 @@ def sensible_model(system, user):
     if not progress.get("sector_searched"):
         return _decision("start_search", {}, comms=comms, confidence=0.85)
     if not progress.get("reported"):
+        if "report_task_complete" in user.split("\n\nAvailable tools:", 1)[-1]:
+            # the v2 tool set (architecture DV2) has an explicit completion tool
+            return _decision("report_task_complete", {},
+                             progress="nearly_complete", comms=comms, confidence=0.9)
         return _decision("report_target", {"target_id": _first_target(belief)},
                          progress="nearly_complete", comms=comms, confidence=0.9)
     return _decision("return_home", {}, progress="complete", comms=comms,
