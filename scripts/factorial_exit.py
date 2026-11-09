@@ -63,8 +63,8 @@ def main(argv: list[str] | None = None) -> int:
           f"cells complete {sum(1 for c in result['cells'].values() if not c['needed'])} of {len(result['cells'])}")
     if args.replacements:
         for p in F.write_replacements(result, d, os.path.join(REPO, "configs", "experiments"), args.replacements):
-            print("replacements ->", os.path.relpath(p, REPO))
-    print(("MET" if result["met"] else "NOT MET") + f" -> {os.path.relpath(stem, REPO)}.md")
+            print("replacements ->", p)
+    print(("MET" if result["met"] else "NOT MET") + f" -> {stem}.md")
     return 0 if result["met"] else 1
 
 

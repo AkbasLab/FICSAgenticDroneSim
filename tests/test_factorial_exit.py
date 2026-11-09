@@ -282,6 +282,33 @@ class ExitTests(unittest.TestCase):
         next(e for e in ev if e["type"] == "FAULT_INJECTED")["planned_s"] = 61.0
         jsave(p, ev)
         self.assertTrue(any("faults differs" in x for x in self.check(b)["problems"]["common_random_numbers"]))
+        # Taking hold a step after its plan is the architecture's clock (A at 60.1 s), not a different fault ...
+        b = self.copy()
+        p = os.path.join(self.run_of(b, "A", 2), "events.jsonl.gz")
+        ev = jload(p)
+        fault = next(e for e in ev if e["type"] == "FAULT_INJECTED")
+        fault["t"] = fault["planned_s"] + 0.1
+        jsave(p, ev)
+        self.assertEqual(self.check(b)["problems"]["common_random_numbers"], [])
+        # ... but taking hold seconds late is.
+        fault["t"] = fault["planned_s"] + 5.0
+        jsave(p, ev)
+        self.assertTrue(any("took hold at" in x for x in self.check(b)["problems"]["common_random_numbers"]))
+
+    def test_a_partition_fault_is_compared_whole(self):
+        # A partition is injected with no drone, its groups and its end (the dry run of 2026-11-09 met it first).
+        part = {"drone": None, "fault": "partition", "groups": [["Drone1", "base"], ["Drone2"]], "t": 60.0,
+                "type": "FAULT_INJECTED", "until_s": 120.0}
+        b = self.copy()
+        for arch in "ABCD":
+            p = os.path.join(self.run_of(b, arch, 1), "events.jsonl.gz")
+            jsave(p, jload(p) + [dict(part)])
+        self.assertEqual(self.check(b)["problems"]["common_random_numbers"], [])
+        p = os.path.join(self.run_of(b, "B", 1), "events.jsonl.gz")
+        ev = jload(p)
+        ev[-1]["groups"] = [["Drone1", "Drone2", "base"]]
+        jsave(p, ev)
+        self.assertTrue(any("faults differs" in x for x in self.check(b)["problems"]["common_random_numbers"]))
 
     def test_a_message_fate_that_is_not_the_seeded_draw_fails(self):
         b = self.copy()

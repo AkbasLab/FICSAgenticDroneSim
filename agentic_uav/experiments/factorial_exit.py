@@ -17,7 +17,8 @@ run) declares the criteria; this module applies them exactly and checks the rest
     paired_complete      each cell: 20 seeds with a valid run of every architecture; a seed with an excluded
                          run set aside for all four and the next reserve flown by all four
     common_random_numbers  for a cell and a seed, every architecture: the same scenario, network and failure
-                         files, the same roster, targets and fault; and every message lost or received as the
+                         files, the same roster, targets and planned faults (each taking hold within 1 s of its
+                         plan); and every message lost or received as the
                          seeded network draws it -- one function of (sender, recipient, message number)
     decisions_saved      18.4: every D decision with its model input, its replies, its validation, the action
                          and any fallback; every drone's guardian log
@@ -46,6 +47,7 @@ SCENARIOS = {2: "search_pair_001", 4: "search_relay_001"}
 FAILURES = ("none", "drone1-at-60s")
 REQUIRED = 20
 FLAG_AGREEMENT = 0.95
+FAULT_LAG_S = 1.0                 # a planned fault takes hold at the next step of the flight's clock, within this
 MODEL_ARCHS = ("D",)
 CHECKS = ("design", "frozen_code", "exclusions", "paired_complete", "common_random_numbers", "decisions_saved",
           "variability", "requests_accounted")
@@ -324,7 +326,16 @@ def check_crn(runs: list[Run], d: Design) -> list[str]:
             files = {k: (m.get("files") or {}).get(k, {}).get("sha256") for k in ("scenario", "network", "failure")}
             facts = (rep.get("report") or {}).get("facts") or {}
             start = next((e for e in ev if e["type"] == "MISSION_STARTED"), {})
-            faults = sorted((e.get("drone"), e.get("fault"), e.get("planned_s")) for e in ev if e["type"] == "FAULT_INJECTED")
+            # The fault as planned -- a stop, a partition, whole -- is the common random number; when it took hold is
+            # the first step of the architecture's own clock at or after it (A's controller: 60.1 s for 60 s), held
+            # to within FAULT_LAG_S below.
+            injected = [e for e in ev if e["type"] == "FAULT_INJECTED"]
+            faults = sorted(json.dumps({k: v for k, v in e.items() if k not in ("type", "t")}, sort_keys=True)
+                            for e in injected)
+            for e in injected:
+                if e.get("planned_s") is not None and not 0 <= e["t"] - e["planned_s"] <= FAULT_LAG_S:
+                    p.append(f"{cell} seed {seed}: {r.arch}'s {e.get('fault')} planned at {e['planned_s']} s "
+                             f"took hold at {e['t']} s")
             mine = {"files": files, "targets": facts.get("targets"), "seed": facts.get("random_seed"),
                     "roster": start.get("roster"), "faults": faults}
             for k, v in mine.items():
