@@ -120,6 +120,17 @@ class TestScorer(unittest.TestCase):
         self.assertLess(report.coverage_fraction, self.scenario.required_coverage)
         self.assertFalse(report.overall_pass)
 
+    def test_low_coverage_does_not_fail_a_search_mission(self):
+        import dataclasses
+        scenario = dataclasses.replace(self.scenario, mission_kind="search")
+        run_log = {spec.name: [Sample(0.0, scenario.base_station)] for spec in scenario.drones}
+        report = score_run(scenario, run_log, 1.0)
+        self.assertFalse(report.coverage_pass)       # still reported
+        self.assertFalse(report.coverage_gates)
+        # not passing overall here is for the targets, not the coverage
+        self.assertEqual(report.overall_pass, report.targets_pass and report.no_fly_pass and report.separation_pass
+                         and report.battery_pass and report.deadline_pass and report.all_home_pass)
+
     def test_battery_overrun_is_caught(self):
         run_log, elapsed = self._full_good_run()
         spec = self.scenario.drones[0]

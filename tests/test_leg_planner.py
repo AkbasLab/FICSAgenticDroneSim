@@ -95,6 +95,31 @@ class TestLegSkill(unittest.TestCase):
         result = fly_leg_with_planner(adapter, 100.0, 0.0, 12.0, StraightPlanner(speed=1.0), lambda: [], timeout_s=0.6)
         self.assertEqual(result.status, SkillStatus.TIMEOUT)
 
+    def test_a_leg_held_in_place_gives_up_long_before_the_timeout(self):
+        adapter = KinematicMockVehicleAdapter("D", start_position=(0.0, 0.0, 12.0))
+        result = fly_leg_with_planner(adapter, 100.0, 0.0, 12.0, StraightPlanner(speed=0.0), lambda: [], timeout_s=30.0,
+                                      stall_s=0.5)
+        self.assertEqual(result.status, SkillStatus.TIMEOUT)
+        self.assertLess(result.elapsed_s, 5.0)
+        self.assertIn("no progress", result.error)
+
+    def test_a_leg_that_keeps_getting_nearer_is_not_called_stalled(self):
+        adapter = KinematicMockVehicleAdapter("D", start_position=(0.0, 0.0, 12.0))
+        result = fly_leg_with_planner(adapter, 6.0, 0.0, 12.0, StraightPlanner(speed=4.0), lambda: [], timeout_s=20.0, stall_s=0.6)
+        self.assertEqual(result.status, SkillStatus.SUCCESS)
+
+    def test_a_leg_in_a_run_ends_still_moving_and_a_last_leg_ends_stopped(self):
+        through = KinematicMockVehicleAdapter("D", start_position=(0.0, 0.0, 12.0))
+        result = fly_leg_with_planner(through, 20.0, 0.0, 12.0, StraightPlanner(speed=4.0), lambda: [], timeout_s=20.0,
+                                      pass_through_m=1.5)
+        self.assertEqual(result.status, SkillStatus.SUCCESS)
+        self.assertGreater(through.get_speed(), 1.0)                 # no stop at the waypoint
+        self.assertGreater(through.get_position()[0], 18.0)
+        last = KinematicMockVehicleAdapter("D", start_position=(0.0, 0.0, 12.0))
+        result = fly_leg_with_planner(last, 20.0, 0.0, 12.0, StraightPlanner(speed=4.0), lambda: [], timeout_s=20.0)
+        self.assertEqual(result.status, SkillStatus.SUCCESS)
+        self.assertLessEqual(last.get_speed(), 0.5)                  # stopped at the end, as before
+
     def test_a_climb_with_no_horizontal_distance_never_asks_the_planner(self):
         adapter = KinematicMockVehicleAdapter("D", start_position=(0.0, 0.0, 0.0))
         planner = StraightPlanner(speed=10.0)
@@ -119,6 +144,44 @@ class TestLegSkill(unittest.TestCase):
         result = fly_leg_with_planner(adapter, 10.0, 0.0, 12.0, Broken(), lambda: [], timeout_s=5.0)
         self.assertEqual(result.status, SkillStatus.FAILED)
         self.assertIn("policy failed", result.error)
+
+
+class TestPlannerThatWantsTheAdapter(unittest.TestCase):
+    def test_the_adapter_is_given_only_to_a_planner_that_asks_for_it(self):
+        seen = {}
+
+        class Asks(StraightPlanner):
+            wants_adapter = True
+
+            def begin_leg(self, start_xy, goal_xy, adapter=None):
+                seen["adapter"] = adapter
+                return self
+
+        adapter = KinematicMockVehicleAdapter("D", start_position=(0.0, 0.0, 12.0))
+        fly_leg_with_planner(adapter, 6.0, 0.0, 12.0, Asks(speed=10.0), lambda: [], timeout_s=10.0)
+        self.assertIs(seen["adapter"], adapter)
+        plain = StraightPlanner(speed=10.0)          # begin_leg takes no adapter: must not be handed one
+        result = fly_leg_with_planner(adapter, 0.0, 0.0, 12.0, plain, lambda: [], timeout_s=10.0)
+        self.assertEqual(result.status, SkillStatus.SUCCESS, result.error)
+
+
+class TestFleetStates(unittest.TestCase):
+    def test_peers_exclude_self_apply_offsets_and_estimate_velocity(self):
+        import time
+        from fics_drone.planners.fleet_states import FleetStates
+        a = KinematicMockVehicleAdapter("A", start_position=(0.0, 0.0, 8.0))
+        b = KinematicMockVehicleAdapter("B", start_position=(0.0, 0.0, 8.0))
+        fleet = FleetStates({"A": a, "B": b}, {"A": (0.0, 0.0, 0.0), "B": (0.0, 20.0, 0.0)}, refresh_s=0.0)
+        self.assertEqual(fleet.peers_of(a)[0][0], (0.0, 20.0))            # B's spawn offset applied, A not listed
+        b.start_velocity(2.0, 0.0, 0.0)
+        time.sleep(0.15)
+        fleet.peers_of(a)
+        time.sleep(0.15)
+        (position, velocity), = fleet.peers_of(a)
+        self.assertGreater(position[0], 0.3)
+        self.assertAlmostEqual(velocity[0], 2.0, delta=0.6)
+        self.assertEqual(len(fleet.peers_of(b)), 1)
+        self.assertEqual(fleet.peers_of(b)[0][0][1], 0.0)
 
 
 class TestOnePlannerSharedByTwoDrones(unittest.TestCase):

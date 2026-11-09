@@ -32,11 +32,12 @@ class ScoreReport:
     deadline_pass: bool
     all_home: bool
     all_home_pass: bool
+    coverage_gates: bool = True   # False for a search mission: coverage is reported, not required
 
     @property
     def overall_pass(self) -> bool:
         return all([
-            self.coverage_pass, self.targets_pass, self.no_fly_pass,
+            self.coverage_pass or not self.coverage_gates, self.targets_pass, self.no_fly_pass,
             self.separation_pass, self.battery_pass, self.deadline_pass,
             self.all_home_pass,
         ])
@@ -167,4 +168,5 @@ def score_run(scenario: Scenario, run_log: Dict[str, List[Sample]], mission_elap
         battery_violations=battery_violations, battery_pass=battery_pass,
         deadline_s=mission_elapsed_s, deadline_pass=mission_elapsed_s <= scenario.deadline_s,
         all_home=all_home, all_home_pass=all_home,
+        coverage_gates=scenario.mission_kind != "search",
     )

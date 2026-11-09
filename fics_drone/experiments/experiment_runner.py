@@ -59,6 +59,10 @@ def _run_once(scenario, monitor: bool, mock_speed_mps: float, repeat: int, kill=
     adapters = {d.name: KinematicMockVehicleAdapter(d.name, speed_mps=mock_speed_mps)
                 for d in scenario.drones}
     offsets = {d.name: d.spawn_offset for d in scenario.drones}
+    if leg_planner is not None and hasattr(leg_planner, "fleet"):
+        from ..planners.fleet_states import FleetStates
+        leg_planner.fleet = FleetStates(adapters, offsets)     # NavRL sees the other drones
+        leg_planner.separation_m = scenario.min_separation_m    # and the lab's separation limit is held
     recorder = TelemetryRecorder(adapters, world_offsets=offsets)
     rec_start = time.monotonic()
     recorder.start()
@@ -127,6 +131,7 @@ def _run_once(scenario, monitor: bool, mock_speed_mps: float, repeat: int, kill=
             "all_home": score.all_home,
             "overall_pass": score.overall_pass,
         },
+        "traces": {n: r.trace for n, r in reports.items()},   # what each agent did, step by step: why a drone stopped early
     }
     events = derive_events(agents, reports, scenario, agent_log, repeat)
     if policy:

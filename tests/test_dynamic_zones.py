@@ -92,6 +92,17 @@ class TestGuardianUsesMissionTime(unittest.TestCase):
 
 
 class TestSteerOutWhenAlreadyInside(unittest.TestCase):
+    def test_exit_point_inside_a_keepout_is_not_used(self):
+        from fics_drone.core.obstacles import TreeObstacle
+        trees = [TreeObstacle(x=17.0, y=30.0, z_bottom=0.0, z_top=20.0, trunk_r=2.0, crown_r=2.0, crown_from_frac=0.0),
+                 TreeObstacle(x=30.0, y=17.0, z_bottom=0.0, z_top=20.0, trunk_r=2.0, crown_r=2.0, crown_from_frac=0.0)]
+        g = SafetyGuardian(limits=SafetyLimits(restricted_zones=[_scheduled()], obstacles=trees, geofence_half_extent_m=200.0))
+        ev = g.evaluate(_fly(0, 0), _belief(position=(30.0, 30.0, 8.0), t=70.0))
+        self.assertEqual(ev.fallback, FallbackAction.EXIT_ZONE)
+        tx, ty, _ = ev.command.target
+        self.assertFalse(any(t.blocks_point(tx, ty, 8.0, margin=0.5) for t in trees), "the exit lands inside a tree")
+        self.assertFalse(_scheduled().contains(tx, ty, 70.0))
+
     def test_drone_inside_a_zone_that_just_activated_is_steered_out(self):
         belief = _belief(position=(30.0, 30.0, 8.0), t=70.0)   # zone Z is active, drone sits in it
         ev = _guardian(_scheduled()).evaluate(_fly(0, 0), belief)   # the policy's own proposal is ignored
@@ -223,10 +234,11 @@ class TestPerTickMonitor(unittest.TestCase):
         from fics_drone.agents.persistent_agent import PersistentAgent
         from fics_drone.simulator.kinematic_mock_adapter import KinematicMockVehicleAdapter
         scenario = load_scenario(SCENARIO_PATH)
-        # Active from the start, across the diagonal of Drone1's ~28 m leg to Sector A. The leg's
-        # TARGET (20, 20) is outside the zone, so the command is approved; only watching the
-        # position every tick can notice the aircraft flying into it.
-        scenario.no_fly_zones = [NoFlyZone("Z", 8.0, 14.0, 8.0, 14.0, active_from_s=0.1)]
+        # Switches on 1.5 s into Drone1's ~28 m leg to Sector A (at 5 m/s that is just before the aircraft reaches it),
+        # across the diagonal. The leg's TARGET (20, 20) is outside the zone, so the command is approved, and the zone was
+        # not on when the leg started, so the agent does not route round it (it does for a zone that is already on); only
+        # watching the position every tick can notice the aircraft flying into it.
+        scenario.no_fly_zones = [NoFlyZone("Z", 8.0, 14.0, 8.0, 14.0, active_from_s=1.5)]
         spec = scenario.drones[0]
         agent = PersistentAgent(KinematicMockVehicleAdapter(spec.name, speed_mps=5.0), scenario, spec.sector,
                                 spec.spawn_offset, spec.battery_s, drone_name=spec.name, zone_monitor=monitor)

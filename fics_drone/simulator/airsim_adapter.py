@@ -10,6 +10,7 @@ connect_and_takeoff() again while still airborne would treat the current
 altitude as ground level, and a later land() would disarm mid-air.
 """
 
+import math
 import queue
 import threading
 import time
@@ -69,6 +70,8 @@ RPC_READ_TIMEOUT_S = 10.0
 # command toward the target instead. The skill loop already calls start_hover() once the drone is within
 # its tolerance, so the velocity command only has to start the motion.
 SHORT_MOVE_M = 4.5
+VELOCITY_HOLD_S = 0.6   # a velocity command lapses (the aircraft hovers) this long after the last refresh, so a stalled
+                        # caller leaves it stopping, not flying on
 SHORT_MOVE_SPEED_MPS = 1.0   # 2.0 left the drone creeping 1.0-1.3 m after arrival, enough to fail a 1 m hold; 1.0 creeps 0.5-0.6 m
 
 
@@ -205,6 +208,23 @@ class AirSimVehicleAdapter(VehicleAdapter):
             self.client.moveToPositionAsync(
                 x, y, self._to_ned(z), MOVE_SPEED, vehicle_name=self.vehicle_name,
             )
+
+    def start_velocity(self, vx, vy, vz=0.0):
+        """Fly at (vx, vy) m/s horizontally and vz m/s UP (height is up here, NED z is down). The caller refreshes it
+        every control tick; it lapses after VELOCITY_HOLD_S."""
+        with self._lock:
+            self.client.moveByVelocityAsync(vx, vy, -vz, VELOCITY_HOLD_S, vehicle_name=self.vehicle_name)
+
+    def get_lidar_scan(self, lidar_name="NavLidar"):
+        """The lidar's latest points as a flat list x, y, z, ... in the sensor's own frame (x forward, y right, z
+        down), and the aircraft's yaw in radians (NED, so the points can be turned into the local frame)."""
+        with self._lock:
+            data = _with_timeout(lambda: self.client.getLidarData(lidar_name=lidar_name,
+                                                                  vehicle_name=self.vehicle_name), RPC_READ_TIMEOUT_S)
+            q = _with_timeout(lambda: self.client.getMultirotorState(self.vehicle_name).kinematics_estimated.orientation,
+                              RPC_READ_TIMEOUT_S)
+        yaw = math.atan2(2.0 * (q.w_val * q.z_val + q.x_val * q.y_val), 1.0 - 2.0 * (q.y_val ** 2 + q.z_val ** 2))
+        return list(data.point_cloud), yaw
 
     def start_hover(self):
         with self._lock:

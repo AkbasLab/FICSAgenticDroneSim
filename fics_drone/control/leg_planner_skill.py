@@ -24,17 +24,32 @@ CLIMB_GAIN = 1.0          # 1/s: vertical speed per metre of height error
 MAX_CLIMB_MPS = 1.0
 
 
+STALL_S = 40.0              # a leg that has not got this much nearer its goal (stall_progress_m) for this long has stalled
+STALL_PROGRESS_M = 1.5
+PASS_THROUGH_M = 1.5        # a leg that another follows is done this near its waypoint, without stopping there
+
+
 def fly_leg_with_planner(adapter: VehicleAdapter, x: float, y: float, z: float, planner,
                          zone_rects_fn: Callable[[], list], offset_xy: Tuple[float, float] = (0.0, 0.0),
                          tolerance: float = SKILL_TOLERANCE_M, timeout_s: float = SKILL_TIMEOUT_S,
-                         max_speed: float = SKILL_STOP_SPEED_MPS, interrupt: Optional[Callable] = None) -> SkillResult:
+                         max_speed: float = SKILL_STOP_SPEED_MPS, interrupt: Optional[Callable] = None,
+                         stall_s: float = STALL_S, stall_progress_m: float = STALL_PROGRESS_M,
+                         pass_through_m: float = 0.0) -> SkillResult:
+    """pass_through_m > 0: the leg is one of a run (the next starts at once), so it ends, still moving, as soon as the aircraft is
+    that near the waypoint. Stopping at every waypoint costs a braking and a climb back to cruise speed each time: at 3 m between
+    waypoints a live aircraft averaged about 1.1 m/s of the 1.9 commanded."""
     target = (x, y, z)
     start = time.monotonic()
+    best_distance, last_progress = float("inf"), start
     try:
         ox, oy = offset_xy
         goal_world = (x + ox, y + oy)
         pos = adapter.get_position()
-        leg = planner.begin_leg((pos[0] + ox, pos[1] + oy), goal_world)
+        start_world = (pos[0] + ox, pos[1] + oy)
+        # a planner that reads a sensor on the aircraft (NavRL's lidar) is handed the adapter, so one shared planner
+        # can serve several drones, each leg using its own aircraft's sensor
+        leg = (planner.begin_leg(start_world, goal_world, adapter) if getattr(planner, "wants_adapter", False)
+               else planner.begin_leg(start_world, goal_world))
         holding = False
         while True:
             pos = adapter.get_position()
@@ -42,12 +57,22 @@ def fly_leg_with_planner(adapter: VehicleAdapter, x: float, y: float, z: float, 
             if interrupt is not None and interrupt(pos):
                 adapter.start_hover()
                 return SkillResult(SkillStatus.INTERRUPTED, pos, elapsed, error="interrupted by monitor")
+            if pass_through_m > 0.0 and math.dist(pos, target) <= max(pass_through_m, tolerance):
+                return SkillResult(SkillStatus.SUCCESS, pos, elapsed)
             close = math.dist(pos, target) <= tolerance
             if close and not holding:
                 adapter.start_hover()
                 holding = True
             if close and adapter.get_speed() <= max_speed:
                 return SkillResult(SkillStatus.SUCCESS, pos, elapsed)
+            distance = math.hypot(x - pos[0], y - pos[1])
+            if distance < best_distance - stall_progress_m:
+                best_distance, last_progress = distance, time.monotonic()
+            elif not close and distance > tolerance and time.monotonic() - last_progress > stall_s:
+                # a reactive planner can be held in a pocket (a keep-out between it and its goal) and would otherwise fly in
+                # place until the leg timeout; the agent is told the leg failed and carries on with the mission
+                adapter.start_hover()
+                return SkillResult(SkillStatus.TIMEOUT, pos, elapsed, error=f"no progress toward {target} for {stall_s}s")
             if elapsed > timeout_s:
                 adapter.start_hover()
                 return SkillResult(SkillStatus.TIMEOUT, pos, elapsed, error=f"didn't reach {target} within {timeout_s}s")
@@ -64,4 +89,10 @@ def fly_leg_with_planner(adapter: VehicleAdapter, x: float, y: float, z: float, 
                 adapter.start_velocity(float(vx), float(vy), vz)
             time.sleep(SKILL_POLL_INTERVAL_S)
     except Exception as e:
-        return SkillResult(SkillStatus.FAILED, None, time.monotonic() - start, error=str(e))
+        final = None
+        try:
+            adapter.start_hover()      # a failed leg must not leave the aircraft flying on its last command
+            final = adapter.get_position()
+        except Exception:
+            pass
+        return SkillResult(SkillStatus.FAILED, final, time.monotonic() - start, error=str(e))

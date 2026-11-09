@@ -29,6 +29,7 @@ point, so teammates converging there are expected, not a near-miss.
 """
 
 import math
+import os
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import List, Optional, Tuple
@@ -53,6 +54,9 @@ def _distance_to_segment(point, a, b) -> float:
 class Severity(str, Enum):
     HARD = "hard"  # cannot be narrowed - refuse outright
     SOFT = "soft"  # can be narrowed into the envelope instead of refused
+
+
+EXIT_DETOUR_LIMIT_M = 4.0  # an exit that clears the keep-out margin may be this much farther than one that only clears the keep-out
 
 
 class FallbackAction(str, Enum):
@@ -100,6 +104,9 @@ class SafetyLimits:
     altitude_ceiling_m: float = 60.0
     geofence_half_extent_m: float = 80.0  # box is [-extent, extent] on x and y
     restricted_zones: List[NoFlyZone] = field(default_factory=list)
+    obstacles: list = field(default_factory=list)  # trees: core/obstacles.py
+    obstacle_margin_m: float = float(os.environ.get("NAVRL_TREE_MARGIN", 0.5))   # a fast aircraft coasts about 0.7 m per m/s on a turn
+    home_world: tuple = (0.0, 0.0)  # where this aircraft's home is, world metres: its own spawn point (the agent sets it)
     max_coordinate_m: float = 300.0
     max_speed_mps: float = 30.0  # comfortably above every real adapter speed this repo
     # configures (5-25 m/s across various mock/live scripts) - FICS's own 12 m/s assumes a
@@ -122,7 +129,8 @@ class SafetyLimits:
         xs = [s.x_min for s in scenario.sectors] + [s.x_max for s in scenario.sectors]
         ys = [s.y_min for s in scenario.sectors] + [s.y_max for s in scenario.sectors]
         half_extent = max(max(abs(v) for v in xs + ys), 1.0) + margin_m
-        return cls(restricted_zones=scenario.no_fly_zones, geofence_half_extent_m=half_extent,
+        return cls(restricted_zones=scenario.no_fly_zones, obstacles=list(getattr(scenario, "obstacles", [])),
+                    geofence_half_extent_m=half_extent,
                     min_separation_m=scenario.min_separation_m)
 
 
@@ -283,6 +291,26 @@ class SafetyGuardian:
         usable = [(cx, cy) for cx, cy in candidates
                   if abs(cx) <= extent and abs(cy) <= extent
                   and not any(zn.contains(cx, cy, t) for zn in self.limits.restricted_zones)]
+        candidates_all = list(usable)
+        # an exit point inside a keep-out, or a straight way to it through one, is not an exit (a street scenario has them on
+        # every side); if every one is blocked the nearest is still used
+        keep = self.limits.obstacle_margin_m
+        unblocked = [c for c in usable
+                     if not any(o.blocks_point(c[0], c[1], z, margin=keep) or o.blocks_segment((x, y, z), (c[0], c[1], z), margin=keep)
+                                for o in self.limits.obstacles)]
+        usable = unblocked or usable
+        # Every second spent inside the zone counts against the mission, a thin keep-out margin does not: when the only
+        # margin-clear exits are far (a narrow street, a tree on the near side), take a near one that clears the keep-out
+        # itself by half the margin rather than fly the length of the zone
+        slim = self.limits.obstacle_margin_m / 4.0
+        close_enough = [c for c in candidates_all
+                        if not any(o.blocks_point(c[0], c[1], z, margin=slim) or o.blocks_segment((x, y, z), (c[0], c[1], z), margin=slim)
+                                   for o in self.limits.obstacles)]
+        if close_enough and unblocked:
+            if min(math.dist((x, y), c) for c in close_enough) + EXIT_DETOUR_LIMIT_M < min(math.dist((x, y), c) for c in unblocked):
+                usable = close_enough
+        elif close_enough and not unblocked:
+            usable = close_enough
         names = [zone.id for zone in inside]
         if not usable:
             return self._escalate(belief, [f"inside_active_zone({', '.join(names)})"])
@@ -315,13 +343,12 @@ class SafetyGuardian:
         x, y, _ = belief.position
         return math.hypot(x, y) <= 3.0
 
-    @staticmethod
-    def _home_world(belief) -> Tuple[float, float, float]:
+    def _home_world(self, belief) -> Tuple[float, float, float]:
         # Belief positions are already in this agent's own local frame, where
         # (0, 0, *) at home has a well-defined meaning everywhere this class
         # is used (persistent_agent.py's own RETURN_HOME target) - the
         # guardian reasons in the same frame its caller hands it, not world.
-        return (0.0, 0.0, belief.position[2] if belief.position else 0.0)
+        return (self.limits.home_world[0], self.limits.home_world[1], belief.position[2] if belief.position else 0.0)
 
     def _narrow(self, command: Command, failed: List[SafetyCheck]) -> Command:
         updated = command
@@ -344,6 +371,7 @@ class SafetyGuardian:
             self._check_altitude_bounds(command),
             self._check_geofence(command),
             self._check_restricted_zones(command, belief),
+            self._check_obstacles(command, position_world),
             self._check_waypoint_validity(command),
             self._check_max_speed(command),
             self._check_command_timeout(command),
@@ -382,6 +410,22 @@ class SafetyGuardian:
             if zone.contains(x, y, t):
                 return SafetyCheck("restricted_zones", False, f"({x}, {y}) inside {zone.id}", Severity.HARD)
         return SafetyCheck("restricted_zones", True)
+
+    def _check_obstacles(self, command: Command, position_world=None) -> SafetyCheck:
+        """A leg must not end in, or (when the aircraft's own position is known) cross, a tree. The sim does not stop
+        a drone flying through a palm, so this is the only protection."""
+        if command.kind != "fly" or command.target is None or not self.limits.obstacles:
+            return SafetyCheck("obstacles", True)
+        margin = self.limits.obstacle_margin_m
+        for tree in self.limits.obstacles:
+            if tree.blocks_point(*command.target, margin=margin):
+                return SafetyCheck("obstacles", False, f"{command.target} inside the tree at ({tree.x}, {tree.y})",
+                                    Severity.HARD)
+            if position_world is not None and tree.blocks_segment(position_world, command.target, margin=margin):
+                return SafetyCheck("obstacles", False,
+                                    f"path to {command.target} passes through the tree at ({tree.x}, {tree.y})",
+                                    Severity.HARD)
+        return SafetyCheck("obstacles", True)
 
     def _check_waypoint_validity(self, command: Command) -> SafetyCheck:
         if command.target is None:

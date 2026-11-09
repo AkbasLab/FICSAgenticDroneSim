@@ -1,0 +1,21 @@
+{
+  "limit5": {
+    "_about": "The settings the 2026-11-07/08 live full-map runs used (S1-S3). Run speed (4.75) is a script argument, not here.",
+    "NAVRL_ACTION_LIMIT": 5,
+    "NAVRL_VEL_INPUT": "policy",
+    "NAVRL_GOVERNOR": 1,
+    "NAVRL_DOWN_ROW": 1,
+    "NAVRL_TREE_MARGIN": 2.0,
+    "NAVRL_MIN_SPEED": 1.5
+  },
+  "limit5_medium": {
+    "_about": "As limit5, with the wider tree margin and lane inset the medium scenario needs.",
+    "NAVRL_ACTION_LIMIT": 5,
+    "NAVRL_VEL_INPUT": "policy",
+    "NAVRL_GOVERNOR": 1,
+    "NAVRL_DOWN_ROW": 1,
+    "NAVRL_TREE_MARGIN": 3.0,
+    "NAVRL_LANE_INSET": 4.5,
+    "NAVRL_MIN_SPEED": 1.5
+  }
+}

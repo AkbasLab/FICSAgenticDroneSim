@@ -15,6 +15,7 @@ import time
 from ..core.interfaces import VehicleAdapter
 
 DEFAULT_SPEED_MPS = 5.0  # matches control.navigation.MOVE_SPEED
+VELOCITY_HOLD_S = 0.6    # a velocity command lapses after this long, as in the real adapter (airsim_adapter.VELOCITY_HOLD_S)
 
 
 class KinematicMockVehicleAdapter(VehicleAdapter):
@@ -40,6 +41,8 @@ class KinematicMockVehicleAdapter(VehicleAdapter):
         raise NotImplementedError("KinematicMockVehicleAdapter is driven via skills, not execute()")
 
     def land(self):
+        self._advance()
+        self._velocity = None
         self._target = None
 
     def _advance(self):
@@ -47,7 +50,11 @@ class KinematicMockVehicleAdapter(VehicleAdapter):
         position/speed read so a poll mid-flight sees genuine progress."""
         if self._velocity is not None:
             elapsed = time.monotonic() - self._vel_start_time
+            lapsed = elapsed > VELOCITY_HOLD_S
+            elapsed = min(elapsed, VELOCITY_HOLD_S)
             self._pos = tuple(p + v * elapsed for p, v in zip(self._vel_start_pos, self._velocity))
+            if lapsed:
+                self._velocity = None    # nobody renewed it: the aircraft hovers where it got to
             return
         if self._target is None or self._move_start_time is None:
             return

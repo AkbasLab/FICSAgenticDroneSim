@@ -84,6 +84,17 @@ class Belief:
         return self.mission.search_queue
 
     @property
+    def targets_sensed(self) -> Tuple[str, ...]:
+        """Targets this drone's own sensor saw, whether or not the report hold went on to confirm them."""
+        return tuple(sorted(s.target_id for s in self.mission.targets_known.values() if s.source == "sensor"))
+
+    @property
+    def targets_confirmed_by_self(self) -> Tuple[str, ...]:
+        """Targets this drone sensed itself and then confirmed by holding position (what it told the team)."""
+        return tuple(sorted(s.target_id for s in self.mission.targets_known.values()
+                            if s.source == "sensor" and s.confirmed))
+
+    @property
     def target_found(self) -> Optional[str]:
         for sighting in self.mission.targets_known.values():
             if sighting.confirmed:

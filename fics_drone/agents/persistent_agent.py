@@ -8,12 +8,17 @@ bare timer tick.
 """
 
 import math
+import os
 import time
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 from ..control.navigation import DEFAULT_HEIGHT, SKILL_TIMEOUT_S
-from ..control.leg_planner_skill import fly_leg_with_planner
+from ..control.leg_planner_skill import PASS_THROUGH_M, fly_leg_with_planner
+from ..core.obstacles import BoxKeepOut, TreeObstacle
+from ..planners.street_path import plan_around
+from ..planners.overfly import detour_cost_s, overfly_altitude, overfly_cost_s
+from ..control.leg_planner_skill import MAX_CLIMB_MPS
 from ..control.skills import go_to_waypoint, hold_position, land, take_off
 from ..coordination.bidding import DEFAULT_WEIGHTS, compute_bid
 from ..coordination.message_bus import AgentLink
@@ -41,6 +46,12 @@ MAX_STEPS = 500  # hard backstop against a future undiscovered infinite-loop bug
 # a real mission finishes in well under 50 decision steps even with retries, so this is generous
 MAX_HELP_REQUESTS_KEPT = 5  # Phase 12.3: bounded, like every other thing shown to a model
 MAX_MARKET_KEPT = 5  # Phase 12 (15-tool set): same bound for announcements, bids and offers
+OVERFLY_MAX_EXTRA_M = float(os.environ.get("AGENT_OVERFLY_MAX_M", 15.0))   # a blocked leg may climb this far above its own height to cross
+# tall trees instead of flying round them (0 = never). NavRL steers only sideways; the agent supplies the vertical part.
+OVERFLY_CLEARANCE_M = 3.0      # how far above the tallest tree on the way the crossing is flown
+DETOUR_SPEED_MPS = 2.1         # what a live aircraft averages along a detour (measured 2026-11-08), to compare it with a climb
+AGENT_REPORT_DRIFT_M = 3.0  # how far the aircraft may wander while holding to confirm a sighting. The default 1.0 m
+# failed live reports on ordinary hover jitter (1 to 2 m): 4 of 5 finds were never reported in live run P1
 AGENT_REPORT_HOLD_S = 3.0  # how long THIS agent holds position to confirm a sighting - an agent-
 # owned protocol constant, deliberately not read from the scenario's Target.dwell_s (that would be
 # the same ground-truth leak Phase 6 exists to close, just moved to a different field)
@@ -55,6 +66,16 @@ CONFIRM_CLEAR_MARGIN_S = 1.0  # wait this long past the last zone-covered instan
 CONFIRM_WAIT_STEP_S = 2.0  # one wait-in-place step while a zone is still over the sighting
 MAX_CONFIRM_WAIT_S = 45.0  # do not wait longer than this for a zone to clear; hand it to nobody
 MAX_CONFIRM_ATTEMPTS = 3  # failed confirmation tries per sighting before giving up on it
+SCENE_RANGE_M = 30.0  # obstacles further than this from the aircraft are left out of the scene a leg planner is shown
+RETURN_VIEW_MARGIN_M = 2.0  # a leg home along the outward trail keeps this far from every keep-out
+ZONE_ROUTE_PAD_M = 1.0    # a zone that is on is flown round with this much room (the exit margin is for steering out)
+SEARCH_ZONE_PAD_M = 1.5   # a search waypoint this close to a zone that is on is put off, so no leg ends right at its edge
+DEFER_MAX_S = 150.0  # a search leg inside a zone that will end is put off for at most this long, then dropped
+DEFER_WAIT_MAX_S = 30.0  # a routed scenario waits for a zone that ends within this long instead of putting its legs off
+MAX_LEG_REFUSALS = 3     # a routed scenario asks for a refused search leg this many times before it drops it
+REFUSAL_WAIT_S = 1.0
+STEP_OUT_RANGE_M = 20.0
+DEFER_HOLD_S = 2.0   # when every remaining leg is inside a zone, hold still this long before looking again
 SEPARATION_WAIT_S = 25.0  # how long a drone holds still when only a teammate's position or route blocks its leg
 SEPARATION_WAIT_STEP_S = 2.0  # one hold, then ask the guardian again
 CONFIRM_TEAMMATE_FRESH_S = 8.0  # a teammate counts as a candidate only if heard from this recently
@@ -80,10 +101,42 @@ def _subdivide(a: Tuple[float, float, float], b: Tuple[float, float, float], spa
     return [tuple(a[k] + (b[k] - a[k]) * (i / steps) for k in range(3)) for i in range(1, steps + 1)]
 
 
-def _build_search_queue(sector: Sector, spawn_offset, height: float) -> List[SearchLeg]:
+# lane ends are pulled in from the sector edge by this much (env NAVRL_LANE_INSET, metres): every lane end is a U-turn, and a fast
+# aircraft coasts about 0.7 m per m/s past it (3 m at 4.4 m/s), into whatever stands just outside the sector
+LANE_INSET_M = float(os.environ.get("NAVRL_LANE_INSET", 0.0))
+
+
+def _nearest_clear_spot(start, trees, margin: float, extra: float = 0.7, step: float = 0.5, limit: float = 14.0):
+    """The nearest point (x, y, z) outside every keep-out grown by margin + extra, found by widening rings round `start`, or
+    None. A point is only taken if the straight line to it never goes deeper into the keep-outs than the aircraft already is."""
+    gap = margin + extra
+    z = start[2]
+    r = step
+    while r <= limit:
+        n = max(8, int(2 * math.pi * r / step))
+        for k in range(n):
+            a = 2 * math.pi * k / n
+            p = (start[0] + r * math.cos(a), start[1] + r * math.sin(a), z)
+            if not any(t.blocks_point(*p, margin=gap) for t in trees)                     and not any(t.blocks_segment(start, p, margin=margin) for t in trees):
+                return p
+        r += step
+    return None
+
+
+def _build_search_queue(sector: Sector, spawn_offset, height: float, inset: float = None, route=None) -> List[SearchLeg]:
     """Pure geometry - no target information goes into this. An agent's
     search pattern must not depend on where the things it's searching for
-    actually are."""
+    actually are. With a `route` (world x, y pairs from the scenario) the legs follow it instead of lanes."""
+    if route:
+        corners = [(x, y, height) for x, y in route]
+        points = [corners[0]]
+        for a, b in zip(corners, corners[1:]):
+            points.extend(_subdivide(a, b, SEARCH_WAYPOINT_SPACING_M))
+        return [SearchLeg(point=_to_local(p, spawn_offset)) for p in points[1:]]
+    inset = LANE_INSET_M if inset is None else inset
+    if inset > 0.0:
+        i = min(inset, (sector.x_max - sector.x_min) / 2.0 - 1.0, (sector.y_max - sector.y_min) / 2.0 - 1.0)
+        sector = Sector(sector.id, sector.x_min + i, sector.x_max - i, sector.y_min + i, sector.y_max - i)
     corners = lawnmower_waypoints(sector, height)
     points = [corners[0]] if corners else []
     for a, b in zip(corners, corners[1:]):
@@ -96,13 +149,15 @@ class AgentReport:
     trace: List[str]
     target_found: Optional[str]
     battery_frac_at_end: float
+    targets_sensed: Tuple[str, ...] = ()
+    targets_confirmed_by_self: Tuple[str, ...] = ()
 
 
 class PersistentAgent:
     def __init__(self, adapter: VehicleAdapter, scenario: Scenario, sector_id: str,
                  spawn_offset: Tuple[float, float, float], battery_s: float,
                  policy: SearchAgentPolicy = None, guardian: SafetyGuardian = None,
-                 cruise_height: float = DEFAULT_HEIGHT, logger: DecisionLogger = None,
+                 cruise_height: float = None, logger: DecisionLogger = None,
                  drone_name: str = "drone", link: AgentLink = None,
                  task_board: TaskBoard = None, health_monitor: HealthMonitor = None,
                  kill_at_s: Optional[float] = None, comms_estimator: CommsEstimator = None,
@@ -114,6 +169,9 @@ class PersistentAgent:
         # the per-leg give-up time for slow movers.
         self.leg_planner = leg_planner
         self.leg_timeout_s = leg_timeout_s
+        self._trail = []            # local points the search legs reached, oldest first: the way back for a routed scenario
+        self._refusals = {}
+        self._deferred_since = {}   # search legs put off because a zone is over them: point -> mission time first put off
         # GMB: with zone_monitor on, every flight leg polls the guardian each control tick and stops
         # the moment the aircraft is inside a zone that has just become active. Off = the guardian
         # only notices at the next command boundary (the pre-monitor behaviour, kept for comparison).
@@ -122,12 +180,13 @@ class PersistentAgent:
         self.scenario = scenario
         self.sector = scenario.sector(sector_id)
         self.spawn_offset = spawn_offset
-        self.cruise_height = cruise_height
+        self.cruise_height = cruise_height or scenario.cruise_height or DEFAULT_HEIGHT
         self.policy = policy or SearchAgentPolicy()
         # Phase 11: SafetyGuardian supersedes Phase 5's Guardian (no-fly-zones only,
         # binary pass/fail) as the default - Guardian itself is untouched, still its
         # own class with its own tests, just no longer what a real agent flies with.
         self.guardian = guardian or SafetyGuardian(limits=SafetyLimits.from_scenario(scenario))
+        self.guardian.limits.home_world = (spawn_offset[0], spawn_offset[1])
         self.guardian_log = GuardianLog()
         self._pending_waypoint = None  # Phase 12: coordinates for a model-chosen GO_TO_WAYPOINT, one-shot
         self._pending_action = None  # Phase 12 (15-tool set): (tool, validated args) the model just chose, one-shot
@@ -148,7 +207,9 @@ class PersistentAgent:
         self.belief = Belief(
             self_state=SelfState(position=(0.0, 0.0, 0.0), elapsed_s=0.0, battery_s=battery_s),
             mission=MissionBelief(sector_id=sector_id,
-                                   search_queue=_build_search_queue(self.sector, spawn_offset, cruise_height)),
+                                   search_queue=self._clear_search_queue(
+                                       _build_search_queue(self.sector, spawn_offset, self.cruise_height,
+                                                           route=scenario.search_routes.get(sector_id)))),
         )
         if self.task_board:
             # Seed a baseline "heard from at mission start" for every OTHER known
@@ -242,7 +303,9 @@ class PersistentAgent:
                 break
 
         return AgentReport(trace=trace, target_found=self.belief.target_found,
-                            battery_frac_at_end=self.belief.battery_frac_remaining)
+                            battery_frac_at_end=self.belief.battery_frac_remaining,
+                            targets_sensed=self.belief.targets_sensed,
+                            targets_confirmed_by_self=self.belief.targets_confirmed_by_self)
 
     def _execute(self, objective: Objective, trace: List[str]) -> ReplanEvent:
         if objective == Objective.TAKE_OFF:
@@ -257,9 +320,23 @@ class PersistentAgent:
             if not self.belief.mission.search_queue:
                 return ReplanEvent.SKILL_SUCCEEDED
             leg = self.belief.mission.search_queue.pop(0)
-            event = self._guarded_fly(leg.point, trace)
+            if self._defer_leg_in_zone(leg, trace):
+                self._hover()
+                return ReplanEvent.SKILL_SUCCEEDED
+            # the next lane waypoint follows at once, so the aircraft is not stopped here (the last one of the sweep is)
+            event = self._guarded_fly(leg.point, trace, pass_through=bool(self.belief.mission.search_queue))
+            if event == ReplanEvent.GUARDIAN_BLOCKED and self.scenario.search_routes:
+                # (the next leg would be a straight line over the corner this one rounds)
+                key = tuple(round(v, 1) for v in leg.point)
+                self._refusals[key] = self._refusals.get(key, 0) + 1
+                if self._refusals[key] < MAX_LEG_REFUSALS:
+                    self.belief.mission.search_queue.insert(0, leg)
+                    trace.append("leg_requeued")
+                    self._hover()
+                    time.sleep(REFUSAL_WAIT_S)
             if event != ReplanEvent.SKILL_SUCCEEDED:
                 return event
+            self._trail.append(leg.point)
             if self.task_board:
                 # Keep my own claim fresh from OTHER agents' point of view - same cadence
                 # as the heartbeat above. claimed_by() (my own view) never needs this; it's
@@ -274,7 +351,8 @@ class PersistentAgent:
             # reporting -> returning, never touching "listening"), so it needs its
             # own copy of the same completion signal, not just LISTEN's.
             self._mark_own_task_complete()
-            result = hold_position(self.adapter, AGENT_REPORT_HOLD_S, interrupt=self._zone_interrupt())
+            result = hold_position(self.adapter, AGENT_REPORT_HOLD_S, drift_tolerance=AGENT_REPORT_DRIFT_M,
+                               interrupt=self._zone_interrupt())
             self.belief.position = result.final_position or self.belief.position
             unconfirmed = [s for s in self.belief.mission.targets_known.values()
                            if not s.confirmed and s.source == "sensor"]
@@ -328,8 +406,11 @@ class PersistentAgent:
                 return event
             return self._sense_after_arrival()  # somewhere new: a real sensor reading, as always
 
+        if objective == Objective.RETURN_HOME and self.scenario.search_routes:
+            return self._fly_home_by_trail(trace)
+
         if objective == Objective.RETURN_HOME:
-            return self._guarded_fly((0.0, 0.0, DEFAULT_HEIGHT), trace, purpose="home")
+            return self._guarded_fly((0.0, 0.0, self.cruise_height), trace, purpose="home")   # not lower: a lamp post by T1 tops out near 10 m
 
         if objective == Objective.LAND:
             result = land(self.adapter)
@@ -337,6 +418,30 @@ class PersistentAgent:
             return ReplanEvent.SKILL_SUCCEEDED if result.status == SkillStatus.SUCCESS else ReplanEvent.SKILL_FAILED
 
         return ReplanEvent.SKILL_SUCCEEDED
+
+    def _fly_home_by_trail(self, trace: List[str]) -> ReplanEvent:
+        """Home by the way out. A straight line home would cross whatever stands between the street and the base, so each leg
+        goes to the point of the outward trail nearest home that can be seen from here (no keep-out in the way), until the
+        base itself can be seen."""
+        home = (0.0, 0.0, self.cruise_height)
+        margin = RETURN_VIEW_MARGIN_M
+        trees = self.guardian.limits.obstacles
+
+        def sees(a, b):
+            return not any(t.blocks_segment(a, b, margin=margin) for t in trees)
+
+        for _ in range(len(self._trail) + 2):
+            here = _to_world(self.belief.position, self.spawn_offset)
+            if sees(here, _to_world(home, self.spawn_offset)) or not self._trail:
+                return self._guarded_fly(home, trace, purpose="home")
+            pick = next((k for k, p in enumerate(self._trail) if sees(here, _to_world(p, self.spawn_offset))),
+                        len(self._trail) - 1)
+            point = self._trail[pick]
+            del self._trail[pick:]
+            event = self._guarded_fly(point, trace, purpose="home", pass_through=True)
+            if event != ReplanEvent.SKILL_SUCCEEDED:
+                return event
+        return self._guarded_fly(home, trace, purpose="home")
 
     def _observe_messages(self):
         """Part of 'observe', every loop iteration - belief updates only on
@@ -455,7 +560,9 @@ class PersistentAgent:
             if self.link:
                 self.link.send(MessageType.TASK_CLAIM, {"task_id": task_id, "bid": bid, "version": version})
             self.belief.mission.sector_id = task.sector_id
-            self.belief.mission.search_queue = _build_search_queue(sector, self.spawn_offset, self.cruise_height)
+            self.belief.mission.search_queue = self._clear_search_queue(
+                _build_search_queue(sector, self.spawn_offset, self.cruise_height,
+                                    route=self.scenario.search_routes.get(sector.id)))
             self.belief.listen_rounds = 0  # the new sector gets its own full listen window later
         return accepted
 
@@ -781,7 +888,8 @@ class PersistentAgent:
         if event != ReplanEvent.SKILL_SUCCEEDED:
             pending.attempts += 1
             return event
-        result = hold_position(self.adapter, AGENT_REPORT_HOLD_S, interrupt=self._zone_interrupt())
+        result = hold_position(self.adapter, AGENT_REPORT_HOLD_S, drift_tolerance=AGENT_REPORT_DRIFT_M,
+                               interrupt=self._zone_interrupt())
         self.belief.position = result.final_position or self.belief.position
         if result.status != SkillStatus.SUCCESS:
             pending.attempts += 1
@@ -820,18 +928,157 @@ class PersistentAgent:
             return self.belief.elapsed_s
         return time.monotonic() - self._run_start
 
+    def _hover(self):
+        """Stop where the aircraft is: a leg that ends without flying must not leave the last velocity command running."""
+        try:
+            self.adapter.start_hover()
+        except Exception:
+            pass
+
+    def _trees_near(self, point, range_m: float):
+        """The keep-outs (trees, not zones or teammates) that can reach within range_m of the point."""
+        return [t for t in self.guardian.limits.obstacles
+                if abs(t.x - point[0]) <= range_m + max(t.trunk_r, t.crown_r) and abs(t.y - point[1]) <= range_m + max(t.trunk_r, t.crown_r)]
+
+    def _zone_over(self, point_local):
+        """The zone that is on right now over this local point, or None."""
+        world = _to_world(point_local, self.spawn_offset)
+        t = self._live_elapsed()
+        for zone in self.guardian.limits.restricted_zones:
+            if zone.active_at(t):
+                x0, x1, y0, y1 = zone.bounds_at(t)
+                pad = SEARCH_ZONE_PAD_M
+                if self.scenario.search_routes and zone.active_until_s is not None:
+                    pad = max(pad, ZONE_ROUTE_PAD_M + self.guardian.limits.obstacle_margin_m)   # (what the router keeps clear)
+                if x0 - pad <= world[0] <= x1 + pad and y0 - pad <= world[1] <= y1 + pad:
+                    return zone
+        return None
+
+    def _defer_leg_in_zone(self, leg: SearchLeg, trace: List[str]) -> bool:
+        """A search leg whose point lies inside a zone that is on right now is not proposed (the guardian would refuse it, and
+        three refusals in a row end the mission). If the zone will end or move away the leg goes to the back of the queue and
+        is tried again later, for at most DEFER_MAX_S; a zone that is on for good drops the leg. Returns True if the leg was
+        handled here and must not be flown now."""
+        zone = self._zone_over(leg.point)
+        if zone is None:
+            return False
+        key = tuple(round(v, 1) for v in leg.point)
+        now = self._live_elapsed()
+        first = self._deferred_since.setdefault(key, now)
+        permanent = zone.active_until_s is None and zone.vx == 0.0 and zone.vy == 0.0
+        if permanent or now - first > DEFER_MAX_S:
+            trace.append(f"dropped_leg_in_{zone.id}")
+            return True
+        queue = self.belief.mission.search_queue
+        if self.scenario.search_routes and zone.active_until_s is not None and zone.active_until_s - now <= DEFER_WAIT_MAX_S:
+            if first == now:
+                trace.append(f"waiting_out_{zone.id}")
+            queue.insert(0, leg)         # (in route order: the legs after it must not be flown as a straight line)
+            result = hold_position(self.adapter, min(DEFER_HOLD_S, max(zone.active_until_s - now, 0.5)),
+                                   interrupt=self._zone_interrupt())
+            self.belief.position = result.final_position or self.belief.position
+            if result.status != SkillStatus.SUCCESS:
+                time.sleep(min(DEFER_HOLD_S, 0.5))      # (never a step that costs no time: the step budget is finite)
+            return True
+        if first == now:
+            trace.append(f"deferred_leg_in_{zone.id}")
+        queue.append(leg)
+        if all(self._zone_over(other.point) is not None for other in queue):
+            result = hold_position(self.adapter, DEFER_HOLD_S, interrupt=self._zone_interrupt())
+            self.belief.position = result.final_position or self.belief.position
+        return True
+
+    def _clear_search_queue(self, queue: List[SearchLeg]) -> List[SearchLeg]:
+        """Plans the lanes around known obstacles: a waypoint inside a keep-out is dropped, and where the straight line to
+        the next waypoint would cross one, a detour waypoint on the side of the keep-out is inserted first. With no
+        obstacles the queue is returned unchanged."""
+        trees = self.guardian.limits.obstacles
+        if not trees or not queue or self.scenario.search_routes:
+            return queue   # (a scenario route was planned round every keep-out already)
+        margin = self.guardian.limits.obstacle_margin_m
+        out, previous = [], _to_world((0.0, 0.0, self.cruise_height), self.spawn_offset)
+        for leg in queue:
+            target = _to_world(leg.point, self.spawn_offset)
+            if any(t.blocks_point(*target, margin=margin) for t in trees):
+                continue                       # nothing to fly to under a tree
+            for _ in range(4):
+                blocker = next((t for t in trees if t.blocks_segment(previous, target, margin=margin)), None)
+                if blocker is None:
+                    break
+                path = self._detour_around(blocker, previous, target, margin)
+                out.extend(SearchLeg(point=_to_local(spot, self.spawn_offset)) for spot in path)
+                previous = path[-1]
+            out.append(leg)
+            previous = target
+        return out
+
+    def _route_obstacles(self):
+        """Everything a leg is flown round: trees, the zones that are on right now (grown by the exit margin), and the last
+        known place of every teammate (a full-height cylinder of the separation distance plus a margin)."""
+        limits = self.guardian.limits
+        obstacles = list(limits.obstacles)
+        t = self._live_elapsed()
+        pad = ZONE_ROUTE_PAD_M
+        for zone in limits.restricted_zones:
+            if zone.active_at(t):
+                x0, x1, y0, y1 = zone.bounds_at(t)
+                obstacles.append(BoxKeepOut(x0 - pad, x1 + pad, y0 - pad, y1 + pad))
+        radius = limits.min_separation_m + 1.5
+        for record in self.belief.team.teammates.values():
+            if record.last_known_position is not None:
+                x, y, _ = record.last_known_position
+                obstacles.append(TreeObstacle(x=x, y=y, z_bottom=-1000.0, z_top=1000.0, trunk_r=radius, crown_r=radius,
+                                              crown_from_frac=1.0))
+        return obstacles
+
+    def _detour_path(self, obstacle, a, b, margin):
+        if hasattr(obstacle, "detour_path"):
+            return obstacle.detour_path(a, b, margin)
+        return self._detour_around(obstacle, a, b, margin)
+
+    def _detour_around(self, tree, a, b, margin):
+        """Waypoints that take the aircraft from a to b around `tree`: straight out (or in) along the radius to a ring one metre
+        outside the keep-out, round the ring in steps of at most 25 degrees, then straight to the ring point nearest b. Radial
+        legs and short chords never come closer than the keep-out radius. Goes whichever way round is free of other
+        trees, stays inside the sector, and is shorter, in that order."""
+        z = b[2]
+        # the widest keep-out between the two heights: a leg that climbs or descends sweeps through all of them
+        widest = max([r for r in (tree.radius_at(a[2]), tree.radius_at(z)) if r is not None] or [tree.trunk_r])
+        ring = widest + margin + 1.0
+        cx, cy = tree.x, tree.y
+        a0 = math.atan2(a[1] - cy, a[0] - cx)
+        a1 = math.atan2(b[1] - cy, b[0] - cx)
+        ccw = (a1 - a0) % (2 * math.pi)
+        options = []
+        for sweep in (ccw, ccw - 2 * math.pi):
+            steps = max(1, int(abs(sweep) / math.radians(25)) + 1)
+            spots = [(cx + ring * math.cos(a0 + sweep * k / steps), cy + ring * math.sin(a0 + sweep * k / steps), z)
+                     for k in range(steps + 1)]
+            blocked = sum(any(t.blocks_point(*q, margin=margin) for t in self.guardian.limits.obstacles) for q in spots)
+            outside = sum(not (self.sector.x_min <= q[0] <= self.sector.x_max and self.sector.y_min <= q[1] <= self.sector.y_max)
+                          for q in spots)
+            options.append(((blocked, outside, abs(sweep)), spots))
+        return min(options, key=lambda option: option[0])[1]
+
     def _active_zone_rects(self):
         """The zones that are on right now as (x_min, x_max, y_min, y_max), world coordinates: what a leg
         planner is shown instead of a lidar."""
         t = self._live_elapsed()
-        return [zone.bounds_at(t) for zone in self.guardian.limits.restricted_zones if zone.active_at(t)]
+        rects = [zone.bounds_at(t) for zone in self.guardian.limits.restricted_zones if zone.active_at(t)]
+        height = self.belief.position[2]
+        here = _to_world(self.belief.position, self.spawn_offset)
+        for tree in self.guardian.limits.obstacles:
+            # a planner cannot see further than its sensor, and a street scenario holds thousands of keep-outs
+            if math.hypot(tree.x - here[0], tree.y - here[1]) <= max(tree.trunk_r, tree.crown_r) + SCENE_RANGE_M:
+                rects += tree.rects_at(height)
+        return rects
 
-    def _fly_approved_leg(self, local_target, interrupt):
+    def _fly_approved_leg(self, local_target, interrupt, pass_through=False):
         if self.leg_planner is None:
             return go_to_waypoint(self.adapter, *local_target, timeout_s=self.leg_timeout_s, interrupt=interrupt)
         return fly_leg_with_planner(self.adapter, *local_target, self.leg_planner, self._active_zone_rects,
                                     offset_xy=self.spawn_offset[:2], timeout_s=self.leg_timeout_s,
-                                    interrupt=interrupt)
+                                    interrupt=interrupt, pass_through_m=PASS_THROUGH_M if pass_through else 0.0)
 
     def _zone_interrupt(self):
         """Per-tick check handed to the flight skill, or None when the monitor is off or no zone
@@ -845,7 +1092,8 @@ class PersistentAgent:
         return tripped
 
     def _guarded_fly(self, local_target: Tuple[float, float, float], trace: List[str],
-                      purpose: str = "mission", _after_interrupt: bool = False) -> ReplanEvent:
+                      purpose: str = "mission", _after_interrupt: bool = False,
+                      _detouring: bool = False, pass_through: bool = False) -> ReplanEvent:
         """Every proposed flight target goes through the SafetyGuardian before
         reaching the vehicle - the policy proposes, the guardian disposes.
         `purpose="home"` (RETURN_HOME) exempts battery_reserve/separation, which
@@ -858,12 +1106,85 @@ class PersistentAgent:
         command speed proposal doesn't exist here the way FICS's own does, so
         this check is honest about what it can and can't see, not faked."""
         self.belief.elapsed_s = self._live_elapsed()  # zones are scheduled in mission time
+        try:
+            self.belief.position = self.adapter.get_position()   # (a leg that ended without stopping left it stale)
+        except Exception:
+            pass
         world_target = _to_world(local_target, self.spawn_offset)
+        if not _detouring and purpose in ("mission", "home") and all(math.isfinite(v) for v in world_target):
+            # (a target that is not a real number is not routed: the guardian refuses it below)
+            # A straight leg that would cross a tree, a zone that is on now, or a teammate is flown round it instead (the
+            # guardian would refuse it, or the zone monitor would stop it and steer the aircraft out, again and again, and
+            # the way home must always be possible). A target inside a keep-out is left for the guardian to refuse.
+            trees = self._route_obstacles()
+            margin = self.guardian.limits.obstacle_margin_m
+            start = _to_world(self.belief.position, self.spawn_offset)
+            own = self._trees_near(start, STEP_OUT_RANGE_M) if self.scenario.search_routes else []
+            if any(t.blocks_point(*start, margin=margin) for t in own):
+                # standing inside a keep-out's margin (a zone exit or a stalled leg put the aircraft there): step out to the
+                # nearest clear spot first, since no leg from inside can be planned or approved reliably
+                spot = _nearest_clear_spot(start, own, margin)
+                if spot is not None:
+                    event = self._guarded_fly(_to_local(spot, self.spawn_offset), trace, purpose, _detouring=True)
+                    if event != ReplanEvent.SKILL_SUCCEEDED:
+                        return event
+                    trace.append("stepped_out_of_keepout")
+                    start = _to_world(self.belief.position, self.spawn_offset)
+            blocker = next((t for t in trees if not t.blocks_point(*start, margin=0.0)
+                            and t.blocks_segment(start, world_target, margin=margin)), None)
+            if blocker is not None and not any(t.blocks_point(*world_target, margin=margin) for t in trees):
+                # NavRL steers only sideways at one height; the agent can also fly over the trees that are not too tall
+                over = overfly_altitude(start, world_target, trees, margin, OVERFLY_CLEARANCE_M, OVERFLY_MAX_EXTRA_M)
+                if self.scenario.search_routes:
+                    # keep-outs stand thick along a street: plan a way through all of them, not round one tree at a time
+                    spots = None
+                    for pad in (12.0, 24.0, 40.0):
+                        path = plan_around(start, world_target, trees, margin, pad=pad)
+                        if path:
+                            spots = path[:-1]   # (the leg to the target follows)
+                            break
+                    no_way_round = spots is None or any(t.blocks_point(*s, margin=margin) for s in spots for t in trees)
+                    if no_way_round and over is not None:
+                        spots = []           # no way round, but a way over: flown below
+                    elif no_way_round:
+                        # no way round that is wholly clear: fly nothing, rather than part of a detour the guardian then stops
+                        trace.append("no_way_round")
+                        self._hover()
+                        self.belief.self_state.last_block_reason = "no way round the keep-outs"
+                        if purpose == "home":
+                            self.belief.nav_retries += 1
+                        return ReplanEvent.GUARDIAN_BLOCKED
+                else:
+                    spots = self._detour_path(blocker, start, world_target, margin)
+                if over is not None and spots and (overfly_cost_s(start, world_target, over, MAX_CLIMB_MPS)
+                                                  >= detour_cost_s(start, spots, world_target, DETOUR_SPEED_MPS)):
+                    over = None          # the way round costs less than the climb
+                if over is not None:
+                    # climb straight up, cross level above the trees, come down at the target
+                    for part, spot in (("climb", (start[0], start[1], over)), ("cross", (world_target[0], world_target[1], over))):
+                        event = self._guarded_fly(_to_local(spot, self.spawn_offset), trace, purpose, _detouring=True,
+                                                  pass_through=(part == "cross"))
+                        if event != ReplanEvent.SKILL_SUCCEEDED:
+                            return event
+                    trace.append("flew_over_tree")
+                else:
+                    for spot in spots:
+                        event = self._guarded_fly(_to_local(spot, self.spawn_offset), trace, purpose, _detouring=True,
+                                                  pass_through=True)   # the leg to the target follows
+                        if event != ReplanEvent.SKILL_SUCCEEDED:
+                            return event
+                    trace.append("flew_round_tree")
         command = Command(kind="fly", target=world_target, purpose=purpose,
                            speed_mps=getattr(self.adapter, "speed_mps", 0.0), timeout_s=SKILL_TIMEOUT_S)
         evaluation = self.guardian.evaluate(command, self.belief,
                                            position_world=_to_world(self.belief.position, self.spawn_offset))
         self.guardian_log.record(len(self.guardian_log.entries), command, evaluation)
+        if (evaluation.fallback == FallbackAction.EXIT_ZONE or (evaluation.outcome == GuardianOutcome.REJECT_AND_REPLAN
+                                                              and set(evaluation.failed_checks) <= {"restricted_zones", "obstacles"})):
+            # a zone or a tree that is in the way is the world, not a policy proposing unsafe things over and over: it must not
+            # count toward the repeated-rejection escalation (which sends the drone home and loses its sector)
+            self.guardian.consecutive_rejections = 0
+            self.guardian.consecutive_interventions = 0
         if (self.link and purpose == "mission" and evaluation.outcome == GuardianOutcome.REJECT_AND_REPLAN
                 and evaluation.failed_checks == ["separation"]):
             evaluation = self._wait_out_separation(command, trace, evaluation)
@@ -871,6 +1192,9 @@ class PersistentAgent:
         if evaluation.outcome == GuardianOutcome.REJECT_AND_REPLAN:
             self.belief.self_state.last_block_reason = evaluation.reason
             trace.append(f"guardian_blocked({evaluation.reason})")
+            self._hover()
+            if purpose == "home":
+                self.belief.nav_retries += 1      # (otherwise a blocked way home is asked for until the step limit)
             return ReplanEvent.GUARDIAN_BLOCKED
 
         if evaluation.outcome == GuardianOutcome.EXECUTE_SAFE_FALLBACK:
@@ -897,14 +1221,14 @@ class PersistentAgent:
         self.belief.self_state.last_block_reason = None
         final_local = _to_local(evaluation.command.target, self.spawn_offset)
         self._send_heartbeat(heading_to=evaluation.command.target)
-        result = self._fly_approved_leg(final_local, None if _after_interrupt else self._zone_interrupt())
+        result = self._fly_approved_leg(final_local, None if _after_interrupt else self._zone_interrupt(), pass_through)
         self.belief.position = result.final_position or self.belief.position
         self.guardian.command_completed()
         if result.status == SkillStatus.INTERRUPTED:
             # A zone switched on over the aircraft mid-leg. Re-evaluate from where it now is: the
             # guardian's own steer-out fires first. _after_interrupt stops this recursing.
             trace.append("zone_interrupt")
-            return self._guarded_fly(local_target, trace, purpose, _after_interrupt=True)
+            return self._guarded_fly(local_target, trace, purpose, _after_interrupt=True, pass_through=pass_through)
         if result.status == SkillStatus.SUCCESS:
             # Every successful flight command sends a heartbeat - GO_TO_SECTOR,
             # SEARCH_SECTOR legs, and RETURN_HOME all go through here, covering nearly
@@ -914,7 +1238,9 @@ class PersistentAgent:
             # survivors couldn't tell "done" from "failed" and stole an already-
             # finished sector instead of the actually-orphaned one.
             self._send_heartbeat()
+            self.belief.nav_retries = 0           # (consecutive failures, not failures over the whole mission)
             return ReplanEvent.SKILL_SUCCEEDED
+        trace.append(f"leg_failed({result.status.value}: {result.error})")
         self.belief.nav_retries += 1
         return ReplanEvent.SKILL_FAILED
 
