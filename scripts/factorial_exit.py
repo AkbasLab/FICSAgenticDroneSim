@@ -5,7 +5,7 @@
     python scripts/factorial_exit.py <dirs> --replacements phase18_reserve_1       # + batch files for the reserves
     python scripts/factorial_exit.py <dirs> --dry --seeds 1,2 --reserve 3,4 --required 2   # a dry run's design
 
-The checks: agentic_uav/experiments/factorial_exit.py. Writes factorial-exit-<stamp>[-<block>].json/.md under
+The checks: scripts/factorial_checks.py. Writes factorial-exit-<stamp>[-<block>].json/.md under
 phases/phase-18-main-factorial/results/ (or --out). Exit code 0 only if every check passed.
 `--dry` is for D answered by the echo: no model server, so X3, X5, variability and requests do not apply.
 """
@@ -23,7 +23,8 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO not in sys.path:
     sys.path.insert(0, REPO)
 
-from agentic_uav.experiments import factorial_exit as F  # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import factorial_checks as F  # noqa: E402
 
 DEFAULT_OUT = os.path.join(REPO, "phases", "phase-18-main-factorial", "results")
 

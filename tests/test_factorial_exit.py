@@ -29,8 +29,9 @@ import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
 
-from agentic_uav.experiments import factorial_exit as F  # noqa: E402
+import factorial_checks as F  # noqa: E402
 from agentic_uav.experiments.batch import run_batch  # noqa: E402
 from agentic_uav.experiments.experiment import load_batch  # noqa: E402
 from agentic_uav.experiments.heldout import load_heldout  # noqa: E402
@@ -269,19 +270,26 @@ class ExitTests(unittest.TestCase):
 
     # ------------------------------------------------- common random numbers
 
-    def test_different_targets_or_fault_between_architectures_fails(self):
+    def test_different_targets_or_planned_failure_between_architectures_fails(self):
         b = self.copy()
         p = os.path.join(self.run_of(b, "C", 1), "report.json")
         j = jload(p)
         j["report"]["facts"]["targets"][0]["x"] += 1.0
         jsave(p, j)
         self.assertTrue(any("targets differs" in x for x in self.check(b)["problems"]["common_random_numbers"]))
+        b = self.copy()                                           # the failure as planned: its file
+        m = os.path.join(self.run_of(b, "A", 2), "manifest.json")
+        j = jload(m)
+        j["files"]["failure"]["sha256"] = "0" * 16
+        jsave(m, j)
+        self.assertTrue(any("files differs" in x for x in self.check(b)["problems"]["common_random_numbers"]))
+
+    def test_a_planned_stop_that_found_nothing_to_stop_is_no_difference(self):
+        # Phase 18's A, severe links: Drone1 landed at 19 s, so the stop planned at 60 s took hold of nothing.
         b = self.copy()
-        p = os.path.join(self.run_of(b, "A", 2), "events.jsonl.gz")
-        ev = jload(p)
-        next(e for e in ev if e["type"] == "FAULT_INJECTED")["planned_s"] = 61.0
-        jsave(p, ev)
-        self.assertTrue(any("faults differs" in x for x in self.check(b)["problems"]["common_random_numbers"]))
+        p = os.path.join(self.run_of(b, "A", 1), "events.jsonl.gz")
+        jsave(p, [e for e in jload(p) if e["type"] != "FAULT_INJECTED"])
+        self.assertEqual(self.check(b)["problems"]["common_random_numbers"], [])
         # Taking hold a step after its plan is the architecture's clock (A at 60.1 s), not a different fault ...
         b = self.copy()
         p = os.path.join(self.run_of(b, "A", 2), "events.jsonl.gz")
@@ -304,11 +312,6 @@ class ExitTests(unittest.TestCase):
             p = os.path.join(self.run_of(b, arch, 1), "events.jsonl.gz")
             jsave(p, jload(p) + [dict(part)])
         self.assertEqual(self.check(b)["problems"]["common_random_numbers"], [])
-        p = os.path.join(self.run_of(b, "B", 1), "events.jsonl.gz")
-        ev = jload(p)
-        ev[-1]["groups"] = [["Drone1", "Drone2", "base"]]
-        jsave(p, ev)
-        self.assertTrue(any("faults differs" in x for x in self.check(b)["problems"]["common_random_numbers"]))
 
     def test_a_message_fate_that_is_not_the_seeded_draw_fails(self):
         b = self.copy()

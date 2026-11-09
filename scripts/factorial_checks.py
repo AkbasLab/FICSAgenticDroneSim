@@ -1,5 +1,9 @@
 """Phase 18's exit: every cell of the factorial has its valid paired replications, by predeclared criteria only.
 
+Kept OUTSIDE the agentic_uav package on purpose (2026-11-09): a run's manifest records the package digest, and X4
+holds every run to it -- so a fix to this checker, inside the package, would set aside every run already flown. It
+is frozen all the same: configs/frozen.toml lists it (scripts/factorial_checks.py).
+
     runs = load_runs([abc_dir, d_pair_dir, d_four_a_dir, d_four_b_dir, ...])
     result = run_checks(runs, design(root))          # {check: [problem, ...]}, the cells, the exclusions
     write_replacements(result, design, out_dir)      # batch files for the reserve seeds the cells still need
@@ -17,8 +21,8 @@ run) declares the criteria; this module applies them exactly and checks the rest
     paired_complete      each cell: 20 seeds with a valid run of every architecture; a seed with an excluded
                          run set aside for all four and the next reserve flown by all four
     common_random_numbers  for a cell and a seed, every architecture: the same scenario, network and failure
-                         files, the same roster, targets and planned faults (each taking hold within 1 s of its
-                         plan); and every message lost or received as the
+                         files (the faults as planned), the same roster and targets, each fault that took hold
+                         within 1 s of its plan; and every message lost or received as the
                          seeded network draws it -- one function of (sender, recipient, message number)
     decisions_saved      18.4: every D decision with its model input, its replies, its validation, the action
                          and any fallback; every drone's guardian log
@@ -69,9 +73,9 @@ class Design:
 
 def design(root: str) -> Design:
     """Phase 18's design: the cells of docs/EXCLUSIONS.md, the held-out seeds, the pinned model, the frozen code."""
-    from .heldout import load_heldout
-    from .provenance import package_digest
-    from .runner import load_toml
+    from agentic_uav.experiments.heldout import load_heldout
+    from agentic_uav.experiments.provenance import package_digest
+    from agentic_uav.experiments.runner import load_toml
     test, reserve = load_heldout(root)
     cells = tuple((size, net, fail) for size in sorted(LEVELS) for net in LEVELS[size] for fail in FAILURES)
     cfg = load_toml(os.path.join(root, "configs", "llm", "default.toml"))
@@ -283,7 +287,7 @@ def check_design(runs: list[Run], d: Design, table: dict) -> list[str]:
 def check_frozen(root: str | None) -> list[str]:
     if root is None:
         return []
-    from .freeze import check as freeze_check
+    from agentic_uav.experiments.freeze import check as freeze_check
     return [f"the tree is not its frozen version: {x}" for x in freeze_check(root)]
 
 
@@ -311,7 +315,7 @@ def _fates(r: Run, events: list[dict], model) -> list[str]:
 
 
 def check_crn(runs: list[Run], d: Design) -> list[str]:
-    from .conditions import load_network
+    from agentic_uav.experiments.conditions import load_network
     p = []
     groups: dict = {}
     for r in runs:
@@ -326,18 +330,17 @@ def check_crn(runs: list[Run], d: Design) -> list[str]:
             files = {k: (m.get("files") or {}).get(k, {}).get("sha256") for k in ("scenario", "network", "failure")}
             facts = (rep.get("report") or {}).get("facts") or {}
             start = next((e for e in ev if e["type"] == "MISSION_STARTED"), {})
-            # The fault as planned -- a stop, a partition, whole -- is the common random number; when it took hold is
-            # the first step of the architecture's own clock at or after it (A's controller: 60.1 s for 60 s), held
-            # to within FAULT_LAG_S below.
+            # The faults as PLANNED are the common random number, and the failure file's digest above pins them. A
+            # planned stop can find nothing to stop -- in A, with severe links, Drone1 can be landed before 60 s --
+            # so the faults that took hold may differ: each is held to within FAULT_LAG_S of its plan instead (it
+            # takes hold at the next step of the architecture's own clock: A's controller 60.1 s for 60 s).
             injected = [e for e in ev if e["type"] == "FAULT_INJECTED"]
-            faults = sorted(json.dumps({k: v for k, v in e.items() if k not in ("type", "t")}, sort_keys=True)
-                            for e in injected)
             for e in injected:
                 if e.get("planned_s") is not None and not 0 <= e["t"] - e["planned_s"] <= FAULT_LAG_S:
                     p.append(f"{cell} seed {seed}: {r.arch}'s {e.get('fault')} planned at {e['planned_s']} s "
                              f"took hold at {e['t']} s")
             mine = {"files": files, "targets": facts.get("targets"), "seed": facts.get("random_seed"),
-                    "roster": start.get("roster"), "faults": faults}
+                    "roster": start.get("roster")}
             for k, v in mine.items():
                 if k in shared and shared[k][1] != v:
                     p.append(f"{cell} seed {seed}: {k} differs between {shared[k][0]} and {r.arch}")
