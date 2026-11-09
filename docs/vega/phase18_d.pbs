@@ -1,0 +1,95 @@
+#!/bin/bash
+# Phase 18: one D batch on Vega as a NON-INTERACTIVE job -- the steps typed by hand on 2026-11-09, written down once.
+#
+#   cd /scratch/chikhala
+#   qsub -v BATCH=phase18_d_four_b,PORT=11436 phase18_d.pbs                         # a new batch
+#   qsub -v BATCH=phase18_d_four_b,PORT=11436,RESUME=/scratch/chikhala/auv-runs/phase18-d-four-b-<stamp> phase18_d.pbs
+#
+# Steps, each stopping the job if it fails (nothing is flown on a server that is not right):
+#   1. the code is the commit Phase 18 flies, with a clean tree (docs/EXCLUSIONS.md X4)
+#   2. Ollama's libraries read from scratch first, so its GPU discovery beats its 30 s limit
+#   3. the server started on PORT, its own log; it must find CUDA, never the CPU (X3)
+#   4. one warm-up request, so the model is on the GPU before the first decision (X2: Phase 17's cold start)
+#   5. the batch flown, or resumed; then, if every run is complete, the model-variability check
+#   6. the server's log copied into the batch directory (the exit check reads it); the server stopped
+# PBS mails at the start (b), the end (e) and an abort (a).
+#
+# The walltime must cover the whole batch and its check: a run cut off by the walltime leaves requests in the
+# server log that no record holds (the exit check's requests_accounted would then need explaining). Phase 18's
+# estimates: pair 2.5 h, four-a 5-6 h, four-b ~10 h -- hence 14 h. gpuq allows 24 h; Vega allows 2 jobs a user.
+#
+#PBS -N p18-d
+#PBS -q gpuq
+#PBS -l nodes=gpu01:ppn=16:gpus=1,mem=64gb,walltime=14:00:00
+#PBS -m abe
+#PBS -M chikhala@my.erau.edu
+#PBS -j oe
+
+set -u
+EXPECT=95b71bd                                   # the commit every Phase 18 run flies (pushed to fics/SC)
+BATCH=${BATCH:?give BATCH=phase18_d_...}
+PORT=${PORT:-11434}
+RESUME=${RESUME:-}
+TAG=${BATCH#phase18_}                            # e.g. d_four_b
+JOB=${PBS_JOBID%%.*}
+HOST=http://127.0.0.1:$PORT
+PY=/scratch/$USER/auv-venv/bin/python
+SLOG=/scratch/$USER/ollama/serve-${TAG//_/-}-$JOB.log
+say() { echo "[$(date +%H:%M:%S)] $*"; }
+stop() { say "STOPPED: $*"; [ -n "${SERVER:-}" ] && kill "$SERVER" 2>/dev/null; exit 1; }
+
+say "job $JOB on $(hostname), GPU(s) ${CUDA_VISIBLE_DEVICES:-?}; batch $BATCH, port $PORT${RESUME:+, resuming $RESUME}"
+
+# 1. the code
+cd /scratch/$USER/auv || stop "no /scratch/$USER/auv"
+HEAD=$(git rev-parse --short HEAD); DIRTY=$(git status --porcelain)
+[ "$HEAD" = "$EXPECT" ] || stop "the code is at $HEAD, not $EXPECT"
+[ -z "$DIRTY" ] || stop "the tree is not clean: $DIRTY"
+say "code $HEAD, clean"
+
+# 2. Ollama, its libraries read first
+export OLLAMA_HOME=/scratch/chikhala/ollama
+export OLLAMA_MODELS=$OLLAMA_HOME/models
+export PATH=$OLLAMA_HOME/bin:$PATH
+export LD_LIBRARY_PATH=$OLLAMA_HOME/lib/ollama:${LD_LIBRARY_PATH:-}
+T0=$(date +%s)
+timeout 180 find "$OLLAMA_HOME/lib/ollama" -type f -exec cat {} + > /dev/null || stop "reading Ollama's libraries took over 180 s: scratch is slow"
+say "libraries read in $(( $(date +%s) - T0 )) s"
+
+# 3. the server, and what it computes on
+OLLAMA_HOST=127.0.0.1:$PORT OLLAMA_CONTEXT_LENGTH=8192 OLLAMA_NUM_PARALLEL=1 nohup ollama serve > "$SLOG" 2>&1 &
+SERVER=$!
+for i in $(seq 60); do
+  grep -q 'msg="inference compute"' "$SLOG" 2>/dev/null && curl -s "$HOST/api/version" > /dev/null && break
+  sleep 5
+done
+grep 'msg="inference compute"' "$SLOG" | grep -q 'library=CUDA' || stop "the server found no CUDA GPU: $(grep 'inference compute' "$SLOG")"
+grep 'msg="inference compute"' "$SLOG" | grep -q 'library=cpu' && stop "the server reports the CPU"
+say "server $(curl -s "$HOST/api/version") on CUDA: $(grep -o 'pci_id=[^ ]*' "$SLOG" | head -1)"
+
+# 4. warm-up
+curl -s "$HOST/api/generate" -d '{"model":"llama3.3:70b","prompt":"ready","stream":false,"options":{"num_ctx":8192,"num_predict":1,"temperature":0,"seed":0}}' \
+  | grep -q '"done":true' || stop "the warm-up request failed"
+OLLAMA_HOST=127.0.0.1:$PORT ollama ps | tee /dev/stderr | grep -q '100% GPU' || stop "the model is not wholly on the GPU"
+say "model warm"
+
+# 5. the batch, then the variability check
+if [ -n "$RESUME" ]; then
+  $PY scripts/run_batch.py "$BATCH" --jobs 2 --resume "$RESUME" --ollama-host "$HOST" < /dev/null; DIR=$RESUME
+else
+  $PY scripts/run_batch.py "$BATCH" --jobs 2 --out /scratch/$USER/auv-runs --ollama-host "$HOST" < /dev/null
+  DIR=$(ls -dt /scratch/$USER/auv-runs/${BATCH//_/-}-* | head -1)
+fi
+WANT=$($PY -c "import sys; sys.path.insert(0, '.'); from agentic_uav.experiments.experiment import load_batch; print(len(load_batch('configs/experiments/$BATCH.toml').runs))")
+HAVE=$(ls "$DIR"/*/manifest.json 2>/dev/null | wc -l)
+say "batch directory $DIR: $HAVE of $WANT runs complete"
+if [ "$HAVE" -ge "$WANT" ]; then
+  $PY scripts/model_variability.py "$DIR" --ollama-host "$HOST" | tail -3
+else
+  say "not all runs complete: resume with RESUME=$DIR before the variability check"
+fi
+
+# 6. the server's log beside the runs; the server stopped
+cp "$SLOG" "$DIR"/ && say "server log copied to $DIR/$(basename "$SLOG")"
+kill "$SERVER" 2>/dev/null
+say "done"
