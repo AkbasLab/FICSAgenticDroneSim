@@ -95,7 +95,10 @@ model.
 ## Where the project is
 
 **Phases 1 to 16 are complete** (2026-10-20 to 2026-11-06), each tagged
-`phase-NN-complete` (Phase 12 as a capability). **Phase 17, the pilot experiments, is next.**
+`phase-NN-complete` (Phase 12 as a capability). **Phase 17, the pilot experiments, is in progress**: levels
+chosen by a pre-registered rule, 120 live-model runs on Vega read timeline by timeline (three defects found and
+fixed), and everything that flies or scores frozen in [`configs/frozen.toml`](configs/frozen.toml), with Phase 18's
+held-out seeds drawn from the freeze ([`phases/phase-17-pilot-experiments/`](phases/phase-17-pilot-experiments/)).
 
 | Phase | Done | What it left |
 |---|---|---|
