@@ -231,28 +231,56 @@ TOOLS: Tuple[Tool, ...] = (
 BY_NAME: Dict[str, Tool] = {t.name: t for t in TOOLS}
 TOOL_NAMES: Tuple[str, ...] = tuple(t.name for t in TOOLS)
 
+#: The task-phase tool set ("v2", architecture DV2), added after the Phase 18
+#: main_v1 run. In v1 the only way to finish a sector was `report_target` - a
+#: tool for reporting a *detected target* - which the scripted control used by
+#: convention and llama3.1:8b never discovered: it chose `start_search` for
+#: 98.5% of 8,237 decisions and re-flew its own sector until the battery
+#: reserve sent it home. v2 names the missing phase explicitly. v1 is kept,
+#: unchanged, so main_v1's architecture D stays reproducible.
+REPORT_COMPLETE = Tool(
+    "report_task_complete", COORDINATION,
+    "report that the held task's sweep is finished; this hands the sector back "
+    "as done and frees the drone to take open work")
 
-def get(name) -> Tool:
+TOOLSETS: Dict[str, Tuple[Tool, ...]] = {
+    "v1": TOOLS,
+    "v2": TOOLS + (REPORT_COMPLETE,),
+}
+
+
+def tools_for(toolset="v1") -> Tuple[Tool, ...]:
+    if toolset not in TOOLSETS:
+        raise ValueError(f"unknown toolset {toolset!r}; have {sorted(TOOLSETS)}")
+    return TOOLSETS[toolset]
+
+
+def tool_names(toolset="v1") -> Tuple[str, ...]:
+    return tuple(t.name for t in tools_for(toolset))
+
+
+def get(name, toolset="v1") -> Tool:
     """Look up a tool, with an error a model can actually act on."""
     if not isinstance(name, str):
         raise ParamError(f"selected_tool must be a string, got {name!r}")
-    tool = BY_NAME.get(name.strip())
+    by_name = {t.name: t for t in tools_for(toolset)}
+    tool = by_name.get(name.strip())
     if tool is None:
         raise ParamError(f"{name!r} is not an available tool; choose one of: "
-                         + ", ".join(TOOL_NAMES))
+                         + ", ".join(by_name))
     return tool
 
 
-def validate_call(name, parameters) -> Tuple[Tool, Dict[str, Any]]:
+def validate_call(name, parameters, toolset="v1") -> Tuple[Tool, Dict[str, Any]]:
     """Resolve a tool by name and check its parameters. Raises ParamError."""
-    tool = get(name)
+    tool = get(name, toolset)
     return tool, tool.validate(parameters)
 
 
-def catalogue(categories=None) -> str:
+def catalogue(categories=None, toolset="v1") -> str:
     """The tool list as it appears in the prompt."""
     lines = []
-    for t in TOOLS:
+    for t in tools_for(toolset):
         if categories and t.category not in categories:
             continue
         lines.append("  " + t.signature())

@@ -64,6 +64,9 @@ class RejectionReason(str, Enum):
     TIMEOUT = "timeout"
     BACKEND_ERROR = "backend_error"
     EMPTY_RESPONSE = "empty_response"
+    #: v2 only: a valid tool chosen in the wrong task phase (searching a sector
+    #: already searched, reporting a sweep not yet flown)
+    WRONG_PHASE = "wrong_phase"
 
     @property
     def correctable(self) -> bool:
@@ -79,7 +82,7 @@ class RejectionReason(str, Enum):
             RejectionReason.MISSING_FIELD, RejectionReason.UNKNOWN_TOOL,
             RejectionReason.BAD_PARAMETERS, RejectionReason.BAD_ASSESSMENT,
             RejectionReason.BAD_CONFIDENCE, RejectionReason.BAD_MESSAGES,
-            RejectionReason.EMPTY_RESPONSE,
+            RejectionReason.EMPTY_RESPONSE, RejectionReason.WRONG_PHASE,
         )
 
 
@@ -282,7 +285,7 @@ def _messages(raw, known_peers=None) -> List[OutgoingMessage]:
     return out
 
 
-def parse_decision(raw_text, known_peers=None) -> AgentDecisionTurn:
+def parse_decision(raw_text, known_peers=None, toolset="v1") -> AgentDecisionTurn:
     """Parse and validate one model output. Raises DecisionError on anything wrong.
 
     `known_peers`, when given, is the agent's roster: it lets the validator
@@ -320,10 +323,12 @@ def parse_decision(raw_text, known_peers=None) -> AgentDecisionTurn:
 
     try:
         tool, params = llm_tools.validate_call(data.get("selected_tool"),
-                                               data.get("parameters", {}))
+                                               data.get("parameters", {}),
+                                               toolset=toolset)
     except ParamError as e:
         name = data.get("selected_tool")
-        unknown = isinstance(name, str) and name.strip() not in llm_tools.BY_NAME
+        unknown = isinstance(name, str) and \
+            name.strip() not in llm_tools.tool_names(toolset)
         raise DecisionError(
             RejectionReason.UNKNOWN_TOOL if unknown else RejectionReason.BAD_PARAMETERS,
             str(e), str(e))
@@ -349,7 +354,7 @@ def _strip_fences(text):
 # --- the schema, for models that support constrained decoding ---
 
 
-def response_schema() -> Dict[str, Any]:
+def response_schema(toolset="v1") -> Dict[str, Any]:
     """A JSON schema for the decision object.
 
     Ollama's `format=` and Gemini's `response_schema` both accept this, which
@@ -372,7 +377,8 @@ def response_schema() -> Dict[str, Any]:
                 "required": ["mission_progress", "communication_status",
                              "current_risk"],
             },
-            "selected_tool": {"type": "string", "enum": list(llm_tools.TOOL_NAMES)},
+            "selected_tool": {"type": "string",
+                              "enum": list(llm_tools.tool_names(toolset))},
             "parameters": {"type": "object"},
             "outgoing_messages": {
                 "type": "array",

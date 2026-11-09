@@ -34,6 +34,7 @@ ARCHITECTURE_ALIASES = {
     "independent": "B", "independent_persistent_agents": "B",
     "deterministic_decentralized": "C", "decentralized": "C",
     "agentic_decentralized": "D", "agentic": "D",
+    "agentic_decentralized_v2": "DV2", "agentic_v2": "DV2",
     "open_loop": "E", "open_loop_baseline": "E",
 }
 

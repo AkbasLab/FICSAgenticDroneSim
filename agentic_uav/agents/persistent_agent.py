@@ -271,33 +271,58 @@ class PersistentAgent:
 
         # event-driven: only re-decide when something happened
         if not self._should_replan(b):
+            if (b.airborne and not b.landed and self.task is not None
+                    and getattr(self, "_stuck_rounds", 0) >= MAX_IDLE_WAITS):
+                # Re-deciding has not moved this task for MAX_IDLE_WAITS rounds
+                # in a row: give it up (its lease lapses, so a teammate can
+                # take it) and fall through to the idle path, which brings the
+                # drone home instead of leaving the loop in the air.
+                self._say(f"{'GIVE_UP_TASK':<16} -> {self.task.task_id} not "
+                          f"progressing after {MAX_IDLE_WAITS} re-decisions")
+                self._drop_current_task(b)
+                self._stuck_rounds = 0
             if self._waiting_on_pad(b):
                 self._wait_on_pad()
                 return True
-            if not self._idle_airborne(b):
+            if self._airborne_holding_task(b):
+                # Airborne with a task and nothing new to react to: re-decide
+                # instead of leaving the loop in the air. Found in main_v1: an
+                # LLM drone that chose send_bid while holding a task had no
+                # event on the next step, was treated as finished, and its
+                # mission ended at 4.7 s with the drone still flying.
+                self._stuck_rounds = getattr(self, "_stuck_rounds", 0) + 1
+                if self._simulated_clock():
+                    self.adapter.hold(self.vehicle_id, IDLE_WAIT_S)
+                else:
+                    import time as _time
+                    _time.sleep(min(IDLE_WAIT_S, 0.2))
+                b.push(AgentEvent.COMMS_CHANGED, "holding a task; re-deciding")
+            elif not self._idle_airborne(b):
                 self.finished = True
                 return False
-            # still flying with nothing to do: give it a bounded number of
-            # chances for work to appear, then bring it home rather than
-            # leaving it hovering. Quitting the loop airborne would strand it.
-            self._idle_rounds += 1
-            # Not while work is being bid on, or while standing by for a
-            # teammate. In real time an agent waiting out a 5 s bid window has
-            # nothing to execute, so it ran through these rounds in
-            # milliseconds, concluded there was no work, and landed - having
-            # just won the lost teammate's sector it was waiting for.
-            still_wanted = STAND_BY_FOR_TEAMMATES and (
-                self._waiting_for_work(b) or getattr(b, "standing_by", False))
-            if self._simulated_clock() and self._waiting_for_work(b) \
-                    and self._idle_rounds <= MAX_IDLE_WAITS:
-                still_wanted = True
-                self.adapter.hold(self.vehicle_id, IDLE_WAIT_S)
-            if self._idle_rounds > MAX_IDLE_ROUNDS and not still_wanted:
-                b.no_work_remaining = True
-            b.push(AgentEvent.COMMS_CHANGED,
-                   f"idle with no task ({self._idle_rounds})")
+            else:
+                # still flying with nothing to do: give it a bounded number of
+                # chances for work to appear, then bring it home rather than
+                # leaving it hovering. Quitting the loop airborne would strand it.
+                self._idle_rounds += 1
+                # Not while work is being bid on, or while standing by for a
+                # teammate. In real time an agent waiting out a 5 s bid window has
+                # nothing to execute, so it ran through these rounds in
+                # milliseconds, concluded there was no work, and landed - having
+                # just won the lost teammate's sector it was waiting for.
+                still_wanted = STAND_BY_FOR_TEAMMATES and (
+                    self._waiting_for_work(b) or getattr(b, "standing_by", False))
+                if self._simulated_clock() and self._waiting_for_work(b) \
+                        and self._idle_rounds <= MAX_IDLE_WAITS:
+                    still_wanted = True
+                    self.adapter.hold(self.vehicle_id, IDLE_WAIT_S)
+                if self._idle_rounds > MAX_IDLE_ROUNDS and not still_wanted:
+                    b.no_work_remaining = True
+                b.push(AgentEvent.COMMS_CHANGED,
+                       f"idle with no task ({self._idle_rounds})")
         else:
             self._idle_rounds = 0
+            self._stuck_rounds = 0
         triggers = b.drain_events()
 
         # log what the agent knows *and does not know* before it decides
@@ -698,6 +723,10 @@ class PersistentAgent:
     def _simulated_clock(self):
         return bool(getattr(self.adapter, "simulated_clock", False)) \
             and hasattr(self.adapter, "hold")
+
+    def _airborne_holding_task(self, b):
+        return (b.airborne and not b.landed and self.task is not None
+                and getattr(self, "_stuck_rounds", 0) < MAX_IDLE_WAITS)
 
     def _idle_airborne(self, b):
         """Flying, holding nothing, with no events - waiting on the team."""

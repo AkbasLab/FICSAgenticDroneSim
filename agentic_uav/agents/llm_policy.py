@@ -59,6 +59,7 @@ TOOL_OBJECTIVE = {
     "hold": Objective.HOLD,
     "act_as_relay": Objective.HOLD,
     "report_target": Objective.REPORT,
+    "report_task_complete": Objective.REPORT,     # v2 only
     "accept_task": Objective.CLAIM_TASK,
     "claim_task": Objective.CLAIM_TASK,
     "send_bid": Objective.CLAIM_TASK,
@@ -93,7 +94,7 @@ class LLMAgentPolicy:
     def __init__(self, backend, vehicle_id, fallback=None, timeout_s=DEFAULT_TIMEOUT_S,
                  safety_limits=None, allocator=None, capabilities=None,
                  allow_correction=True, log=None, memory_turns=6,
-                 use_schema=True):
+                 use_schema=True, toolset="v1"):
         self.backend = backend
         self.vehicle_id = vehicle_id
         self.fallback = fallback or SearchAgentPolicy()
@@ -103,6 +104,9 @@ class LLMAgentPolicy:
         self.capabilities = set(capabilities or {"search", "relay", "inspect"})
         self.allow_correction = allow_correction
         self.use_schema = use_schema
+        #: "v1" (architecture D, main_v1) or "v2" (DV2: an explicit
+        #: report_task_complete tool and task-phase validation)
+        self.toolset = toolset
 
         card = backend.card() if hasattr(backend, "card") else None
         self.log = log or LLMDecisionLog(vehicle_id, model_card=card)
@@ -209,7 +213,10 @@ class LLMAgentPolicy:
         # bounded deliberation: coordinating is a legitimate use of a turn, but
         # a run of them with no task to show for it is a stuck agent, not a
         # thoughtful one.
-        if objective is Objective.CLAIM_TASK and belief.task is None:
+        # v2 also counts coordinating while *holding* a task: in main_v1 a drone
+        # that kept choosing send_bid with a task in hand never flew it.
+        if objective is Objective.CLAIM_TASK and (belief.task is None
+                                                  or self.toolset == "v2"):
             self.coordination_streak += 1
             if self.coordination_streak > self.max_coordination_streak:
                 turn.used_fallback = True
@@ -260,7 +267,8 @@ class LLMAgentPolicy:
         ctx = context_builder.build(
             belief, step=self.step, task=belief.task, messages=self._inbox,
             last_result=self.last_result, allocator=self.allocator,
-            safety_limits=self.safety_limits, capabilities=self.capabilities)
+            safety_limits=self.safety_limits, capabilities=self.capabilities,
+            toolset=self.toolset)
         system = context_builder.SYSTEM_PROMPT
         user = self._with_memory(ctx.to_prompt())
 
@@ -269,12 +277,13 @@ class LLMAgentPolicy:
                        system_prompt=system, user_prompt=user)
 
         peers = set(belief.team.teammates) | {belief.vehicle_id}
-        schema = response_schema() if self.use_schema else None
+        schema = response_schema(self.toolset) if self.use_schema else None
 
         raw, err = self._ask(system, user, schema, turn)
         if err is None:
             try:
-                decision = parse_decision(raw, known_peers=peers)
+                decision = parse_decision(raw, known_peers=peers, toolset=self.toolset)
+                self._check_phase(decision, belief)
                 self._fill(turn, decision)
                 _validated(turn, "accepted")
                 return turn, decision
@@ -297,7 +306,9 @@ class LLMAgentPolicy:
                                    prompt_for_log=corrected_user)
             if err2 is None:
                 try:
-                    decision = parse_decision(raw2, known_peers=peers)
+                    decision = parse_decision(raw2, known_peers=peers,
+                                              toolset=self.toolset)
+                    self._check_phase(decision, belief)
                     self._fill(turn, decision)
                     turn.corrected = True
                     _validated(turn, "accepted")
@@ -348,6 +359,44 @@ class LLMAgentPolicy:
             ex["latency_s"] = time.monotonic() - started
             return None, DecisionError(RejectionReason.BACKEND_ERROR,
                                        f"{type(e).__name__}: {e}")
+
+    def _check_phase(self, decision, belief):
+        """v2 only: a tool that is valid but wrong for the task's phase is
+        rejected with a correction that names the right next step. This is
+        what turns main_v1's failure - start_search, again, on a searched
+        sector - into one corrected decision instead of an 80 s re-sweep."""
+        if self.toolset != "v2":
+            return
+        name = decision.tool_name
+        if (getattr(belief, "no_work_remaining", False)
+                and not (belief.task is not None and belief.sector_searched
+                         and not belief.reported)
+                and (name in ("start_search", "go_to_waypoint")
+                     or TOOL_OBJECTIVE.get(name) is Objective.CLAIM_TASK)):
+            raise DecisionError(
+                RejectionReason.WRONG_PHASE,
+                f"{name}: all mission work is complete",
+                "there is nothing left to claim or search; choose return_home")
+        if belief.task is None:
+            return
+        if belief.sector_searched and (
+                name in ("start_search", "go_to_waypoint")
+                or TOOL_OBJECTIVE.get(name) is Objective.CLAIM_TASK):
+            # Searching the finished sector again, or bidding for / handling
+            # other work while the finished one is still unreported, both
+            # leave the completion unannounced - the second stranded drones
+            # in the air in a scripted probe ("always send_bid").
+            raise DecisionError(
+                RejectionReason.WRONG_PHASE,
+                f"{name}: the held task's sector has already been searched",
+                "the sweep for the held task is finished; choose "
+                "report_task_complete to hand it back and free this drone for "
+                "open work")
+        if name == "report_task_complete" and not belief.sector_searched:
+            raise DecisionError(
+                RejectionReason.WRONG_PHASE,
+                "report_task_complete: the sweep has not been flown yet",
+                "fly the sweep first with start_search")
 
     def _fill(self, turn, decision):
         turn.parsed = decision.as_dict()

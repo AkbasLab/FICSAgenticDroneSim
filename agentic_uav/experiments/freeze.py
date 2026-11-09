@@ -67,6 +67,7 @@ RULE_SOURCES = {
     "scenarios": ["agentic_uav/simulator/scenario_family.py"],
     "design": ["configs/experiments/factorial_main.yaml",
                "configs/experiments/factorial_gemini.yaml",
+               "configs/experiments/factorial_main_v2.yaml",
                "configs/experiments/exclusion_criteria.yaml",
                "agentic_uav/experiments/factorial.py",
                "agentic_uav/experiments/pilot.py",

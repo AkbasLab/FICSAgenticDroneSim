@@ -1,0 +1,24 @@
+# DV2 with the REAL model on development seeds - run this before main_v2.
+# Checks llama actually uses report_task_complete / follows the phase
+# correction, before any held-out seed is spent. 16 runs, about an hour on the
+# 4 GB laptop GPU.
+#
+#   $env:AGENTIC_UAV_NUM_GPU = "all"
+#   python scripts/run_factorial.py configs/experiments/factorial_dv2_dev.yaml
+#   python scripts/analyse_factorial.py results/dv2_dev
+design_id: dv2_dev
+split: development
+
+architectures: [agentic_decentralized_v2]
+team_sizes:
+  stage1: [2, 4]
+network_profiles: [final_nominal, final_severe]
+failure_profiles: [none, one_failure]
+seed_plan: {split: development, count: 2}
+
+planner: llama3.1:8b
+fault_interrupts_skill: true
+heartbeat_s: 8.0
+max_steps: 600
+exclusions: configs/experiments/exclusion_criteria.yaml
+min_valid_override: 2

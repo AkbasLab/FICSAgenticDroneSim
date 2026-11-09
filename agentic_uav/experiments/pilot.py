@@ -94,7 +94,7 @@ def audit_run(directory) -> Dict[str, Any]:
         problems.append("a fault was configured but no FAULT_INJECTED event")
     if len(team) > 1 and "MESSAGE_SENT" not in types:
         problems.append("a multi-drone team sent no messages")
-    if m.get("architecture_key") == "D" and "LLM_CALLED" not in types:
+    if _agentic(m.get("architecture_key")) and "LLM_CALLED" not in types:
         problems.append("agentic architecture with no LLM_CALLED events")
 
     # per-drone state needed to read the run
@@ -178,3 +178,9 @@ def success(result, team_size):
     survivors = team_size - len([s for s in str(result.get("stopped", "-")).split(",")
                                  if s and s != "-"])
     return result.get("coverage") == 1.0 and result.get("drones_home") == survivors
+
+
+def _agentic(key):
+    from .architectures import ALL
+    sp = ALL.get(key)
+    return sp is not None and sp.policy == "llm"

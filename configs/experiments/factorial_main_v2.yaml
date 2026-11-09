@@ -1,0 +1,30 @@
+# Phase 18 follow-up: main_v2, on FRESH held-out seeds (21-40).
+#
+# Why: in main_v1 the agentic architecture D failed mostly because its tool set
+# had no explicit "report the task complete" step (docs/RESULTS_main_v1.md).
+# DV2 is D with that step made explicit and task-phase validation of the
+# model's choice. D itself is unchanged and main_v1 is reported as measured;
+# main_v2 is a separately labelled, disclosed follow-up, run on held-out seeds
+# that no earlier result was produced from (the runner refuses overlap).
+#
+#   python scripts/run_factorial.py configs/experiments/factorial_dv2_dev.yaml   # first, with llama
+#   python scripts/run_factorial.py configs/experiments/factorial_main_v2.yaml --dry-run
+#   python scripts/run_factorial.py configs/experiments/factorial_main_v2.yaml
+design_id: main_v2
+split: test
+
+# A, B and C are re-run on the new seeds (seconds) so DV2 is compared with them
+# seed for seed. D is not re-run: its main_v1 result stands.
+architectures: [centralized, independent, deterministic_decentralized, agentic_decentralized_v2]
+team_sizes:
+  stage1: [2, 4]
+  stage2: [8]
+network_profiles: [final_nominal, final_moderate, final_severe, final_partitioned]
+failure_profiles: [none, one_failure]
+seed_plan: {split: test, count: 20, skip: 20}   # held-out seeds 21-40
+
+planner: llama3.1:8b
+fault_interrupts_skill: true
+heartbeat_s: 8.0
+max_steps: 600
+exclusions: configs/experiments/exclusion_criteria.yaml

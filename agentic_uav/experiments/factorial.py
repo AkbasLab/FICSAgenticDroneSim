@@ -77,7 +77,8 @@ def seeds(design) -> List[int]:
     plan = design["seed_plan"]
     if plan.get("split", design["split"]) != design["split"]:
         raise ValueError("seed_plan.split must match the design's split")
-    return seeds_for(design["split"], int(plan["count"]), start=int(plan.get("start", 1)))
+    return seeds_for(design["split"], int(plan["count"]), start=int(plan.get("start", 1)),
+                     skip=int(plan.get("skip", 0)))
 
 
 def arch_key(a):
@@ -119,9 +120,43 @@ def cells(design, stage="1"):
 # --- 18.2 the held-out seal --------------------------------------------------------
 
 
+def seal_path(design_id):
+    """Each held-out design has its own seal. main_v1's keeps the original name."""
+    if design_id == "main_v1":
+        return SEAL_PATH
+    return os.path.join(os.path.dirname(SEAL_PATH), f"test_seal_{design_id}.json")
+
+
+def _sealed_seeds_of_other_designs(design):
+    """{design_id: seeds} for every other sealed held-out design."""
+    import glob
+    out = {}
+    folder = os.path.dirname(SEAL_PATH)
+    for path in glob.glob(os.path.join(folder, "test_seal*.json")):
+        try:
+            with open(path, encoding="utf-8") as f:
+                seal = json.load(f)
+        except (OSError, ValueError):
+            continue
+        did = seal.get("design_id")
+        if did == design["design_id"]:
+            continue
+        used = seal.get("seeds")
+        if used is None:                       # seals written before seeds were stored
+            other = os.path.join(ROOT, "configs", "experiments",
+                                 "factorial_main.yaml" if did == "main_v1"
+                                 else f"factorial_{did}.yaml")
+            if os.path.exists(other):
+                used = seeds(load_design(other))
+        out[did] = list(used or [])
+    return out
+
+
 def check_test_split(design, fingerprint_now, exclusions):
     """Raise unless a test-split design may run now. Returns the seal (written
-    on the first call)."""
+    on the first call). Each held-out design is sealed separately, and no two
+    may share a held-out seed: a follow-up design is evaluated on seeds that
+    no earlier result was produced from."""
     if design["split"] != "test":
         return None
     from .freeze import check
@@ -129,8 +164,16 @@ def check_test_split(design, fingerprint_now, exclusions):
     if not r["ok"]:
         raise RuntimeError("held-out runs need an unchanged freeze:\n  "
                            + "\n  ".join(r["changes"][:10]))
-    if os.path.exists(SEAL_PATH):
-        with open(SEAL_PATH, encoding="utf-8") as f:
+    mine = set(seeds(design))
+    for other, used in _sealed_seeds_of_other_designs(design).items():
+        clash = sorted(mine & set(used))
+        if clash:
+            raise RuntimeError(f"held-out seeds {clash[:5]}... were already used by "
+                               f"sealed design {other}; a new design needs seeds no "
+                               "earlier result has seen")
+    path = seal_path(design["design_id"])
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
             seal = json.load(f)
         if seal["fingerprint"] != fingerprint_now:
             changed = sorted(g for g in fingerprint_now
@@ -148,11 +191,12 @@ def check_test_split(design, fingerprint_now, exclusions):
             "design_id": design["design_id"], "design_sha256": design["_sha256"],
             "fingerprint": fingerprint_now,
             "exclusions_sha256": exclusions["_sha256"],
+            "seeds": sorted(mine),
             "note": "Written by the first held-out run. From here on the prompts, "
                     "rules, metrics, profiles, scenarios and exclusion criteria are "
                     "fixed for the test split."}
-    os.makedirs(os.path.dirname(SEAL_PATH), exist_ok=True)
-    with open(SEAL_PATH, "w", encoding="utf-8") as f:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(seal, f, indent=1, sort_keys=True)
     return seal
 
@@ -172,7 +216,7 @@ def transcript_problems(directory, manifest) -> List[str]:
     """18.4: for an agentic run, every model call must be saved with its input,
     its structured output, its validation result, the action taken, and any
     fallback. Returns what is missing."""
-    if manifest.get("architecture_key") != "D":
+    if not _is_agentic(manifest.get("architecture_key")):
         return []
     out = []
     events_path = os.path.join(directory, "events.jsonl")
@@ -262,7 +306,7 @@ def classify(directory, expected: ExperimentConfig, exclusions, fingerprint) -> 
         if m.get("team") and len(m["team"]) != expected.team_size:
             reasons.append("X3_configuration_mismatch: team size")
 
-    if "X4_model_unreachable" in crit and m.get("architecture_key") == "D":
+    if "X4_model_unreachable" in crit and _is_agentic(m.get("architecture_key")):
         frac = _transport_failure_fraction(directory)
         limit = float(crit["X4_model_unreachable"].get("max_transport_failure_fraction", 0.2))
         if frac is not None and frac > limit:
@@ -271,6 +315,13 @@ def classify(directory, expected: ExperimentConfig, exclusions, fingerprint) -> 
 
     return {"status": "excluded" if reasons else "valid", "reasons": reasons,
             "system_failure": system_failure}
+
+
+def _is_agentic(key) -> bool:
+    """D and every model-driven variant of it (DV2, the ablations)."""
+    from .architectures import ALL
+    sp = ALL.get(key)
+    return sp is not None and sp.policy == "llm"
 
 
 def _transport_failure_fraction(directory) -> Optional[float]:

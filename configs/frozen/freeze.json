@@ -1,23 +1,24 @@
 {
  "fingerprint": {
-  "design": "1d6bc8796e5e976b",
+  "design": "9a1da68101e1bff8",
   "metrics": "460d71eeb86f37b2",
   "networks": "896214a3727d10e6",
-  "prompts": "d4471bb58e1c9a4b",
-  "scenarios": "f988835d0e907ea7",
+  "prompts": "f9a40a98346ed908",
+  "scenarios": "3f187079082c80b0",
   "seeds": "444ffdaa7ff0dd49",
-  "task_rules": "4c91b3e8b2fce2ae"
+  "task_rules": "519f14ce94f97562"
  },
- "frozen_at": "2026-11-07T14:37:40",
+ "frozen_at": "2026-11-09T11:44:23",
  "groups": {
   "design": {
    "sources": {
-    "agentic_uav/experiments/architectures.py": "4b9242e09173417d",
-    "agentic_uav/experiments/factorial.py": "29122b9c79c863d1",
-    "agentic_uav/experiments/pilot.py": "044b05bc938b4958",
+    "agentic_uav/experiments/architectures.py": "54e26f981c24ba4b",
+    "agentic_uav/experiments/factorial.py": "84ea9164d7b76fd0",
+    "agentic_uav/experiments/pilot.py": "5c6cdfa5bddc73ed",
     "configs/experiments/exclusion_criteria.yaml": "1ebbb83d744f4d53",
     "configs/experiments/factorial_gemini.yaml": "7b84540c0d0a8683",
-    "configs/experiments/factorial_main.yaml": "c19b266352f08645"
+    "configs/experiments/factorial_main.yaml": "c19b266352f08645",
+    "configs/experiments/factorial_main_v2.yaml": "1ab54cbfa0bc80fd"
    }
   },
   "metrics": {
@@ -99,10 +100,10 @@
     "OTHER"
    ],
    "sources": {
-    "agentic_uav/agents/context_builder.py": "444e6bbb628b001e",
-    "agentic_uav/agents/decision_schema.py": "84a7874531e6351e",
-    "agentic_uav/agents/llm_policy.py": "a3ef93b58d1df707",
-    "agentic_uav/agents/llm_tools.py": "861c30efd3ca5ca0",
+    "agentic_uav/agents/context_builder.py": "2389616848290e3a",
+    "agentic_uav/agents/decision_schema.py": "137a2b276e312c80",
+    "agentic_uav/agents/llm_policy.py": "a7acd0ac7e37e1d9",
+    "agentic_uav/agents/llm_tools.py": "b3483d1bd91736f8",
     "configs/benchmark/guardrail_prompts.yaml": "ccdc760cc09dab41"
    }
   },
@@ -175,7 +176,7 @@
     "search_relay_001_sim.yaml": "ac3c889b23f0c58d"
    },
    "sources": {
-    "agentic_uav/simulator/scenario_family.py": "6b9ec49a245d2261"
+    "agentic_uav/simulator/scenario_family.py": "1d6d85ec5eafa37d"
    }
   },
   "seeds": {
@@ -219,7 +220,7 @@
     "LEG_TIMEOUT": 600.0
    },
    "sources": {
-    "agentic_uav/agents/persistent_agent.py": "1289b01c305233b7",
+    "agentic_uav/agents/persistent_agent.py": "5a5e3b0c39eb0cb4",
     "agentic_uav/agents/safety_guardian.py": "ab4187f6f9188cd4",
     "agentic_uav/agents/search_policy.py": "804f4de67be8d7dd",
     "agentic_uav/control/skill_executor.py": "de240967167cc1aa",
@@ -284,6 +285,32 @@
     "task_rules": "4c91b3e8b2fce2ae"
    },
    "reason": "Pre-run review, part 2: the message bus, the centralized controller and the skill executor are now frozen too - each was changed in this review and each decides results."
+  },
+  {
+   "at": "2026-11-09T11:43:18",
+   "fingerprint": {
+    "design": "876752c543a56d2d",
+    "metrics": "460d71eeb86f37b2",
+    "networks": "896214a3727d10e6",
+    "prompts": "f9a40a98346ed908",
+    "scenarios": "3f187079082c80b0",
+    "seeds": "444ffdaa7ff0dd49",
+    "task_rules": "519f14ce94f97562"
+   },
+   "reason": "Follow-up after main_v1 (disclosed): architecture DV2 = D plus report_task_complete and phase-aware validation; airborne-exit lifecycle fix (inert for A/B/C: never triggered on 36 dev runs); per-design held-out seals with no seed reuse; design main_v2 on held-out seeds 21-40. main_v1 and its D are unchanged and reported as measured."
+  },
+  {
+   "at": "2026-11-09T11:44:23",
+   "fingerprint": {
+    "design": "9a1da68101e1bff8",
+    "metrics": "460d71eeb86f37b2",
+    "networks": "896214a3727d10e6",
+    "prompts": "f9a40a98346ed908",
+    "scenarios": "3f187079082c80b0",
+    "seeds": "444ffdaa7ff0dd49",
+    "task_rules": "519f14ce94f97562"
+   },
+   "reason": "Follow-up after main_v1 (disclosed): architecture DV2 = D plus report_task_complete and phase-aware validation; DV2 audited and excluded under the same rules as D (X2 transcripts, X4); airborne-exit lifecycle fix (inert for A/B/C: never triggered in 36 development runs); per-design held-out seals with no seed reuse; design main_v2 on held-out seeds 21-40. main_v1 results are unchanged and reported as measured."
   }
  ]
 }

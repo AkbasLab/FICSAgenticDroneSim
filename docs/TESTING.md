@@ -393,7 +393,7 @@ to a real invariant, applied to a throwaway copy of the repository; the
 simulator-free suites run against the damaged copy, and the defect counts as
 caught only if a suite fails.
 
-**30 of 30 caught**: eleven written up front, across allocation, communication, roles, belief and safety; five first found by flying in CARLA-Air; four found by the Phase 17 pilot timelines (see `docs/PILOT.md`); and five that would break the Phase 18 experiment's guarantees (see `docs/FACTORIAL.md`):
+**34 of 34 caught**: eleven written up front, across allocation, communication, roles, belief and safety; five first found by flying in CARLA-Air; four found by the Phase 17 pilot timelines (see `docs/PILOT.md`); five that would break the Phase 18 experiment's guarantees (see `docs/FACTORIAL.md`); five from the pre-run review; and four guarding the DV2 follow-up (see `docs/FOLLOWUP_DV2.md`):
 
 | Defect | Breaks |
 |---|---|
@@ -427,6 +427,10 @@ caught only if a suite fails.
 | `first_mover_allocation` | the first drone to step claims before anyone else has bid |
 | `relay_for_nobody` | a drone with no live teammate turns relay, stops searching and lands |
 | `controller_award_sent_once` | a lost assignment is never repeated; its sector is never searched |
+| `phase_check_off` | DV2 accepts `start_search` on a finished sector; main_v1's re-sweep failure returns |
+| `completion_tool_not_offered` | the v2 tool set silently lacks `report_task_complete`, so DV2 is just D |
+| `airborne_exit` | a drone holding a task with nothing new to react to leaves its loop in the air |
+| `seeds_reused_across_designs` | a follow-up design is evaluated on held-out seeds an earlier result already used |
 
 The last five were each invisible to the suite when they were found - they
 appeared only in real simulator runs - and each is now caught by the fake

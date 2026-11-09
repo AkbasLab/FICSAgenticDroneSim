@@ -177,7 +177,7 @@ def summarize_belief(belief, limits=None) -> Dict[str, Any]:
     }
 
 
-def unresolved_decisions(belief, allocator=None, now=None) -> List[str]:
+def unresolved_decisions(belief, allocator=None, now=None, toolset="v1") -> List[str]:
     """What is currently waiting on this agent.
 
     This is the field that makes a *persistent* agent different from a
@@ -198,7 +198,11 @@ def unresolved_decisions(belief, allocator=None, now=None) -> List[str]:
         elif not belief.sector_searched:
             out.append(f"task {tid}: sector reached, sweep not yet flown")
         elif not belief.reported:
-            out.append(f"task {tid}: sweep complete, completion not yet reported")
+            if toolset == "v2":
+                out.append(f"task {tid}: sweep complete - next step is "
+                           f"report_task_complete; searching it again finds nothing new")
+            else:
+                out.append(f"task {tid}: sweep complete, completion not yet reported")
 
     if allocator is not None:
         try:
@@ -251,7 +255,7 @@ def constraints_for(belief, safety_limits=None) -> Dict[str, Any]:
 
 def build(belief, *, step=0, role=None, task=None, messages=None,
           last_result=None, allocator=None, safety_limits=None,
-          capabilities=None, limits=None) -> AgentPromptContext:
+          capabilities=None, limits=None, toolset="v1") -> AgentPromptContext:
     """Assemble the nine sections. This is the whole of what the model sees."""
     now = belief.now
     messages = list(messages or [])
@@ -296,10 +300,10 @@ def build(belief, *, step=0, role=None, task=None, messages=None,
         recent_messages=recent_important(messages, now),
         communication=reasoning_tools.comms_reachable(belief),
         last_skill_result=skill_result,
-        unresolved=unresolved_decisions(belief, allocator, now),
+        unresolved=unresolved_decisions(belief, allocator, now, toolset=toolset),
         computed=reasoning_tools.brief(belief, task=task, limits=safety_limits,
                                        capabilities=capabilities),
-        tools=llm_tools.catalogue(),
+        tools=llm_tools.catalogue(toolset=toolset),
     )
 
 

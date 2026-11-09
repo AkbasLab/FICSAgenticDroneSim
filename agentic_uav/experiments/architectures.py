@@ -71,6 +71,8 @@ class ArchitectureSpec:
     force_perfect_comms: bool = False   # override the condition with nominal
     comms_health_in_bids: bool = True   # the C term of the cost model
     llm_enabled: bool = True            # False = D with the fallback policy
+    #: the LLM's tool set: "v1" (D) or "v2" (DV2, explicit task phases)
+    toolset: str = "v1"
 
     #: informal note for the results table
     ablation_of: Optional[str] = None
@@ -155,7 +157,17 @@ ABLATIONS = [
             llm_enabled=False, ablation_of="D"),
 ]
 
-MAIN = [A, B, C, D, E]
+#: The follow-up to main_v1 (see docs/RESULTS_main_v1.md). Identical to D but
+#: for the tool set: an explicit `report_task_complete` tool, and a tool chosen
+#: in the wrong task phase is corrected rather than executed. Not a tuning of
+#: D's prompt on held-out data - D is kept unchanged and DV2 is evaluated on
+#: held-out seeds main_v1 never used.
+DV2 = replace(D, key="DV2", name="Agentic decentralized, task-phase tools",
+              description="D with an explicit report_task_complete tool and "
+                          "task-phase validation of the model's tool choice.",
+              toolset="v2")
+
+MAIN = [A, B, C, D, E, DV2]
 ALL: Dict[str, ArchitectureSpec] = {s.key: s for s in MAIN + ABLATIONS}
 
 
@@ -306,7 +318,8 @@ def _make_policy(sp, vehicle_id, limits, allocator, backend):
             raise ValueError("architecture D needs a backend; pass backend=...")
         return LLMAgentPolicy(
             backend, vehicle_id, safety_limits=limits, allocator=allocator,
-            timeout_s=None, memory_turns=6 if sp.persistent_memory else 0)
+            timeout_s=None, memory_turns=6 if sp.persistent_memory else 0,
+            toolset=getattr(sp, "toolset", "v1"))
     raise ValueError(f"unknown policy {sp.policy!r}")
 
 

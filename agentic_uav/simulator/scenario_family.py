@@ -82,16 +82,17 @@ def split_of(seed) -> str:
     return "development"
 
 
-def seeds_for(split, count, start=1):
+def seeds_for(split, count, start=1, skip=0):
     """The first `count` seeds of a split, in a fixed order. Test seeds come
     from the held-out list in its stored order; development seeds are the
     smallest positive integers that belong to no other split."""
     from ..experiments.freeze import heldout_seeds, validation_seeds
     if split == "test":
         held = heldout_seeds()
-        if len(held) < count:
-            raise ValueError(f"only {len(held)} held-out seeds exist, {count} requested")
-        return held[:count]
+        if len(held) < skip + count:
+            raise ValueError(f"only {len(held)} held-out seeds exist, "
+                             f"{skip} + {count} requested")
+        return held[skip:skip + count]
     if split == "validation":
         return validation_seeds()[:count]
     taken = set(heldout_seeds()) | set(validation_seeds())
