@@ -4,8 +4,10 @@ targets, no-fly zones, per-drone battery). See fics_drone/evaluation/ for the
 rules that judge a run against this."""
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
+
+from .obstacles import TreeObstacle  # noqa: E402
 
 
 @dataclass
@@ -97,6 +99,17 @@ class Scenario:
     sectors: List[Sector]
     targets: List[Target]
     no_fly_zones: List[NoFlyZone]
+    # objects the aircraft must not fly through that the simulator does not stop it from flying through (trees);
+    # empty unless a live script fills it in (see core/obstacles.py)
+    obstacles: list = field(default_factory=list)
+    # "surveillance": the whole sector must be swept, so coverage gates the pass. "search": the mission is to find the targets and
+    # come home, a drone stops when its target is found, and coverage is reported but does not gate the pass.
+    mission_kind: str = "surveillance"
+    # sector id -> [[x, y], ...] in world metres: a path a drone flies instead of a lawnmower sweep (streets, where a straight
+    # lane would run through buildings). Empty = every sector is swept in lanes.
+    search_routes: dict = field(default_factory=dict)
+    # height above ground the agents cruise at when the caller does not say; None = the navigation default
+    cruise_height: Optional[float] = None
 
     def sector(self, sector_id: str) -> Sector:
         for s in self.sectors:
@@ -122,4 +135,8 @@ def load_scenario(path: str) -> Scenario:
         sectors=[Sector(**s) for s in data["sectors"]],
         targets=[Target(**t) for t in data["targets"]],
         no_fly_zones=[NoFlyZone(**z) for z in data["no_fly_zones"]],
+        obstacles=[TreeObstacle(**t) for t in data.get("obstacles", [])],
+        mission_kind=data.get("mission_kind", "surveillance"),
+        search_routes=data.get("search_routes", {}),
+        cruise_height=data.get("cruise_height"),
     )

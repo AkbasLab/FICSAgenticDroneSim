@@ -1,0 +1,247 @@
+{
+  "scenario_id": "medium_001",
+  "random_seed": 7,
+  "base_station": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 0.0
+  },
+  "deadline_s": 1500.0,
+  "comms_range_m": 200.0,
+  "min_separation_m": 5.0,
+  "required_coverage": 0.85,
+  "mission_kind": "search",
+  "drones": [
+    {
+      "name": "Drone1",
+      "battery_s": 900.0,
+      "sector": "A",
+      "spawn_offset": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "Drone2",
+      "battery_s": 900.0,
+      "sector": "B",
+      "spawn_offset": [
+        0.0,
+        20.0,
+        0.0
+      ]
+    },
+    {
+      "name": "Drone3",
+      "battery_s": 900.0,
+      "sector": "E",
+      "spawn_offset": [
+        0.0,
+        -20.0,
+        0.0
+      ]
+    },
+    {
+      "name": "Drone4",
+      "battery_s": 900.0,
+      "sector": "C",
+      "spawn_offset": [
+        0.0,
+        40.0,
+        0.0
+      ]
+    },
+    {
+      "name": "Drone5",
+      "battery_s": 900.0,
+      "sector": "F",
+      "spawn_offset": [
+        0.0,
+        -40.0,
+        0.0
+      ]
+    },
+    {
+      "name": "Drone6",
+      "battery_s": 900.0,
+      "sector": "D",
+      "spawn_offset": [
+        0.0,
+        60.0,
+        0.0
+      ]
+    }
+  ],
+  "sectors": [
+    {
+      "id": "A",
+      "x_min": -10.0,
+      "x_max": 40.0,
+      "y_min": -10.0,
+      "y_max": 40.0
+    },
+    {
+      "id": "B",
+      "x_min": -60.0,
+      "x_max": -10.0,
+      "y_min": -10.0,
+      "y_max": 40.0
+    },
+    {
+      "id": "C",
+      "x_min": -10.0,
+      "x_max": 40.0,
+      "y_min": 40.0,
+      "y_max": 90.0
+    },
+    {
+      "id": "D",
+      "x_min": -60.0,
+      "x_max": -10.0,
+      "y_min": 40.0,
+      "y_max": 90.0
+    },
+    {
+      "id": "E",
+      "x_min": -10.0,
+      "x_max": 40.0,
+      "y_min": -60.0,
+      "y_max": -10.0
+    },
+    {
+      "id": "F",
+      "x_min": -60.0,
+      "x_max": -10.0,
+      "y_min": -60.0,
+      "y_max": -10.0
+    }
+  ],
+  "targets": [
+    {
+      "id": "T1",
+      "x": 30.0,
+      "y": 30.0,
+      "detection_radius_m": 5.0,
+      "dwell_s": 2.0
+    },
+    {
+      "id": "T2",
+      "x": -30.0,
+      "y": -30.0,
+      "detection_radius_m": 5.0,
+      "dwell_s": 2.0
+    },
+    {
+      "id": "T3",
+      "x": 15.0,
+      "y": 70.0,
+      "detection_radius_m": 5.0,
+      "dwell_s": 2.0
+    },
+    {
+      "id": "T4",
+      "x": -35.0,
+      "y": 60.0,
+      "detection_radius_m": 5.0,
+      "dwell_s": 2.0
+    },
+    {
+      "id": "T5",
+      "x": 25.0,
+      "y": -45.0,
+      "detection_radius_m": 5.0,
+      "dwell_s": 2.0
+    },
+    {
+      "id": "T6",
+      "x": -20.0,
+      "y": 15.0,
+      "detection_radius_m": 5.0,
+      "dwell_s": 2.0
+    }
+  ],
+  "no_fly_zones": [
+    {
+      "id": "NFZ1",
+      "x_min": -10.0,
+      "x_max": 10.0,
+      "y_min": 95.0,
+      "y_max": 110.0
+    }
+  ],
+  "obstacles": [
+    {
+      "x": 28.68,
+      "y": 42.41,
+      "z_bottom": 1.8,
+      "z_top": 25.35,
+      "trunk_r": 1.5,
+      "crown_r": 5.59,
+      "crown_from_frac": 0.28
+    },
+    {
+      "x": 29.45,
+      "y": 22.02,
+      "z_bottom": 1.8,
+      "z_top": 25.75,
+      "trunk_r": 1.5,
+      "crown_r": 5.67,
+      "crown_from_frac": 0.28
+    },
+    {
+      "x": 29.13,
+      "y": 82.5,
+      "z_bottom": 1.8,
+      "z_top": 25.2,
+      "trunk_r": 1.5,
+      "crown_r": 5.55,
+      "crown_from_frac": 0.28
+    },
+    {
+      "x": 29.69,
+      "y": 62.05,
+      "z_bottom": 1.8,
+      "z_top": 21.29,
+      "trunk_r": 1.5,
+      "crown_r": 4.73,
+      "crown_from_frac": 0.28
+    },
+    {
+      "x": 30.02,
+      "y": 1.97,
+      "z_bottom": 1.8,
+      "z_top": 21.84,
+      "trunk_r": 1.5,
+      "crown_r": 4.84,
+      "crown_from_frac": 0.28
+    },
+    {
+      "x": 29.92,
+      "y": -57.53,
+      "z_bottom": 1.8,
+      "z_top": 22.13,
+      "trunk_r": 1.5,
+      "crown_r": 4.9,
+      "crown_from_frac": 0.28
+    },
+    {
+      "x": 30.24,
+      "y": -36.61,
+      "z_bottom": 1.8,
+      "z_top": 22.11,
+      "trunk_r": 1.5,
+      "crown_r": 4.9,
+      "crown_from_frac": 0.28
+    },
+    {
+      "x": 30.28,
+      "y": -16.7,
+      "z_bottom": 1.8,
+      "z_top": 22.1,
+      "trunk_r": 1.5,
+      "crown_r": 4.9,
+      "crown_from_frac": 0.28
+    }
+  ]
+}

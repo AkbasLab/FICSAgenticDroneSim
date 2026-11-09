@@ -32,12 +32,45 @@ def zone_specs(profile: str, appear_s: float = 5.0, expire_s: float = 12.0,
                                active_from_s=appear_s, active_until_s=expire_s)],
         "drift": [dict(name="DZ_drift", bounds=(38.0, 46.0, 28.0, 36.0),
                        active_from_s=drift_s, vx=-2.5)],
+        # the medium scenario (configs/missions/medium_001.json): a block that appears over T3's area and expires, a box
+        # that drifts west across sector A, and one that appears over T2's area and stays
+        "medium_none": [],
+        "medium_dynamic": [dict(name="DZ_appear", bounds=(5.0, 30.0, 55.0, 80.0), active_from_s=appear_s * 1.3,
+                              active_until_s=expire_s * 1.6),
+                         dict(name="DZ_drift", bounds=(38.0, 46.0, 28.0, 36.0), active_from_s=drift_s * 2, vx=-2.5),
+                         dict(name="DZ_stay", bounds=(-45.0, -25.0, -45.0, -25.0), active_from_s=appear_s * 2.5)],
+        # the large scenario (configs/missions/large_001.json, street level): one block that appears over T3's road and
+        # expires, one that drifts west along a road in sector D, one that appears over T2's road and stays
+        "large_none": [],
+        "large_dynamic": [dict(name="DZ_appear", bounds=(79.0, 103.0, -171.0, -147.0), active_from_s=appear_s * 1.3,
+                               active_until_s=expire_s * 1.6),
+                          dict(name="DZ_drift", bounds=(150.0, 158.0, -174.0, -166.0), active_from_s=drift_s * 2, vx=-2.5),
+                          dict(name="DZ_stay", bounds=(131.0, 151.0, -259.0, -239.0), active_from_s=appear_s * 2.5)],
     }
+    for scenario_name in ("xlarge", "full_map"):
+        if profile == f"{scenario_name}_none":
+            return []
+        if profile == f"{scenario_name}_dynamic":
+            return _planned_zones(scenario_name, appear_s, expire_s, drift_s)
     return specs[profile]
 
 
+def _planned_zones(scenario_name: str, appear_s: float, expire_s: float, drift_s: float) -> List[dict]:
+    """The dynamic profile of a generated street scenario: its file holds a `zone_plan` over its own routes (a block that appears
+    over T3 and expires, a box that drifts west clear of every spawn, one that appears over T2 and stays)."""
+    path = os.path.join(os.path.dirname(__file__), "..", "..", "configs", "missions", f"{scenario_name}_001.json")
+    with open(path) as f:
+        plan = json.load(f)["zone_plan"]
+    zones = [dict(name="DZ_appear", bounds=tuple(plan["appear"]), active_from_s=appear_s * 1.3, active_until_s=expire_s * 1.6)]
+    if plan.get("drift"):
+        zones.append(dict(name="DZ_drift", bounds=tuple(plan["drift"]), active_from_s=drift_s * 2, vx=-2.5))
+    zones.append(dict(name="DZ_stay", bounds=tuple(plan["stay"]), active_from_s=appear_s * 2.5))
+    return zones
+
+
 ZONE_PROFILES: Dict[str, List[dict]] = {
-    n: zone_specs(n) for n in ("static", "appear", "appear_expire", "drift")}
+    n: zone_specs(n) for n in ("static", "appear", "appear_expire", "drift", "medium_none", "medium_dynamic", "large_none", "large_dynamic",
+              "xlarge_none", "xlarge_dynamic", "full_map_none", "full_map_dynamic")}
 
 #: cmd = guardian acts at command boundaries only; tick = per-control-tick zone monitor.
 ZONE_MONITORS = ("cmd", "tick")
