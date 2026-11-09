@@ -34,7 +34,7 @@ The levels themselves are frozen (`configs/network/*.toml` in `configs/frozen.to
 | Batch | Runs | Every run complete | Commit | Notes |
 |---|---|---|---|---|
 | `phase17-pilot-20261106-201311` (Vega gpu02) | 80 (C 40, D 40) | 80 of 80: manifest, events, report, records, trajectories | `cfb4d0e`, clean | 2,809 D decisions, 2,860 requests; variability 100 of 100 agreed |
-| `phase17-pilot-d2-20261107-195223` (Vega gpu01) | 40 (D) | 40 of 40, gzip-checked after the copy | `4de38b1`, clean | 2,789 decisions; **2,821 requests in the records = 2,821 `POST /api/chat` in `serve-d2.log.gz`, all HTTP 200**, the server on CUDA (H100) throughout |
+| `phase17-pilot-d2-20261107-195223` (Vega gpu01) | 40 (D) | 40 of 40, gzip-checked after the copy | `4de38b1`, clean | 2,789 decisions; **2,821 requests in the records = 2,821 `POST /api/chat` in `serve-d2.log.gz`, all HTTP 200**, the server on CUDA (H100) throughout; variability 100 of 100 agreed (2026-11-09) |
 
 Each run's manifest names the commit, the package digest, the model's digest (`a6eb4748fd29…`), its options and
 every file read with its digest. Failures are kept as completed runs (0035's 24,999 events among them). Metrics
@@ -55,7 +55,7 @@ guardian's log, fixed with tests that fail on the old code, and every run of rec
 The first two left D's mission score at 3 of 10 against C's 10 of 10 — visible in the aggregate, but only the
 timeline said why. The third left one run of forty; its cause sits in code C flies too.
 
-## Not yet
+## Verdict
 
-The variability check on the re-fly batch (2026-11-08: gpu01's scratch hung and Ollama fell back to the CPU; to run
-on Vega). The phase closes when it has.
+**Met, 2026-11-09.** The re-fly's variability check, held back on 2026-11-08 when gpu01's scratch hung and Ollama
+fell back to the CPU, ran on 2026-11-09 with the server confirmed on CUDA first: 100 of 100 agreed, 0 errors.

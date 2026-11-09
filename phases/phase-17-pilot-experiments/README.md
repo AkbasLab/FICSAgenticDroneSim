@@ -1,7 +1,7 @@
 # Phase 17 — Pilot experiments
 
 **Stage:** 7 · Science · **Vault note:** `AUV-16 — Pilots, Experiment and Analysis`
-**Started:** 2026-11-06 · **Completed:** — (the D re-fly's variability check is still to run on Vega)
+**Started:** 2026-11-06 · **Completed:** 2026-11-09
 
 > Pilots debug the methodology; they are not results. Phase 17 pre-registered how a communication level is judged,
 > swept the levels on the mock and chose them by that rule, flew C and D on the live 70B on Vega, and read every
@@ -20,7 +20,7 @@ Mirrored from `AUV-22 — Phase Objectives Checklist`.
 - [x] **17.2** Inspect individual timelines — `scripts/timeline.py`: each drone's task, role, skills, outages, model decisions and guardian, the team's messages, partitions, reallocations and progress; all 120 live runs drawn and read
 - [x] **17.3** Calibrate communication conditions — the rule pre-registered (`docs/CONDITIONS.md`, `aeec7c6`) before an 840-run sweep; levels chosen by it
 - [x] **17.4** Freeze the final configurations — `configs/frozen.toml` (138 files, version 1; the held-out seeds as version 2), checked by the suite and CI; **held-out seeds** drawn from the freeze (`configs/seeds/heldout.toml`)
-- [ ] ✅ **Exit:** the team can explain why each final communication level is meaningful, and the runner produces complete, interpretable logs — *met on the evidence below; closed once the D re-fly's variability check has run*
+- [x] ✅ **Exit:** the team can explain why each final communication level is meaningful, and the runner produces complete, interpretable logs — *met 2026-11-09*
 
 ## Exit criterion
 
@@ -31,7 +31,7 @@ Mirrored from `AUV-22 — Phase Objectives Checklist`.
 separates the architectures when a drone is lost and still delivers most messages (57–75 %); 2-drone `severe` is out
 because it delivers 49.5 %, under the rule's 50 % line. **Complete, interpretable logs:** all 120 live-model runs
 complete with every file, every model request in the records found in the server's log, and the timelines found
-three defects the aggregates hid. · **Evidence:** [`evidence/exit-criterion-2026-11-09.md`](evidence/exit-criterion-2026-11-09.md).
+three defects the aggregates hid; the 70B repeated 100 of 100 recorded decisions in each batch. **Met:** yes, 2026-11-09. · **Evidence:** [`evidence/exit-criterion-2026-11-09.md`](evidence/exit-criterion-2026-11-09.md).
 
 ## Deliverables
 
@@ -41,7 +41,7 @@ three defects the aggregates hid. · **Evidence:** [`evidence/exit-criterion-202
 | The calibration sweep and its verdict | `scripts/calibrate_conditions.py`, `agentic_uav/experiments/calibration.py`, `results/calibration-20261106-193951.*` | **Done**; 840 runs |
 | Run timelines | `scripts/timeline.py`, `agentic_uav/experiments/timeline.py`; `timeline.html` per run, `timelines.html` per batch | **Done** |
 | The pilot on Vega | `configs/experiments/phase17_pilot.toml`, `results/phase17-pilot-20261106-201311/`, `docs/VEGA-BATCH.md` | **Done**; 80 runs |
-| Model variability | `scripts/model_variability.py`; `model-variability-*.md` in each batch | First batch **100/100**; D re-fly **to run** |
+| Model variability | `scripts/model_variability.py`; `model-variability-*.md` in each batch | **100/100** in both batches |
 | The three defects' fixes and tests | `agentic_uav/agents/llm_tools.py`, `agents/team_policy.py`, `coordination/keepout.py`; `tests/test_pilot_defects.py`, `tests/test_keepout.py` | **Done** |
 | D re-flown | `configs/experiments/phase17_pilot_d2.toml`, `results/phase17-pilot-d2-20261107-195223/` | **Done**; 40 runs |
 | The freeze | `configs/frozen.toml`, `agentic_uav/experiments/freeze.py`, `scripts/freeze.py`, `tests/test_freeze.py` | **Done**; version 2 |
@@ -100,7 +100,9 @@ the evidence, and D flies live again in Phase 18 on the frozen code.
 
 On 2026-11-08 the variability check for the re-fly could not run: gpu01's connection to scratch hung, Ollama's GPU
 discovery timed out and it fell back to the CPU (`serve-d2-variability.log.gz`, kept); the 40 runs were copied home
-first. To run on Vega.
+first. On 2026-11-09, on gpu01 again (job 78790; gpu02's four GPUs were all busy, seen with `ssh gpu02 nvidia-smi`),
+scratch read Ollama's libraries in 17 s, the server came up on CUDA, and the check ran: **100 of 100 agreed**, 0
+errors, 100 requests in `serve-d2-variability-3.log.gz`, all answered.
 
 ### Reproductions after each fix
 
@@ -108,6 +110,11 @@ After each of the three fixes: the suite (1,391 → 1,393 → 1,401 tests, all p
 14's batch reports, records and trajectories identical to its run of record; the pilot's 40 C runs identical to
 Vega's, byte for byte; the 40 D runs flown by the echo identical to before; the calibration identical but for stamps
 and code digests. No run of record took a changed path.
+
+### 2026-11-09 — close
+
+The re-fly's variability check run (above); the exit met; **Phase 17 is complete.** Phase 18 flies the factorial on
+the held-out seeds, on the frozen code.
 
 ### 2026-11-08/09 — the freeze and the held-out seeds
 
@@ -152,12 +159,11 @@ question AUV-12F keeps apart (model size against decision latency and runtime as
 
 ## Open questions
 
-1. **The D re-fly's variability** — to run on Vega (`model_variability.py` on `phase17-pilot-d2-20261107-195223`).
-2. **What each Phase 13 ablation is worth** with the live model and degraded links was not part of the pilots; it
+1. **What each Phase 13 ablation is worth** with the live model and degraded links was not part of the pilots; it
    goes to Phase 18's design, within its compute budget.
-3. **Seven severe-link D runs leave their record part-way when replayed** on the mock, on the old code and the new
+2. **Seven severe-link D runs leave their record part-way when replayed** on the mock, on the old code and the new
    alike; outcomes unchanged. Worth understanding before Phase 18 relies on replay.
-4. **Latency** — AUV-12F: a real-clock run is needed to measure what the 70B's decision time costs a flight.
+3. **Latency** — AUV-12F: a real-clock run is needed to measure what the 70B's decision time costs a flight.
 
 ---
 
