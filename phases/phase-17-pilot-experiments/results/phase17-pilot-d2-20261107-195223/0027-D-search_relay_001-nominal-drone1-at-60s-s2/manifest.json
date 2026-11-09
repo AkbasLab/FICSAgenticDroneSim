@@ -1,0 +1,103 @@
+{
+ "code": {
+  "agent": "open_loop_agent.py",
+  "agent_sha256": "28d05b1f1599ced5",
+  "agentic_uav_sha256": "3e9324a103139991",
+  "commit": "4de38b1",
+  "dirty": false,
+  "ollama_endpoint": "http://127.0.0.1:11434",
+  "python": "3.11.7"
+ },
+ "config": {
+  "architecture": "D",
+  "experiment_id": "four",
+  "failure": "drone1-at-60s",
+  "index": 27,
+  "network": "nominal",
+  "planner": "llm:default",
+  "run_id": "0027-D-search_relay_001-nominal-drone1-at-60s-s2",
+  "scenario": "search_relay_001",
+  "seed": 2,
+  "team_size": 4
+ },
+ "error": null,
+ "event_log_version": 2,
+ "files": {
+  "allocation": {
+   "path": "configs/allocation/default.toml",
+   "sha256": "d2495f2cc39c6687"
+  },
+  "architecture": {
+   "path": "configs/architectures/D.toml",
+   "sha256": "480f4c57f9ec25be"
+  },
+  "failure": {
+   "path": "configs/failures/drone1-at-60s.toml",
+   "sha256": "f0037f3eb95182e9"
+  },
+  "guardian": {
+   "path": "configs/guardian/default.toml",
+   "sha256": "7fddc9efd53362fc"
+  },
+  "keep_out": {
+   "path": "configs/keepout/default.toml",
+   "sha256": "dc9d9368b6a732b2"
+  },
+  "llm": {
+   "path": "configs/llm/default.toml",
+   "sha256": "c368f1ce6170fef8"
+  },
+  "network": {
+   "path": "configs/network/nominal.toml",
+   "sha256": "7fda14c235b10ef8"
+  },
+  "recovery": {
+   "path": "configs/recovery/default.toml",
+   "sha256": "f75e8c1f45ac0b3f"
+  },
+  "scenario": {
+   "path": "configs/scenarios/search_relay_001.toml",
+   "sha256": "aafbb0738a4874a5"
+  }
+ },
+ "files_written": [
+  "events.jsonl.gz",
+  "report.json",
+  "records.json.gz",
+  "trajectories.json.gz",
+  "manifest.json"
+ ],
+ "finished": "2026-11-07T20:57:46",
+ "model": {
+  "endpoint": "http://127.0.0.1:11434",
+  "llm": {
+   "digest": "a6eb4748fd2990ad2952b2335a95a7f952d1a06119a0aa6a2df6cd052a93a3fa",
+   "model": "llama3.3:70b",
+   "options": {
+    "num_ctx": 8192,
+    "num_predict": 400,
+    "seed": 0,
+    "temperature": 0
+   },
+   "timeout_s": 60.0
+  },
+  "planner": "llm:default"
+ },
+ "outcome": {
+  "completion_s": 309.1,
+  "events": 6530,
+  "met": true,
+  "success": true
+ },
+ "run_id": "0027-D-search_relay_001-nominal-drone1-at-60s-s2",
+ "software": {
+  "airsim": null,
+  "numpy": "2.2.6",
+  "ollama": "0.6.2",
+  "platform": "Linux-4.18.0-553.134.1.el8_10.x86_64-x86_64-with-glibc2.28",
+  "python": "3.11.7"
+ },
+ "started": "2026-11-07T20:50:11",
+ "status": "completed",
+ "wall_s": 455.303
+}

@@ -13,8 +13,8 @@ Names: `chikhala` is the Vega user; replace it with yours. `/scratch/$USER` is f
 its commit — copied to Vega. `scp` runs on the machine that has the file:
 
 ```
-git bundle create "$HOMEuv-SC.bundle" SC
-scp "$HOMEuv-SC.bundle" chikhala@vega.erau.edu:/scratch/chikhala/
+git bundle create "$HOME\auv-SC.bundle" SC
+scp "$HOME\auv-SC.bundle" chikhala@vega.erau.edu:/scratch/chikhala/
 ```
 
 **On the Vega login node** (it has internet; the GPU nodes do not), inside `screen -S vega`. Vega's default

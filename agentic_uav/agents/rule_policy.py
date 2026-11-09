@@ -306,7 +306,8 @@ class RulePolicy:
                 p = record.report.position
                 heard.append((drone, p[0], p[1], p[2], record.report.at))
         me = belief.self_
-        return keep_outs(heard, me.updated_at, self.keep_out, (me.x, me.y), ZONE_CLEARANCE_M)
+        pads = {v.id: (v.start_x, v.start_y) for v in belief.brief.vehicles}
+        return keep_outs(heard, me.updated_at, self.keep_out, (me.x, me.y), ZONE_CLEARANCE_M, pads)
 
     def _obstacles(self, belief: BeliefState, avoid: list) -> list:
         return [z.polygon for z in belief.brief.restricted_zones] + avoid

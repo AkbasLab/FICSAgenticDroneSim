@@ -81,6 +81,28 @@ class RuleTests(unittest.TestCase):
         corner = (80.0 - 7.0 * 1.05 + 0.1, -40.0 + 7.0 * 1.05 - 0.1)
         self.assertEqual([d for d, _ in K.keep_outs(heard, 60.0, CFG, corner, 2.0)], ["Drone2"])
 
+    def test_over_its_own_pad_the_keep_out_is_its_pads_column(self):
+        # Phase 17 pilot run 0035 (2026-11-07): Drone3, last heard descending onto its pad at (8, 0), went
+        # silent for good; the full square round it covered Drone4's home 4 m away, so Drone4 could never get
+        # home. Over its own pad a silent teammate keeps its pad's column -- PAD_RADIUS_M either side -- and
+        # the neighbouring pads stay open.
+        pads = {"Drone3": (8.0, 0.0), "Drone4": (12.0, 0.0)}
+        landing = [("Drone3", 8.0, 0.4, 4.0, 198.4)]
+        got = K.keep_outs(landing, 351.0, CFG, (205.0, 72.0), 2.0, pads)
+        self.assertEqual([d for d, _ in got], ["Drone3"])
+        self.assertEqual(got[0][1].vertices, K.square(8.0, 0.4, K.PAD_RADIUS_M).vertices)
+        self.assertFalse(grown(got[0][1], 2.0 * 1.05).contains(12.0, 0.0))        # Drone4's home is reachable
+        self.assertEqual(K.PAD_RADIUS_M, 1.0)
+        # Anywhere else -- off its pad by more than PAD_RADIUS_M, or with no pads given -- the full square.
+        off = [("Drone3", 8.0, 1.5, 4.0, 198.4)]
+        self.assertEqual(K.keep_outs(off, 351.0, CFG, (205.0, 72.0), 2.0, pads)[0][1].vertices,
+                         K.square(8.0, 1.5, 5.0).vertices)
+        self.assertEqual(K.keep_outs(landing, 351.0, CFG, (205.0, 72.0), 2.0)[0][1].vertices,
+                         K.square(8.0, 0.4, 5.0).vertices)
+        # Over ANOTHER drone's pad it is no landing of its own: the full square.
+        self.assertEqual(K.keep_outs([("Drone3", 12.0, 0.0, 4.0, 198.4)], 351.0, CFG, (205.0, 72.0), 2.0,
+                                     pads)[0][1].vertices, K.square(12.0, 0.0, 5.0).vertices)
+
 
 class SearchPathTests(unittest.TestCase):
     def test_with_nothing_to_avoid_it_is_the_lawnmower(self):

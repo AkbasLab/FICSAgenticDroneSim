@@ -1,20 +1,29 @@
 #!/usr/bin/env python3
-"""Tests for the two defects Phase 17's pilot timelines found, each re-flown on the mock (AUV-16 17.2).
+"""Tests for the three defects Phase 17's pilot timelines found, each re-flown on the mock (AUV-16 17.2).
 
     python -m unittest discover -s tests -p test_pilot_defects.py
 
 WHY THESE EXIST
 ---------------
 Pilot batch phase17-pilot-20261106-201311 (the live llama3.3:70b, Vega gpu02) flew D's two-drone team with
-Drone1 stopped at 60 s: 4 of 10 missions completed, against C's 10 of 10. The timelines showed why, the same in all
-six failures. The survivor claimed Drone1's sector and the model chose `start_search`; the tool searched FROM
+Drone1 stopped at 60 s: 3 of 10 missions completed, against C's 10 of 10. The timelines showed why, the same in all
+seven failures. The survivor claimed Drone1's sector and the model chose `start_search`; the tool searched FROM
 WHERE THE DRONE WAS, so the search's first leg crossed the keep-out round Drone1's last position; the guardian
 refused it (rightly); and a refusal sends a drone home. The rule team never meets this: it searches from where it
 is only when the way to its first lane is clear, and otherwise flies a route round what it avoids first.
+(First written as "4 of 10 ... six failures", in 4de38b1's message and here: a miscount, corrected 2026-11-08 from
+the batch's metrics. The fixes were not affected.)
 
-And in one of the six (run 0027), after the model had put the drone on "stand by" and then sent it home, the
+And in one of the seven (run 0027), after the model had put the drone on "stand by" and then sent it home, the
 landing's success took it back to "wait for a task": a hold on the ground that failed, a landing retried, every
 half second to the deadline (559 decisions).
+
+D re-flown on the fixed code (phase17-pilot-d2-20261107-195223, Vega gpu01): those cells 10 of 10, as C. One run of
+40 failed, by a defect in the rule team's own going home, which C flies too: in run 0035 (4 drones, severe links)
+Drone3 went silent while descending onto its pad at (8, 0), and never spoke again; the keep-out round its last
+position -- 5 m either side, lasting while it is silent -- covered Drone4's home at (12, 0), 4 m away. With no
+route home, Drone4's straight way was refused, landing where it was was refused, and it held, asked and was refused
+again from 351 s to 2991 s.
 
 1. THE PILOT RUN, RE-FLOWN WITH THE MODEL'S OWN ANSWERS. Run 0029 (seed 4) is flown again on the mock, every
    request answered with the reply the 70B gave for exactly those messages that night, and with the rule's answer
@@ -24,6 +33,8 @@ half second to the deadline (559 decisions).
    with the way clear, it is the search itself, as before.
 3. GOING HOME IS NOT WAITING: a drone put on "stand by" then sent home lands and is done -- no hold on the ground,
    no landing retried.
+4. A SILENT TEAMMATE OVER ITS OWN PAD KEEPS ONLY ITS PAD'S COLUMN: run 0035 re-flown with the model's own answers
+   gets Drone4 home and landed, refused by nothing. (The rule itself: tests/test_keepout.py.)
 """
 
 import dataclasses
@@ -43,6 +54,8 @@ from agentic_uav.experiments.experiment import ExperimentConfig  # noqa: E402
 
 BATCH = os.path.join(ROOT, "phases", "phase-17-pilot-experiments", "results", "phase17-pilot-20261106-201311")
 RUN_0029 = "0029-D-search_pair_001-nominal-drone1-at-60s-s4"
+BATCH_D2 = os.path.join(ROOT, "phases", "phase-17-pilot-experiments", "results", "phase17-pilot-d2-20261107-195223")
+RUN_0035 = "0035-D-search_relay_001-severe-none-s5"
 
 
 class PilotReplay:
@@ -78,9 +91,9 @@ class Scripted:
         return self.fn(request)
 
 
-def fly(seed, ask, failure="drone1-at-60s"):
-    """One D flight of the pilot's two-drone cell, as the batch flies it, with `ask` as the model."""
-    run = ExperimentConfig(1, "pilot", "D", "search_pair_001", 2, "nominal", failure, seed, "echo")
+def fly(seed, ask, failure="drone1-at-60s", scenario="search_pair_001", team=2, network="nominal"):
+    """One D flight of a pilot cell (by default the two-drone one), as the batch flies it, with `ask` as the model."""
+    run = ExperimentConfig(1, "pilot", "D", scenario, team, network, failure, seed, "echo")
     original = ER._ask
     ER._ask = lambda *a, **k: (ask, {"planner": "test"})
     try:
@@ -170,6 +183,20 @@ class GoingHomeTests(unittest.TestCase):
         on_ground = [e for e in log if e["at"] > 200 and (e.get("decision") or {}).get("objective") == "wait for a task"]
         self.assertEqual(on_ground, [])
         self.assertLess(len(log), 120)                       # 0027's loop made it 600
+
+
+class PadKeepOutTests(unittest.TestCase):
+    def test_run_0035_re_flown_with_the_models_own_answers_gets_drone4_home(self):
+        with gzip.open(os.path.join(BATCH_D2, RUN_0035, "records.json.gz"), "rt", encoding="utf-8") as h:
+            ask = PilotReplay(json.load(h))
+        flight = fly(5, ask, failure="none", scenario="search_relay_001", team=4, network="severe")
+        self.assertGreater(ask.recorded, 100)                 # the night's own answers, up to and past the defect
+        self.assertEqual(refusals(flight), [])
+        self.assertTrue(flight.run.met)
+        log = entries(flight, "Drone4")
+        landed = [e for e in log if (e.get("decision") or {}).get("objective") == "land"]
+        self.assertTrue(landed and landed[-1]["at"] < 450, "Drone4 should land at home soon after S4")
+        self.assertLess(len(log), 150)                       # 0035's loop made it 465
 
 
 if __name__ == "__main__":

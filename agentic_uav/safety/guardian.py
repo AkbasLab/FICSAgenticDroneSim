@@ -592,7 +592,8 @@ class Guardian:
         if self.keep_out is None:
             return []
         heard = [(m.drone, m.x, m.y, m.altitude_m, m.at) for m in view.teammates]
-        return keep_outs(heard, view.now, self.keep_out, (view.x, view.y), AVOID_CLEARANCE_M)
+        pads = {v.id: (v.start_x, v.start_y) for v in self.brief.vehicles}
+        return keep_outs(heard, view.now, self.keep_out, (view.x, view.y), AVOID_CLEARANCE_M, pads)
 
     @staticmethod
     def _heard_at(view: GuardianView, drone: str) -> float:

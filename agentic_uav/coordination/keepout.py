@@ -23,6 +23,18 @@ moment it is heard again it is gone.
 
 A drone already inside a keep-out when it appears is not held there: the zone
 is left out of its own routes, so it can fly away (callers' `excluding`).
+
+OVER ITS OWN PAD (Phase 17 pilot run 0035, 2026-11-07). A teammate last known
+within PAD_RADIUS_M of its own pad -- climbing off it or coming down onto it --
+keeps only its pad's column: a square PAD_RADIUS_M either side. Drone3 went
+silent descending onto its pad at (8, 0) and never spoke again (landed, out of
+range); the full square round it covered Drone4's home at (12, 0), 4 m away, and
+Drone4 could never get home: every route refused, every landing elsewhere
+refused, to the end of the run. The pads are laid out 4 m apart to be used at
+the same time, take-off and landing alike; a drone over its own pad stays in
+that column, and nobody else's route goes through it. Everywhere else the full
+square stands, unchanged -- including over another drone's pad. Callers give
+the pads (`pads`); without them, the full square everywhere, as before.
 """
 
 from __future__ import annotations
@@ -34,6 +46,7 @@ from ..control.routing import grown
 from ..core.geometry import Polygon
 
 KEY_ORDER = ("half_width_m", "after_s", "min_altitude_m")
+PAD_RADIUS_M = 1.0          # over its own pad: within the 1 m a drone lands from (`RulePolicy._home`); its column
 
 
 @dataclass(frozen=True)
@@ -84,13 +97,18 @@ def inside(point: tuple[float, float], centre: tuple[float, float], reach_m: flo
 
 
 def keep_outs(heard: Iterable[tuple[str, float, float, float, float]], now: float, cfg: KeepOutConfig,
-              here: tuple[float, float], clearance_m: float) -> list[tuple[str, Polygon]]:
-    """The keep-out squares to plan round, leaving out any the drone is already within (it must fly away)."""
+              here: tuple[float, float], clearance_m: float,
+              pads: dict[str, tuple[float, float]] | None = None) -> list[tuple[str, Polygon]]:
+    """The keep-out squares to plan round, leaving out any the drone is already within (it must fly away).
+
+    `pads`: each drone's own pad (its home); a teammate over its own pad keeps only the pad's column."""
     # "Within" exactly as the router judges it -- inside the square grown by the clearance -- so a drone
     # standing on a route's corner just outside still plans round it, and one inside can still fly out.
     out = []
     for d, x, y in silent_in_the_air(heard, now, cfg):
-        zone = square(x, y, cfg.half_width_m)
+        pad = (pads or {}).get(d)
+        on_pad = pad is not None and inside((x, y), pad, PAD_RADIUS_M)
+        zone = square(x, y, PAD_RADIUS_M if on_pad else cfg.half_width_m)
         if not grown(zone, clearance_m).contains(*here):
             out.append((d, zone))
     return out
