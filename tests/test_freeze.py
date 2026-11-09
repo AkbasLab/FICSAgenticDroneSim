@@ -67,10 +67,10 @@ class AbleToFailTests(unittest.TestCase):
         with io.open(self.path("agentic_uav/agents/new_trick.py"), "w", encoding="utf-8") as h:
             h.write("X = 1\n")
         os.remove(self.path("docs/METRICS.md"))
-        got = F.check(self.root)
-        self.assertIn("configs/network/severe.toml: changed since frozen version 1", got)
-        self.assertIn("agentic_uav/agents/new_trick.py: new in the frozen scope since version 1", got)
-        self.assertIn("docs/METRICS.md: frozen in version 1, now missing", got)
+        got, n = F.check(self.root), F.load(self.root)[-1]["number"]
+        self.assertIn(f"configs/network/severe.toml: changed since frozen version {n}", got)
+        self.assertIn(f"agentic_uav/agents/new_trick.py: new in the frozen scope since version {n}", got)
+        self.assertIn(f"docs/METRICS.md: frozen in version {n}, now missing", got)
         self.assertIn(F.COMMAND, got[-1])
 
     def test_outside_the_scope_nothing_counts(self):
@@ -99,12 +99,12 @@ class AbleToFailTests(unittest.TestCase):
                 F.add_version(self.root, note, "2026-12-01")
         with self.assertRaises(ValueError):                    # dated before version 1
             F.add_version(self.root, "fixed", "2026-11-01")
+        before = F.load(self.root)
         v = F.add_version(self.root, "the recovery rule's defect, found in Phase 18 run 12", "2026-12-01")
-        self.assertEqual((v["number"], v["date"]), (2, "2026-12-01"))
+        self.assertEqual((v["number"], v["date"]), (len(before) + 1, "2026-12-01"))
         self.assertEqual(F.check(self.root), [])
-        self.assertEqual([x["number"] for x in F.load(self.root)], [1, 2])
-        self.assertEqual(F.load(self.root)[0]["files"], F.load(ROOT)[0]["files"])     # version 1 kept as it was
-        with self.assertRaises(ValueError):                    # nothing changed since version 2
+        self.assertEqual(F.load(self.root)[:-1], before)                              # earlier versions kept as they were
+        with self.assertRaises(ValueError):                    # nothing changed since the new version
             F.add_version(self.root, "again", "2026-12-02")
 
     def test_a_version_undated_unnumbered_or_without_a_note_fails(self):

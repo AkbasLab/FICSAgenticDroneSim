@@ -1,0 +1,15 @@
+# The held-out seeds (AUV-16 17.4, 18.2): Phase 18's test seeds. Never flown before Phase 18, never tuned on.
+# DERIVED, not chosen, from freeze version 1 (2026-11-08) in configs/frozen.toml, committed before they were
+# drawn: see agentic_uav/experiments/heldout.py. tests/test_heldout.py recomputes them from the freeze.
+#
+# test     the 20 seeds every Phase 18 cell flies
+# reserve  in this order, each replaces a run ONLY if that run is excluded by a technical criterion declared
+#          before Phase 18 is flown -- never because of its outcome
+#
+# Development seeds (1-20, and 17) are none of these; all lie in 1000..999999.
+
+[heldout]
+from_freeze_version = 1
+freeze_digest = "047c499deda30cb2754708e6b18bb368ee25f72bb09534f1465d97b94a6a41e1"
+test = [343699, 280070, 458535, 821103, 442986, 605891, 312883, 674924, 657750, 8139, 388194, 545599, 634176, 679573, 747877, 640554, 43505, 541297, 720295, 825940]
+reserve = [392707, 777569, 573239, 32319, 411779, 187409, 527499, 131349, 413823, 559298]
