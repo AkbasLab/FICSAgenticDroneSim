@@ -329,6 +329,15 @@ DEFECTS = [
      "the air (main_v1's 4.7 s runs)",
      ["tests/test_dv2.py"]),
 
+    ("idle_report_accepted", "agent tools",
+     "agentic_uav/agents/llm_policy.py",
+     "        if name == \"report_task_complete\" and (belief.task is None or belief.reported):",
+     "        if False:",
+     "a drone with nothing to report may keep reporting; reports take no "
+     "flight time, so it loops at one instant and is left in the air "
+     "(found in the first llama development run)",
+     ["tests/test_dv2.py"]),
+
     ("seeds_reused_across_designs", "experiment design",
      "agentic_uav/experiments/factorial.py",
      "        clash = sorted(mine & set(used))",

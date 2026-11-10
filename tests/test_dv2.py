@@ -50,6 +50,7 @@ def _always(tool, params=None):
 
 REPEATER = _always("start_search")
 BIDDER = _always("send_bid", {"task_id": "SEARCH_SECTOR_S1"})
+REPORTER = _always("report_task_complete")
 
 
 def _fly(key, model, n=2, seed=1, net="final_nominal", fault=False):
@@ -121,6 +122,33 @@ def test_a_model_that_only_bids():
     check("DV2: no drone is left in the air", r.all_landed)
     check("no airborne exit at a few seconds (main_v1's 4.7 s runs)",
           r.mission_time_s > 60, r.mission_time_s)
+
+
+def _reports_when_idle(system, user, **kw):
+    """The control, except that with no task held it chooses
+    report_task_complete - what llama did in the first development run."""
+    from run_llm_agents import sensible_model
+    ctx = json.loads(user.split("\n\nAvailable tools:")[0])
+    if (ctx.get("role_and_task") or {}).get("task") is None:
+        return REPORTER(system, user)
+    return sensible_model(system, user)
+
+
+def test_a_model_that_reports_with_nothing_to_report():
+    """dv2_dev (llama), 2 of 16 runs: after its report, a drone kept choosing
+    report_task_complete with no task held. A report takes no flight time, so it
+    looped at one instant until its step budget ran out, airborne. This model
+    reproduces both runs (n2 severe seed 1 ended at 317 s, as llama's did)."""
+    for n, net, fault in ((2, "final_severe", False), (4, "final_nominal", True)):
+        b, r = _fly("DV2", _reports_when_idle, n=n, net=net, fault=fault)
+        check(f"{n} drones, {net}: the mission completes", r.coverage == 1.0, r.coverage)
+        check(f"{n} drones, {net}: every drone lands", r.all_landed)
+        check(f"{n} drones, {net}: no drone burns its step budget at one instant",
+              max(len(a.policy.log.turns) for a in b.agents) < 60,
+              max(len(a.policy.log.turns) for a in b.agents))
+        reasons = {str(getattr(t, "rejection_reason", "")) for t in _turns(b)}
+        check(f"{n} drones, {net}: the empty report is rejected as wrong_phase",
+              "wrong_phase" in reasons, reasons)
 
 
 def test_the_scripted_control_still_matches_the_deterministic_agents():
