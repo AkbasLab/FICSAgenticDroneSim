@@ -1,0 +1,16 @@
+{
+ "design_id": "main_v1",
+ "design_sha256": "c19b266352f08645",
+ "exclusions_sha256": "1ebbb83d744f4d53",
+ "fingerprint": {
+  "design": "1d6bc8796e5e976b",
+  "metrics": "460d71eeb86f37b2",
+  "networks": "896214a3727d10e6",
+  "prompts": "d4471bb58e1c9a4b",
+  "scenarios": "f988835d0e907ea7",
+  "seeds": "444ffdaa7ff0dd49",
+  "task_rules": "4c91b3e8b2fce2ae"
+ },
+ "note": "Written by the first held-out run. From here on the prompts, rules, metrics, profiles, scenarios and exclusion criteria are fixed for the test split.",
+ "sealed_at": "2026-11-07T15:06:22"
+}
