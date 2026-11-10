@@ -377,6 +377,18 @@ class LLMAgentPolicy:
                 RejectionReason.WRONG_PHASE,
                 f"{name}: all mission work is complete",
                 "there is nothing left to claim or search; choose return_home")
+        if name == "report_task_complete" and (belief.task is None or belief.reported):
+            # Found in the first llama development run: after reporting, the
+            # model kept choosing report_task_complete with no task held. A
+            # report takes no flight time, so the drone looped at one instant
+            # until its step budget ran out and it was left in the air.
+            open_work = not getattr(belief, "no_work_remaining", False)
+            raise DecisionError(
+                RejectionReason.WRONG_PHASE,
+                "report_task_complete: there is no unreported task to report",
+                "you hold no unfinished task; "
+                + ("claim open work with send_bid" if open_work
+                   else "all work is done, choose return_home"))
         if belief.task is None:
             return
         if belief.sector_searched and (

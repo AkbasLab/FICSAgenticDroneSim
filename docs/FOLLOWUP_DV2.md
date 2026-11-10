@@ -22,6 +22,7 @@ second `start_search` on a searched sector either. The scripted control used
 | `start_search` on a searched sector | accepted, re-flies it | rejected as `wrong_phase`; one correction naming `report_task_complete`; then the deterministic fallback |
 | bidding / searching while a finished task is unreported | accepted | rejected as `wrong_phase` the same way |
 | `report_task_complete` before the sweep | n/a | rejected as `wrong_phase` ("fly the sweep first") |
+| `report_task_complete` with nothing to report | n/a | rejected as `wrong_phase` ("claim open work" / "return_home") |
 | context line after a sweep | "sweep complete, completion not yet reported" | "sweep complete - next step is report_task_complete; searching it again finds nothing new" |
 | coordination streak limit | only when holding no task | also while holding one |
 
@@ -52,9 +53,30 @@ catches it. So a DV2 success has to be read together with how often the model
 chose the right phase itself. That is why `completions_by_model` and
 `wrong_phase_fallbacks` are reported next to success.
 
-Tests: `tests/test_dv2.py` (33 checks). Four new injected defects
+Tests: `tests/test_dv2.py` (41 checks). Five new injected defects
 (`phase_check_off`, `completion_tool_not_offered`, `airborne_exit`,
-`seeds_reused_across_designs`) are all caught.
+`idle_report_accepted`, `seeds_reused_across_designs`) are all caught.
+
+## Development run 1 with llama (dv2_dev, 16 runs) and the one fix it led to
+
+- 14 of 16 runs succeeded; every run searched every sector. `start_search`
+  fell from 98.5% of choices (D) to 15%. The model chose
+  `report_task_complete` itself; the fallback only had to finish a phase 8 times.
+- **The 2 failures had one cause.** After its report, a drone with no task
+  kept choosing `report_task_complete` (152 and 154 times). A report takes no
+  flight time, so the drone looped at one simulated instant until its step
+  budget ran out and was left in the air. It also inflated the "completions
+  chosen by the model" count (559, of which only a few were real).
+- **Fix:** `report_task_complete` with no unreported task is now a
+  `wrong_phase` rejection like the others ("claim open work with send_bid", or
+  "return_home" when nothing is left). A scripted model that does what llama
+  did reproduces both failures exactly (n2 severe seed 1 ends at 317 s, as
+  llama's did) and completes and lands with the fix. Test:
+  `test_a_model_that_reports_with_nothing_to_report`; defect
+  `idle_report_accepted`.
+- This was a development-split change, made before any held-out DV2 run, and
+  is disclosed here. `completions_by_model` now counts only accepted reports,
+  which after the fix are always real ones.
 
 ## Running it
 

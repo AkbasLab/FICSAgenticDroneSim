@@ -3,12 +3,12 @@
   "design": "9a1da68101e1bff8",
   "metrics": "460d71eeb86f37b2",
   "networks": "896214a3727d10e6",
-  "prompts": "f9a40a98346ed908",
+  "prompts": "505befde9ab6095c",
   "scenarios": "3f187079082c80b0",
   "seeds": "444ffdaa7ff0dd49",
   "task_rules": "519f14ce94f97562"
  },
- "frozen_at": "2026-11-09T11:44:23",
+ "frozen_at": "2026-11-09T22:37:39",
  "groups": {
   "design": {
    "sources": {
@@ -102,7 +102,7 @@
    "sources": {
     "agentic_uav/agents/context_builder.py": "2389616848290e3a",
     "agentic_uav/agents/decision_schema.py": "137a2b276e312c80",
-    "agentic_uav/agents/llm_policy.py": "a7acd0ac7e37e1d9",
+    "agentic_uav/agents/llm_policy.py": "3c7c33b8ded7c10a",
     "agentic_uav/agents/llm_tools.py": "b3483d1bd91736f8",
     "configs/benchmark/guardrail_prompts.yaml": "ccdc760cc09dab41"
    }
@@ -311,6 +311,19 @@
     "task_rules": "519f14ce94f97562"
    },
    "reason": "Follow-up after main_v1 (disclosed): architecture DV2 = D plus report_task_complete and phase-aware validation; DV2 audited and excluded under the same rules as D (X2 transcripts, X4); airborne-exit lifecycle fix (inert for A/B/C: never triggered in 36 development runs); per-design held-out seals with no seed reuse; design main_v2 on held-out seeds 21-40. main_v1 results are unchanged and reported as measured."
+  },
+  {
+   "at": "2026-11-09T22:37:39",
+   "fingerprint": {
+    "design": "9a1da68101e1bff8",
+    "metrics": "460d71eeb86f37b2",
+    "networks": "896214a3727d10e6",
+    "prompts": "505befde9ab6095c",
+    "scenarios": "3f187079082c80b0",
+    "seeds": "444ffdaa7ff0dd49",
+    "task_rules": "519f14ce94f97562"
+   },
+   "reason": "DV2 development run 1 (llama, dv2_dev): 2 of 16 runs left a drone airborne because report_task_complete with nothing to report was accepted and looped at one instant. It is now a wrong_phase rejection. Development-split change before any held-out DV2 run; disclosed in docs/FOLLOWUP_DV2.md."
   }
  ]
 }
