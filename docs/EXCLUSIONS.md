@@ -48,7 +48,11 @@ filled from outside the held-out list.
 * **Model variability** for each D batch (`scripts/model_variability.py`, 100 recorded decisions asked again):
   the agreement is reported. Below 95 %, Phase 18's record flags it for Phase 19; no run is excluded for it.
 * **Requests accounted for:** each D batch's requests in its records against the `POST /api/chat` lines in its
-  server logs. A mismatch is investigated and reported.
+  server logs. A mismatch is investigated and reported. *(Version 2:)* when the cause is an interruption of the
+  batch (its runs cut off and flown again), the report is an `interruptions.json` beside the runs -- the interval,
+  why, the excess requests and the failed requests the investigation found -- which `scripts/factorial_exit.py`
+  verifies rather than trusts: every request outside all complete runs, and every failed request, inside a declared
+  interval; records plus the declared excess equal to the log exactly. No run is excluded by it.
 
 ## Procedure that keeps X2 and X3 rare (not a criterion)
 
@@ -63,3 +67,4 @@ start; found while writing this file.)
 | Version | Date | What |
 |---|---|---|
 | 1 | 2026-11-09 | The criteria, the replacement rule and the completeness rule, before any held-out run (Phase 18) |
+| 2 | 2026-11-10 | How an investigated request mismatch from an interrupted batch is recorded and checked (`interruptions.json`), after the D pair batch was stopped by a misplaced Ctrl+C and resumed; no criterion, rule or run changed |

@@ -94,12 +94,10 @@ model.
 
 ## Where the project is
 
-**Phases 1 to 17 are complete** (2026-10-20 to 2026-11-09), each tagged
-`phase-NN-complete` (Phase 12 as a capability). Phase 17, the pilots, chose the communication levels by a
-pre-registered rule, flew 120 live-model runs on Vega read timeline by timeline (three defects found and fixed), and
-froze everything that flies or scores in [`configs/frozen.toml`](configs/frozen.toml), with Phase 18's held-out seeds
-drawn from the freeze ([`phases/phase-17-pilot-experiments/`](phases/phase-17-pilot-experiments/)). **Phase 18, the
-main factorial, is next.**
+**Phases 1 to 18 are complete** (2026-10-20 to 2026-11-10), each tagged
+`phase-NN-complete` (Phase 12 as a capability). Phase 18 flew the main factorial: 960 runs on the 20 held-out
+seeds and the frozen code, every cell with its 20 valid paired seeds, by exclusion rules committed before any run
+([`phases/phase-18-main-factorial/`](phases/phase-18-main-factorial/)). **Phase 19, the analysis, is next.**
 
 | Phase | Done | What it left |
 |---|---|---|
@@ -129,7 +127,7 @@ Objectives Checklist`; each phase also has a detail note `AUV-01` … `AUV-23`.
 | 4 · Adversity | 10–11 | **Complete** (Phases 10 and 11) |
 | 5 · Intelligence | 12 | **Complete** (Phase 12, as a capability) |
 | 6 · Apparatus | 13–16 | **Complete**: Phases 13–16 (the arms by configuration; the batch runner and event log; the pre-registered metrics; testing, CI and the live regression set) |
-| 7 · Science | 17–20 | **Phase 17 complete** (pilots, the freeze, held-out seeds); Phase 18 next |
+| 7 · Science | 17–20 | **Phases 17–18 complete** (pilots, the freeze, held-out seeds; the 960-run factorial); Phase 19 next |
 
 The ordering is load-bearing. Deterministic decentralized coordination (arm C)
 is built and measured **before** any language model touches coordination (arm

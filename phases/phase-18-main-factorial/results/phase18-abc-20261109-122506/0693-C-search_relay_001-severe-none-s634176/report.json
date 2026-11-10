@@ -1,0 +1,531 @@
+{
+ "finished": {
+  "Drone1": true,
+  "Drone2": true,
+  "Drone3": true,
+  "Drone4": true
+ },
+ "met": true,
+ "report": {
+  "completion_s": 555.3,
+  "components": {
+   "camera_contacts": 0,
+   "collisions": 0,
+   "coverage": 0.9998,
+   "drones_failed": [],
+   "drones_flown": 4,
+   "min_separation_m": 3.831,
+   "reporting": 1.0,
+   "safe_return": 1.0,
+   "separation_violations": 0,
+   "target_detection": 1.0,
+   "zone_entries": 0
+  },
+  "coverage": {
+   "by_sector": {
+    "S1": 0.999844,
+    "S2": 0.999375,
+    "S3": 1.0,
+    "S4": 1.0
+   },
+   "cell_m": 1.0,
+   "cells": 25600,
+   "fraction": 0.999805
+  },
+  "criteria": [
+   {
+    "description": "coverage threshold reached",
+    "detail": "S1 1.000, S2 0.999, S3 1.000, S4 1.000",
+    "id": "C1",
+    "measured": 0.9998,
+    "passed": true,
+    "required": 0.95
+   },
+   {
+    "description": "all targets detected",
+    "detail": "detected: T1, T2",
+    "id": "C2",
+    "measured": 2,
+    "passed": true,
+    "required": 2
+   },
+   {
+    "description": "detections reported to base, or eventually synchronized",
+    "detail": "reported: T1 by Drone3 at 186.4 s, T2 by Drone2 at 19.4 s",
+    "id": "C3",
+    "measured": 2,
+    "passed": true,
+    "required": 2
+   },
+   {
+    "description": "no restricted-region entry",
+    "detail": "",
+    "id": "C4",
+    "measured": 0,
+    "passed": true,
+    "required": 0
+   },
+   {
+    "description": "no collision or separation violation",
+    "detail": "closest pair Drone1-Drone2 3.83 m",
+    "id": "C5",
+    "measured": {
+     "collisions": 0,
+     "separation_violations": 0
+    },
+    "passed": true,
+    "required": {
+     "collisions": 0,
+     "separation_violations": 0
+    }
+   },
+   {
+    "description": "all functioning drones return safely",
+    "detail": "Drone1 24.5%, Drone2 44.0%, Drone3 29.7%, Drone4 32.2%",
+    "id": "C6",
+    "measured": 4,
+    "passed": true,
+    "required": 4
+   }
+  ],
+  "facts": {
+   "batteries": [
+    {
+     "airborne_s": 519.2,
+     "below_reserve_s": null,
+     "depleted_s": null,
+     "drone": "Drone1",
+     "flown_m": 2475.571,
+     "remaining": 24.529,
+     "reserve": 20.0,
+     "used": 75.471
+    },
+    {
+     "airborne_s": 519.6,
+     "below_reserve_s": null,
+     "depleted_s": null,
+     "drone": "Drone2",
+     "flown_m": 1499.469,
+     "remaining": 44.031,
+     "reserve": 20.0,
+     "used": 55.969
+    },
+    {
+     "airborne_s": 526.9,
+     "below_reserve_s": null,
+     "depleted_s": null,
+     "drone": "Drone3",
+     "flown_m": 2196.582,
+     "remaining": 29.723,
+     "reserve": 20.0,
+     "used": 70.277
+    },
+    {
+     "airborne_s": 555.0,
+     "below_reserve_s": null,
+     "depleted_s": null,
+     "drone": "Drone4",
+     "flown_m": 2004.345,
+     "remaining": 32.163,
+     "reserve": 20.0,
+     "used": 67.837
+    }
+   ],
+   "connected_s": {
+    "Drone1": [
+     [
+      0.0,
+      29.66
+     ],
+     [
+      46.56,
+      49.364
+     ],
+     [
+      64.892,
+      73.933
+     ],
+     [
+      89.852,
+      91.586
+     ],
+     [
+      133.006,
+      136.759
+     ],
+     [
+      138.622,
+      139.136
+     ],
+     [
+      142.599,
+      148.555
+     ],
+     [
+      183.185,
+      188.236
+     ],
+     [
+      220.693,
+      252.157
+     ],
+     [
+      265.771,
+      296.426
+     ],
+     [
+      307.171,
+      330.888
+     ],
+     [
+      357.524,
+      375.831
+     ],
+     [
+      387.349,
+      395.712
+     ],
+     [
+      407.285,
+      414.156
+     ],
+     [
+      451.887,
+      455.035
+     ],
+     [
+      477.488,
+      482.752
+     ],
+     [
+      486.987,
+      555.3
+     ]
+    ],
+    "Drone2": [
+     [
+      0.0,
+      29.66
+     ],
+     [
+      46.56,
+      73.933
+     ],
+     [
+      89.852,
+      104.133
+     ],
+     [
+      133.006,
+      156.549
+     ],
+     [
+      183.185,
+      201.492
+     ],
+     [
+      220.693,
+      330.888
+     ],
+     [
+      357.524,
+      375.831
+     ],
+     [
+      382.098,
+      395.712
+     ],
+     [
+      407.285,
+      422.023
+     ],
+     [
+      422.742,
+      440.71
+     ],
+     [
+      449.541,
+      482.752
+     ],
+     [
+      486.987,
+      555.3
+     ]
+    ],
+    "Drone3": [
+     [
+      0.0,
+      29.66
+     ],
+     [
+      46.56,
+      73.933
+     ],
+     [
+      89.852,
+      91.586
+     ],
+     [
+      133.006,
+      148.555
+     ],
+     [
+      183.185,
+      188.236
+     ],
+     [
+      220.693,
+      330.888
+     ],
+     [
+      357.524,
+      375.831
+     ],
+     [
+      382.098,
+      395.712
+     ],
+     [
+      407.285,
+      422.023
+     ],
+     [
+      422.742,
+      440.71
+     ],
+     [
+      449.541,
+      482.752
+     ],
+     [
+      486.987,
+      555.3
+     ]
+    ],
+    "Drone4": [
+     [
+      0.0,
+      29.66
+     ],
+     [
+      46.56,
+      73.933
+     ],
+     [
+      89.852,
+      104.133
+     ],
+     [
+      133.006,
+      139.136
+     ],
+     [
+      142.599,
+      148.555
+     ],
+     [
+      183.185,
+      188.236
+     ],
+     [
+      220.693,
+      237.739
+     ],
+     [
+      247.098,
+      273.357
+     ],
+     [
+      289.498,
+      294.557
+     ],
+     [
+      295.462,
+      302.327
+     ],
+     [
+      310.698,
+      315.757
+     ],
+     [
+      357.524,
+      361.887
+     ],
+     [
+      368.103,
+      375.831
+     ],
+     [
+      387.349,
+      395.712
+     ],
+     [
+      407.285,
+      422.023
+     ],
+     [
+      422.742,
+      440.71
+     ],
+     [
+      449.541,
+      482.752
+     ],
+     [
+      486.987,
+      513.678
+     ],
+     [
+      520.451,
+      555.3
+     ]
+    ]
+   },
+   "detections": [
+    {
+     "detected_s": 19.36,
+     "drone": "Drone2",
+     "in_view_s": 17.36,
+     "target": "T2"
+    },
+    {
+     "detected_s": 20.36,
+     "drone": "Drone4",
+     "in_view_s": 18.36,
+     "target": "T2"
+    },
+    {
+     "detected_s": 186.434,
+     "drone": "Drone3",
+     "in_view_s": 184.434,
+     "target": "T1"
+    },
+    {
+     "detected_s": 328.932,
+     "drone": "Drone1",
+     "in_view_s": 326.932,
+     "target": "T1"
+    },
+    {
+     "detected_s": 516.732,
+     "drone": "Drone4",
+     "in_view_s": 514.732,
+     "target": "T1"
+    }
+   ],
+   "duration_s": 555.3,
+   "random_seed": 634176,
+   "reports": [
+    {
+     "detected_s": 19.36,
+     "drone": "Drone2",
+     "reported_s": 19.36,
+     "target": "T2"
+    },
+    {
+     "detected_s": 20.36,
+     "drone": "Drone4",
+     "reported_s": 20.36,
+     "target": "T2"
+    },
+    {
+     "detected_s": 186.434,
+     "drone": "Drone3",
+     "reported_s": 186.434,
+     "target": "T1"
+    },
+    {
+     "detected_s": 328.932,
+     "drone": "Drone1",
+     "reported_s": 328.932,
+     "target": "T1"
+    },
+    {
+     "detected_s": 516.732,
+     "drone": "Drone4",
+     "reported_s": 520.451,
+     "target": "T1"
+    }
+   ],
+   "scenario_id": "search_relay_001",
+   "separations": [
+    {
+     "at_s": 512.418,
+     "min_m": 3.831,
+     "pair": "Drone1-Drone2",
+     "violations_s": []
+    },
+    {
+     "at_s": 0.3,
+     "min_m": 8.0,
+     "pair": "Drone1-Drone3",
+     "violations_s": []
+    },
+    {
+     "at_s": 0.3,
+     "min_m": 12.0,
+     "pair": "Drone1-Drone4",
+     "violations_s": []
+    },
+    {
+     "at_s": 0.3,
+     "min_m": 4.0,
+     "pair": "Drone2-Drone3",
+     "violations_s": []
+    },
+    {
+     "at_s": 0.3,
+     "min_m": 8.0,
+     "pair": "Drone2-Drone4",
+     "violations_s": []
+    },
+    {
+     "at_s": 0.3,
+     "min_m": 4.0,
+     "pair": "Drone3-Drone4",
+     "violations_s": []
+    }
+   ],
+   "targets": [
+    {
+     "id": "T1",
+     "sector": "S3",
+     "x": 125.699,
+     "y": -12.272
+    },
+    {
+     "id": "T2",
+     "sector": "S2",
+     "x": 40.549,
+     "y": 5.818
+    }
+   ],
+   "zone_entries": []
+  },
+  "observer": "mock-exact",
+  "random_seed": 634176,
+  "scenario_id": "search_relay_001",
+  "success": true,
+  "window_s": 555.3
+ },
+ "searched": {
+  "Drone1": [
+   "search S3",
+   "search S4"
+  ],
+  "Drone2": [
+   "search S2"
+  ],
+  "Drone3": [
+   "search S3",
+   "search S1"
+  ],
+  "Drone4": [
+   "search S2",
+   "search S4",
+   "search S1"
+  ]
+ },
+ "stopped": {},
+ "team_kind": "decentralized"
+}

@@ -1,0 +1,92 @@
+NAME            ID              SIZE     PROCESSOR    CONTEXT    RUNNER      UNTIL              
+llama3.3:70b    a6eb4748fd29    45 GB    100% GPU     8192       llamacpp    4 minutes from now    
+[19:05:43] model warm
+batch phase18-d-pair: 80 runs, 2 at once
+[1/80] 0002-D-search_pair_001-nominal-none-s280070: met
+[2/80] 0001-D-search_pair_001-nominal-none-s343699: met
+[3/80] 0004-D-search_pair_001-nominal-none-s821103: met
+[4/80] 0003-D-search_pair_001-nominal-none-s458535: met
+[5/80] 0005-D-search_pair_001-nominal-none-s442986: met
+[6/80] 0006-D-search_pair_001-nominal-none-s605891: met
+[7/80] 0008-D-search_pair_001-nominal-none-s674924: met
+[8/80] 0007-D-search_pair_001-nominal-none-s312883: met
+[9/80] 0009-D-search_pair_001-nominal-none-s657750: met
+[10/80] 0010-D-search_pair_001-nominal-none-s8139: met
+[11/80] 0011-D-search_pair_001-nominal-none-s388194: met
+[12/80] 0012-D-search_pair_001-nominal-none-s545599: met
+[13/80] 0014-D-search_pair_001-nominal-none-s679573: met
+[14/80] 0013-D-search_pair_001-nominal-none-s634176: met
+[15/80] 0015-D-search_pair_001-nominal-none-s747877: met
+[16/80] 0016-D-search_pair_001-nominal-none-s640554: met
+[17/80] 0017-D-search_pair_001-nominal-none-s43505: met
+[18/80] 0019-D-search_pair_001-nominal-none-s720295: met
+[19/80] 0018-D-search_pair_001-nominal-none-s541297: met
+[20/80] 0021-D-search_pair_001-nominal-drone1-at-60s-s343699: met
+[21/80] 0020-D-search_pair_001-nominal-none-s825940: met
+[22/80] 0022-D-search_pair_001-nominal-drone1-at-60s-s280070: met
+[23/80] 0023-D-search_pair_001-nominal-drone1-at-60s-s458535: met
+[24/80] 0024-D-search_pair_001-nominal-drone1-at-60s-s821103: met
+[25/80] 0025-D-search_pair_001-nominal-drone1-at-60s-s442986: met
+[26/80] 0026-D-search_pair_001-nominal-drone1-at-60s-s605891: met
+[27/80] 0027-D-search_pair_001-nominal-drone1-at-60s-s312883: met
+[28/80] 0028-D-search_pair_001-nominal-drone1-at-60s-s674924: met
+[29/80] 0029-D-search_pair_001-nominal-drone1-at-60s-s657750: met
+[30/80] 0031-D-search_pair_001-nominal-drone1-at-60s-s388194: met
+[31/80] 0030-D-search_pair_001-nominal-drone1-at-60s-s8139: met
+[32/80] 0032-D-search_pair_001-nominal-drone1-at-60s-s545599: met
+[33/80] 0033-D-search_pair_001-nominal-drone1-at-60s-s634176: met
+[34/80] 0034-D-search_pair_001-nominal-drone1-at-60s-s679573: met
+[35/80] 0035-D-search_pair_001-nominal-drone1-at-60s-s747877: met
+[36/80] 0036-D-search_pair_001-nominal-drone1-at-60s-s640554: met
+[37/80] 0038-D-search_pair_001-nominal-drone1-at-60s-s541297: met
+[38/80] 0037-D-search_pair_001-nominal-drone1-at-60s-s43505: met
+[39/80] 0039-D-search_pair_001-nominal-drone1-at-60s-s720295: met
+[40/80] 0040-D-search_pair_001-nominal-drone1-at-60s-s825940: met
+[41/80] 0042-D-search_pair_001-moderate-none-s280070: met
+[42/80] 0041-D-search_pair_001-moderate-none-s343699: met
+[43/80] 0043-D-search_pair_001-moderate-none-s458535: met
+[44/80] 0045-D-search_pair_001-moderate-none-s442986: met
+[45/80] 0044-D-search_pair_001-moderate-none-s821103: met
+[46/80] 0046-D-search_pair_001-moderate-none-s605891: met
+[47/80] 0047-D-search_pair_001-moderate-none-s312883: met
+[48/80] 0049-D-search_pair_001-moderate-none-s657750: met
+[49/80] 0048-D-search_pair_001-moderate-none-s674924: met
+[50/80] 0050-D-search_pair_001-moderate-none-s8139: met
+[51/80] 0051-D-search_pair_001-moderate-none-s388194: met
+[52/80] 0052-D-search_pair_001-moderate-none-s545599: met
+[53/80] 0053-D-search_pair_001-moderate-none-s634176: met
+[54/80] 0054-D-search_pair_001-moderate-none-s679573: met
+[55/80] 0055-D-search_pair_001-moderate-none-s747877: met
+[56/80] 0056-D-search_pair_001-moderate-none-s640554: met
+[57/80] 0057-D-search_pair_001-moderate-none-s43505: met
+[58/80] 0058-D-search_pair_001-moderate-none-s541297: met
+[59/80] 0060-D-search_pair_001-moderate-none-s825940: met
+[60/80] 0059-D-search_pair_001-moderate-none-s720295: met
+[61/80] 0061-D-search_pair_001-moderate-drone1-at-60s-s343699: met
+[62/80] 0062-D-search_pair_001-moderate-drone1-at-60s-s280070: met
+[63/80] 0063-D-search_pair_001-moderate-drone1-at-60s-s458535: met
+[64/80] 0064-D-search_pair_001-moderate-drone1-at-60s-s821103: met
+[65/80] 0065-D-search_pair_001-moderate-drone1-at-60s-s442986: met
+[66/80] 0066-D-search_pair_001-moderate-drone1-at-60s-s605891: met
+[67/80] 0067-D-search_pair_001-moderate-drone1-at-60s-s312883: met
+[68/80] 0068-D-search_pair_001-moderate-drone1-at-60s-s674924: met
+[69/80] 0069-D-search_pair_001-moderate-drone1-at-60s-s657750: met
+[70/80] 0070-D-search_pair_001-moderate-drone1-at-60s-s8139: met
+[71/80] 0071-D-search_pair_001-moderate-drone1-at-60s-s388194: met
+[72/80] 0072-D-search_pair_001-moderate-drone1-at-60s-s545599: met
+[73/80] 0073-D-search_pair_001-moderate-drone1-at-60s-s634176: met
+[74/80] 0074-D-search_pair_001-moderate-drone1-at-60s-s679573: met
+[75/80] 0075-D-search_pair_001-moderate-drone1-at-60s-s747877: met
+[76/80] 0076-D-search_pair_001-moderate-drone1-at-60s-s640554: met
+[77/80] 0077-D-search_pair_001-moderate-drone1-at-60s-s43505: met
+[78/80] 0078-D-search_pair_001-moderate-drone1-at-60s-s541297: met
+[79/80] 0079-D-search_pair_001-moderate-drone1-at-60s-s720295: met
+[80/80] 0080-D-search_pair_001-moderate-drone1-at-60s-s825940: met
+80 runs, 80 completed, 0 crashed or unfinished
+batch   : /scratch/chikhala/auv-runs/phase18-d-pair-20261109-123907
+[19:29:24] batch directory /scratch/chikhala/auv-runs/phase18-d-pair-20261109-123907: 80 of 80 runs complete
+2026-11-09T19:29:24: 100 of 100 recorded decisions asked again (0 errors); **99 agreed (99.0 %)**.
+
+* 0003-D-search_pair_001-nominal-none-s458535 Drone2 at 127.6: first {'tool': 'continue_task', 'parameters': {}}, again {'tool': 'hold', 'parameters': {'duration_s': 10}}
+[19:34:32] server log copied to /scratch/chikhala/auv-runs/phase18-d-pair-20261109-123907/serve-d-pair-78961.log
+[19:34:32] done

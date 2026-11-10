@@ -1,0 +1,70 @@
+{
+ "absent": {
+  "P3.continuity_retention": {
+   "kind": "not available",
+   "why": "no nominal twin in the batch"
+  },
+  "P4.censored": {
+   "kind": "not applicable",
+   "why": "no drone was stopped"
+  },
+  "P4.recovery_s": {
+   "kind": "not applicable",
+   "why": "no drone was stopped"
+  }
+ },
+ "config": {
+  "architecture": "D",
+  "experiment_id": "four",
+  "failure": "none",
+  "index": 57,
+  "network": "severe",
+  "planner": "llm:default",
+  "run_id": "0057-D-search_relay_001-severe-none-s43505",
+  "scenario": "search_relay_001",
+  "seed": 43505,
+  "team_size": 4
+ },
+ "definitions_sha256": "d722ba2b3379f179c9a2a8e500a49be21e66a7a7cc231f0f5e058d4d56f7663c",
+ "metrics_version": 1,
+ "run_id": "0057-D-search_relay_001-severe-none-s43505",
+ "values": {
+  "CE.coordination_efficiency": 0.3551248540125688,
+  "CE.total_cells": 71924,
+  "CE.unique_cells": 25542,
+  "D1.area_searched_pct": 99.77000000000001,
+  "D10.llm_calls": 256,
+  "D11.fallback_use": 6,
+  "D12.tokens": 361673,
+  "D13.battery_used_pct": 257.052,
+  "D14.distance_m": 7623.155,
+  "D15.conflicting_claims": 9,
+  "D2.redundant_searches": 4,
+  "D3.task_reassignments": 23,
+  "D4.orphaned_tasks": 0,
+  "D5.role_changes": 55,
+  "D6.role_oscillations": 31,
+  "D7.stale_message_decisions": 11,
+  "D8.invalid_llm_outputs": 6,
+  "D9.llm_latency_p50_s": 6.947,
+  "D9.llm_latency_p95_s": 7.458,
+  "P1.coverage": 0.9977,
+  "P1.mission_score": 0.9992333333333333,
+  "P1.safe_return": 1.0,
+  "P1.success": true,
+  "P1.target_detection": 1.0,
+  "P2.censored": false,
+  "P2.completion_s": 569.2,
+  "P5.collisions": 0,
+  "P5.emergency_fallbacks": 0,
+  "P5.guardian_interventions": 0,
+  "P5.separation_violations": 0,
+  "P5.unsafe_proposals": 0,
+  "P5.zone_entries": 0,
+  "P6.bytes": 1247159,
+  "P6.duplicates": 5,
+  "P6.expired": 5,
+  "P6.messages": 3333,
+  "P6.messages_per_completed_task": 1111.0
+ }
+}

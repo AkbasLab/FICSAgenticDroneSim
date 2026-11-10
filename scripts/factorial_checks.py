@@ -28,7 +28,8 @@ run) declares the criteria; this module applies them exactly and checks the rest
                          and any fallback; every drone's guardian log
     variability          each D batch's model-variability report, its agreement (below 95 % flagged)
     requests_accounted   each D batch: the requests in its records = the POST /api/chat lines its server logs
-                         show while it ran
+                         show while it ran -- or, for a batch interrupted and resumed, = records + the excess its
+                         interruptions.json declares, verified (docs/EXCLUSIONS.md v2)
 
 X3 (the model off the GPU) reads the server logs kept in each D batch's directory (serve*.log, serve*.log.gz): a run
 is covered by the log whose time span holds it, and must have a CUDA `inference compute` line before it and no
@@ -51,6 +52,7 @@ SCENARIOS = {2: "search_pair_001", 4: "search_relay_001"}
 FAILURES = ("none", "drone1-at-60s")
 REQUIRED = 20
 FLAG_AGREEMENT = 0.95
+EXCLUSIONS_VERSION = 2               # docs/EXCLUSIONS.md's version this checker applies
 FAULT_LAG_S = 1.0                 # a planned fault takes hold at the next step of the flight's clock, within this
 MODEL_ARCHS = ("D",)
 CHECKS = ("design", "frozen_code", "exclusions", "paired_complete", "common_random_numbers", "decisions_saved",
@@ -395,23 +397,67 @@ def check_variability(runs: list[Run]) -> tuple[list[str], dict[str, float]]:
     return p, agree
 
 
-def check_requests(runs: list[Run]) -> list[str]:
+INTERRUPTIONS = "interruptions.json"
+
+
+def read_interruptions(batch_dir: str) -> list[dict[str, Any]]:
+    """An investigated interruption of a batch (docs/EXCLUSIONS.md, version 2): when, why, and the excess it left."""
+    path = os.path.join(batch_dir, INTERRUPTIONS)
+    if not os.path.isfile(path):
+        return []
+    with io.open(path, encoding="utf-8") as h:
+        return list(json.load(h))
+
+
+def check_requests(runs: list[Run], explained: dict[str, Any] | None = None) -> list[str]:
+    """Each D batch: the requests in its records = the POST /api/chat lines its server logs show while it ran.
+
+    A batch that was interrupted carries interruptions.json: the interval, why, and the excess the investigation
+    found (requests of runs cut off and flown again, and requests the server failed). The check VERIFIES it, never
+    takes it on trust: every request outside all complete runs' windows, and every failed request, must lie inside
+    a declared interval, and records + declared excess must equal the log exactly; otherwise the same problems."""
     p = []
     for b in sorted({r.batch for r in runs if r.arch in MODEL_ARCHS}):
         rs = [r for r in runs if r.batch == b and r.manifest is not None and r.arch in MODEL_ARCHS]
         if not rs:
             continue
+        name = os.path.basename(b)
         asked = 0
         for r in rs:
             for log in ((r.load("records.json.gz") or {}).get("llm") or {}).values():
                 asked += sum(len(e.get("latency_s") or []) for e in log["log"] if e.get("prompt_digest"))
         lo, hi = min(r.manifest["started"] for r in rs), max(r.manifest["finished"] for r in rs)
-        chats = [st for g in read_server_logs(b) for when, st in g.chats if lo <= when <= hi]
-        if len(chats) != asked:
-            p.append(f"{os.path.basename(b)}: {asked} requests in the records, {len(chats)} in the server logs")
-        bad = [st for st in chats if st != "200"]
-        if bad:
-            p.append(f"{os.path.basename(b)}: {len(bad)} requests not answered (HTTP {sorted(set(bad))})")
+        chats = [(when, st) for g in read_server_logs(b) for when, st in g.chats if lo <= when <= hi]
+        cuts = read_interruptions(b)
+        if not cuts:
+            if len(chats) != asked:
+                p.append(f"{name}: {asked} requests in the records, {len(chats)} in the server logs")
+            bad = [st for _, st in chats if st != "200"]
+            if bad:
+                p.append(f"{name}: {len(bad)} requests not answered (HTTP {sorted(set(bad))})")
+            continue
+        within = lambda when: any(c["from"] <= when <= c["to"] for c in cuts)       # noqa: E731
+        windows = [(r.manifest["started"], r.manifest["finished"]) for r in rs]
+        stray = [w for w, _ in chats if not any(a <= w <= z for a, z in windows)]
+        excess = sum(int(c["excess_requests"]) for c in cuts)
+        failed = [(w, st) for w, st in chats if st != "200"]
+        declared_failed = sum(int(c["failed_requests"]) for c in cuts)
+        if not all(c.get("why", "").strip() for c in cuts):
+            p.append(f"{name}: an interruption without why")
+        outside = [w for w in stray if not within(w)]
+        if outside:
+            p.append(f"{name}: {len(outside)} requests outside every complete run and every declared interruption "
+                     f"(first {outside[0]})")
+        if len(chats) != asked + excess:
+            p.append(f"{name}: {asked} requests in the records + {excess} declared = {asked + excess}, "
+                     f"{len(chats)} in the server logs")
+        if len(failed) != declared_failed or not all(within(w) for w, _ in failed):
+            p.append(f"{name}: {len(failed)} requests not answered, {declared_failed} declared, "
+                     f"{sum(1 for w, _ in failed if not within(w))} outside a declared interruption")
+        if explained is not None:
+            explained[name] = {"interruptions": cuts, "excess_requests": excess, "failed_requests": declared_failed,
+                               "requests_in_records": asked, "requests_in_logs": len(chats),
+                               "outside_complete_runs": len(stray)}
     return p
 
 
@@ -419,6 +465,7 @@ def run_checks(runs: list[Run], d: Design, root: str | None = None) -> dict[str,
     excluded = exclusions(runs, d)
     table = cells(runs, d, excluded)
     var_p, agree = check_variability(runs) if d.live_model else ([], {})
+    explained: dict[str, Any] = {}
     problems = {
         "design": check_design(runs, d, table),
         "frozen_code": check_frozen(root),
@@ -427,7 +474,7 @@ def run_checks(runs: list[Run], d: Design, root: str | None = None) -> dict[str,
         "common_random_numbers": check_crn(runs, d),
         "decisions_saved": check_decisions(runs),
         "variability": var_p,
-        "requests_accounted": check_requests(runs) if d.live_model else [],
+        "requests_accounted": check_requests(runs, explained) if d.live_model else [],
     }
     flags = [f"{os.path.basename(b)}: model agreement {a:.1%}, under {FLAG_AGREEMENT:.0%}"
              for b, a in agree.items() if a is not None and a < FLAG_AGREEMENT]
@@ -438,7 +485,7 @@ def run_checks(runs: list[Run], d: Design, root: str | None = None) -> dict[str,
             "cells": {f"{c[0]}-{c[1]}-{c[2]}": {"valid": len(i["valid"]), "aside": [[s, w] for s, w in i["aside"]],
                                                  "needed": [[s, a] for s, a in i["needed"]], "flagged": i["flagged"]}
                       for c, i in table.items()},
-            "agreement": agree, "flags": flags,
+            "agreement": agree, "flags": flags, "explained": explained,
             "met": not any(problems.values()), "runs": len(runs)}
 
 
@@ -474,7 +521,7 @@ def write_replacements(result: dict[str, Any], d: Design, out_dir: str, stem: st
 
 def report_md(result: dict[str, Any]) -> str:
     lines = [f"# Phase 18 exit — {'MET' if result['met'] else 'NOT MET'}", "",
-             f"{result['runs']} runs read. Criteria: docs/EXCLUSIONS.md, version 1.", "", "| Check | Problems |", "|---|---|"]
+             f"{result['runs']} runs read. Criteria: docs/EXCLUSIONS.md, version {EXCLUSIONS_VERSION}.", "", "| Check | Problems |", "|---|---|"]
     for k in CHECKS:
         n = len(result["problems"][k])
         lines.append(f"| {k} | {'none' if n == 0 else n} |")
@@ -485,6 +532,14 @@ def report_md(result: dict[str, Any]) -> str:
         lines += ["", "## Excluded runs", ""] + [f"* `{k}`: {v}" for k, v in result["excluded"].items()]
     if result["agreement"]:
         lines += ["", "## Model variability", ""] + [f"* {b}: {a:.1%}" for b, a in result["agreement"].items() if a is not None]
+    if result.get("explained"):
+        lines += ["", "## Interruptions, investigated (docs/EXCLUSIONS.md v2)", ""]
+        for b, e in result["explained"].items():
+            for c in e["interruptions"]:
+                lines.append(f"* {b}: {c['from']} to {c['to']}: {c['why']}")
+            lines.append(f"  - {e['requests_in_records']} requests in the records + {e['excess_requests']} declared = "
+                         f"{e['requests_in_logs']} in the server logs; {e['failed_requests']} failed, all inside it; "
+                         f"{e['outside_complete_runs']} outside every complete run, all inside it")
     if result["flags"]:
         lines += ["", "## Flags", ""] + [f"* {f}" for f in result["flags"]]
     for k in CHECKS:

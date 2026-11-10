@@ -119,7 +119,8 @@ def serve_log(b, cuda=True, drop=0, status="200"):
         h.write("\n".join(lines) + "\n")
 
 
-class ExitTests(unittest.TestCase):
+class Flown(unittest.TestCase):
+    """The small batch flown once per class, and copies of it to break."""
 
     @classmethod
     def setUpClass(cls):
@@ -146,6 +147,9 @@ class ExitTests(unittest.TestCase):
 
     def run_of(self, b, arch, seed):
         return next(p for p in glob.glob(os.path.join(b, f"*-{arch}-*-s{seed}")))
+
+
+class ExitTests(Flown):
 
     # ------------------------------------------------------------------ clean
 
@@ -350,6 +354,63 @@ class ExitTests(unittest.TestCase):
         self.assertTrue(any("in the records" in x for x in self.check(b)["problems"]["requests_accounted"]))
         serve_log(b, status="500")
         self.assertTrue(any("not answered" in x for x in self.check(b)["problems"]["requests_accounted"]))
+
+
+class InterruptionTests(Flown):
+    """docs/EXCLUSIONS.md v2: an interrupted batch's excess requests, declared and VERIFIED, never taken on trust."""
+
+    def interrupted(self):
+        # A D run that flew alone, later; in the gap before it, three requests of a run that was cut off, one failed.
+        b = self.copy()
+        r = self.run_of(b, "D", 2)
+        m = os.path.join(r, "manifest.json")
+        j = jload(m)
+        start = datetime.datetime.fromisoformat(j["started"])
+        j["started"] = (start + datetime.timedelta(seconds=100)).isoformat(timespec="seconds")
+        j["finished"] = (start + datetime.timedelta(seconds=130)).isoformat(timespec="seconds")
+        jsave(m, j)
+        serve_log(b)
+        cut = start + datetime.timedelta(seconds=60)
+        gin = lambda t, st: (f'[GIN] {t.strftime("%Y/%m/%d - %H:%M:%S")} | {st} |  1.0s |  127.0.0.1 | '  # noqa: E731
+                             'POST     "/api/chat"')
+        log = os.path.join(b, "serve-test.log")
+        with io.open(log, encoding="utf-8") as h:
+            lines = h.read().splitlines()
+        lines[-1:-1] = [gin(cut, "200"), gin(cut + datetime.timedelta(seconds=1), "200"),
+                        gin(cut + datetime.timedelta(seconds=2), "500")]
+        with io.open(log, "w", encoding="utf-8") as h:
+            h.write("\n".join(lines) + "\n")
+        span = {"from": (cut - datetime.timedelta(seconds=5)).isoformat(timespec="seconds"),
+                "to": (cut + datetime.timedelta(seconds=5)).isoformat(timespec="seconds")}
+        return b, span
+
+    def test_undeclared_it_fails(self):
+        b, _ = self.interrupted()
+        got = self.check(b)["problems"]["requests_accounted"]
+        self.assertTrue(any("in the records" in x for x in got) and any("not answered" in x for x in got), got)
+
+    def test_declared_and_reconciled_it_passes_and_is_reported(self):
+        b, span = self.interrupted()
+        jsave(os.path.join(b, "interruptions.json"),
+              [{**span, "why": "a Ctrl+C stopped the batch; its runs flown again", "excess_requests": 3,
+                "failed_requests": 1}])
+        res = self.check(b)
+        self.assertEqual(res["problems"]["requests_accounted"], [])
+        e = res["explained"][os.path.basename(b)]
+        self.assertEqual((e["excess_requests"], e["failed_requests"], e["outside_complete_runs"]), (3, 1, 3))
+        self.assertIn("Interruptions, investigated", F.report_md(res))
+
+    def test_a_wrong_count_or_an_interval_that_misses_them_fails(self):
+        b, span = self.interrupted()
+        bad = [({**span, "why": "x", "excess_requests": 2, "failed_requests": 1}, "declared ="),
+               ({**span, "why": "x", "excess_requests": 3, "failed_requests": 0}, "not answered"),
+               ({"from": span["to"], "to": span["to"], "why": "x", "excess_requests": 3, "failed_requests": 1},
+                "outside every complete run"),
+               ({**span, "why": " ", "excess_requests": 3, "failed_requests": 1}, "without why")]
+        for decl, word in bad:
+            jsave(os.path.join(b, "interruptions.json"), [decl])
+            got = self.check(b)["problems"]["requests_accounted"]
+            self.assertTrue(any(word in x for x in got), (word, got))
 
 
 class TheRealDesignTests(unittest.TestCase):

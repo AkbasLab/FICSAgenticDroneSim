@@ -1,0 +1,9 @@
+[
+ {
+  "from": "2026-11-09T14:39:33",
+  "to": "2026-11-09T14:52:17",
+  "why": "At 14:39-14:40 a Ctrl+C meant to cancel a waiting qsub in another screen window reached this batch's window (job 78901, gpu01): run_batch's parent process stopped at 68 of 80 complete runs (the last finished 14:39:33). Its two pool workers, orphaned, kept flying the runs they held until job 78901 ended at about 14:48 and killed them mid-request (the three HTTP 500 at 14:48:45). None of those cut-off runs finished; all twelve unfinished runs were flown again from the start by run_batch --resume in job 78961 (19:05-19:29), whose 442 requests match its records exactly. Investigated 2026-11-10 from serve-d-pair-1.log and the runs' manifests: 236 requests between 14:39:36 and 14:52:17 lie outside every complete run's window, and 4 inside complete runs' windows at the cut belong to the same cut-off runs; 2,292 in the 68 runs' records against 2,296 in the log within their window.",
+  "excess_requests": 240,
+  "failed_requests": 3
+ }
+]

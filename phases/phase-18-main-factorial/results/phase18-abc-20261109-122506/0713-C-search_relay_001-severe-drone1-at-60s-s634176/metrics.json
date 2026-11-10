@@ -1,0 +1,80 @@
+{
+ "absent": {
+  "D10.llm_calls": {
+   "kind": "not applicable",
+   "why": "no model decides in this run"
+  },
+  "D11.fallback_use": {
+   "kind": "not applicable",
+   "why": "no model decides in this run"
+  },
+  "D12.tokens": {
+   "kind": "not applicable",
+   "why": "no model decides in this run"
+  },
+  "D8.invalid_llm_outputs": {
+   "kind": "not applicable",
+   "why": "no model decides in this run"
+  },
+  "D9.llm_latency_p50_s": {
+   "kind": "not applicable",
+   "why": "no model decides in this run"
+  },
+  "D9.llm_latency_p95_s": {
+   "kind": "not applicable",
+   "why": "no model decides in this run"
+  }
+ },
+ "config": {
+  "architecture": "C",
+  "experiment_id": "four",
+  "failure": "drone1-at-60s",
+  "index": 713,
+  "network": "severe",
+  "planner": "none",
+  "run_id": "0713-C-search_relay_001-severe-drone1-at-60s-s634176",
+  "scenario": "search_relay_001",
+  "seed": 634176,
+  "team_size": 4
+ },
+ "definitions_sha256": "d722ba2b3379f179c9a2a8e500a49be21e66a7a7cc231f0f5e058d4d56f7663c",
+ "metrics_version": 1,
+ "run_id": "0713-C-search_relay_001-severe-drone1-at-60s-s634176",
+ "twin": "0573-C-search_relay_001-nominal-none-s634176",
+ "values": {
+  "CE.coordination_efficiency": 0.51391525629115,
+  "CE.total_cells": 49514,
+  "CE.unique_cells": 25446,
+  "D1.area_searched_pct": 99.4,
+  "D13.battery_used_pct": 242.96300000000002,
+  "D14.distance_m": 7006.112,
+  "D15.conflicting_claims": 1,
+  "D2.redundant_searches": 1,
+  "D3.task_reassignments": 12,
+  "D4.orphaned_tasks": 0,
+  "D5.role_changes": 31,
+  "D6.role_oscillations": 14,
+  "D7.stale_message_decisions": 4,
+  "P1.coverage": 0.994,
+  "P1.mission_score": 0.9979999999999999,
+  "P1.safe_return": 1.0,
+  "P1.success": true,
+  "P1.target_detection": 1.0,
+  "P2.censored": false,
+  "P2.completion_s": 521.6,
+  "P3.continuity_retention": 0.9980665377691845,
+  "P4.censored": false,
+  "P4.recovery_s": 54.99999999999999,
+  "P5.collisions": 0,
+  "P5.emergency_fallbacks": 0,
+  "P5.guardian_interventions": 0,
+  "P5.separation_violations": 0,
+  "P5.unsafe_proposals": 0,
+  "P5.zone_entries": 0,
+  "P6.bytes": 987734,
+  "P6.duplicates": 1,
+  "P6.expired": 7,
+  "P6.messages": 2600,
+  "P6.messages_per_completed_task": 866.6666666666666
+ }
+}

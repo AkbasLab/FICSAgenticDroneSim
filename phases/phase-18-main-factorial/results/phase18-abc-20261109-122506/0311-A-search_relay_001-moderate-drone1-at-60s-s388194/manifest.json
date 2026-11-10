@@ -1,0 +1,87 @@
+{
+ "code": {
+  "agent": "open_loop_agent.py",
+  "agent_sha256": "28d05b1f1599ced5",
+  "agentic_uav_sha256": "191d7adb8a0d62c6",
+  "commit": "95b71bd",
+  "dirty": false,
+  "ollama_endpoint": "http://127.0.0.1:11434",
+  "python": "3.10.21"
+ },
+ "config": {
+  "architecture": "A",
+  "experiment_id": "four",
+  "failure": "drone1-at-60s",
+  "index": 311,
+  "network": "moderate",
+  "planner": "none",
+  "run_id": "0311-A-search_relay_001-moderate-drone1-at-60s-s388194",
+  "scenario": "search_relay_001",
+  "seed": 388194,
+  "team_size": 4
+ },
+ "error": null,
+ "event_log_version": 2,
+ "files": {
+  "allocation": {
+   "path": "configs/allocation/default.toml",
+   "sha256": "d2495f2cc39c6687"
+  },
+  "architecture": {
+   "path": "configs/architectures/A.toml",
+   "sha256": "ed10f39bdd130bc6"
+  },
+  "failure": {
+   "path": "configs/failures/drone1-at-60s.toml",
+   "sha256": "f0037f3eb95182e9"
+  },
+  "guardian": {
+   "path": "configs/guardian/default.toml",
+   "sha256": "7fddc9efd53362fc"
+  },
+  "keep_out": {
+   "path": "configs/keepout/default.toml",
+   "sha256": "dc9d9368b6a732b2"
+  },
+  "network": {
+   "path": "configs/network/moderate.toml",
+   "sha256": "5a91de660ba256ae"
+  },
+  "recovery": {
+   "path": "configs/recovery/default.toml",
+   "sha256": "f75e8c1f45ac0b3f"
+  },
+  "scenario": {
+   "path": "configs/scenarios/search_relay_001.toml",
+   "sha256": "aafbb0738a4874a5"
+  }
+ },
+ "files_written": [
+  "events.jsonl.gz",
+  "report.json",
+  "records.json.gz",
+  "trajectories.json.gz",
+  "manifest.json"
+ ],
+ "finished": "2026-11-09T12:26:46",
+ "model": {
+  "planner": "none"
+ },
+ "outcome": {
+  "completion_s": 308.2,
+  "events": 8097,
+  "met": true,
+  "success": true
+ },
+ "run_id": "0311-A-search_relay_001-moderate-drone1-at-60s-s388194",
+ "software": {
+  "airsim": "1.8.1",
+  "numpy": "2.2.6",
+  "ollama": "0.6.2",
+  "platform": "Windows-10-10.0.26300-SP0",
+  "python": "3.10.21"
+ },
+ "started": "2026-11-09T12:26:40",
+ "status": "completed",
+ "wall_s": 6.201
+}
