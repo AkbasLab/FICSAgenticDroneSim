@@ -17,6 +17,12 @@ Anything not marked that way is documented but not yet exercised. Paths like
 
 [`../SETUP.md`](../SETUP.md) §7 has the short version. This is the full one.
 
+**For batches of runs** (Phases 17–18 on), the procedure is
+[`../VEGA-BATCH.md`](../VEGA-BATCH.md): the batch on the GPU node itself (no tunnel), Vega's limits (2 running jobs a
+user; several GPUs per job; `longq` to 120 h), the non-interactive job [`phase18_d.pbs`](phase18_d.pbs), the GPU and
+warm-up checks, screen, the queue, and what to do when something goes wrong. The tunnel in this manual is how the
+laptop reached the model in Phases 1–12.
+
 ## Rebuilding the PDF
 
 The PDF is committed so it can be read without a TeX install. After editing
