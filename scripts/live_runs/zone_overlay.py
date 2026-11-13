@@ -89,8 +89,18 @@ def _draw_tree_light(debug, tree):
         debug.draw_line(a, b, 0.05, ORANGE, TREE_REFRESH_S + 0.4)
 
 
-def start_overlay(scenario, clock_fn, stop_event=None, positions_fn=None):
-    """Runs in a background thread; returns the thread. Stops when `stop_event` is set."""
+def _draw_ring(debug, cx, cy, z, r, color, n=28):
+    """A circle of radius r round (cx, cy) at height z, in CARLA coordinates: the keep-out round a drone, a car or a person."""
+    pts = [carla.Location(cx + r * math.cos(2 * math.pi * i / n), cy + r * math.sin(2 * math.pi * i / n), z) for i in range(n + 1)]
+    for a, b in zip(pts, pts[1:]):
+        debug.draw_line(a, b, 0.05, color, SHAPE_LIFE_S)
+
+
+def start_overlay(scenario, clock_fn, stop_event=None, positions_fn=None, rings_fn=None):
+    """Runs in a background thread; returns the thread. Stops when `stop_event` is set.
+
+    rings_fn() returns [(x, y, height_m, radius_m), ...] in mission world metres: a yellow circle is drawn at each, so the
+    keep-out round every drone, vehicle and pedestrian can be seen."""
     stop_event = stop_event or threading.Event()
 
     last_trees = [0.0]
@@ -126,6 +136,9 @@ def start_overlay(scenario, clock_fn, stop_event=None, positions_fn=None):
                 draw = _draw_tree_light if len(getattr(scenario, "obstacles", [])) > MAX_TREES_UNFILTERED else _draw_tree
                 for tree in trees:
                     draw(debug, tree)
+                if rings_fn is not None:
+                    for rx, ry, rz, rr in rings_fn():
+                        _draw_ring(debug, rx + SX, ry + SY, GZ + rz, rr, YELLOW)
             except Exception:
                 debug = None    # sim not ready or briefly unreachable: reconnect on the next round
             time.sleep(REFRESH_S)

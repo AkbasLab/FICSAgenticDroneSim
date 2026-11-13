@@ -75,6 +75,7 @@ parser.add_argument("--noclip", default="unrecorded")
 parser.add_argument("--overlay", action="store_true")
 parser.add_argument("--separation-margin", type=float, default=0.0, help="extra metres on the separation the filter holds, for hover jitter and sampling noise")
 parser.add_argument("--record", action="store_true")
+parser.add_argument("--moving", default="on", choices=["on", "off"], help="on: read the simulator's vehicles and pedestrians and keep clear of them (guardian and NavRL); off: ignore them")
 parser.add_argument("--only", default="", help="comma-separated drone names to fly (the others stay on the ground)")
 args = parser.parse_args()
 
@@ -97,6 +98,17 @@ if planner is not None:
     from fics_drone.planners.fleet_states import FleetStates
     planner.fleet = FleetStates(adapters, offsets)       # NavRL sees the other drones (peer state, as a swarm would broadcast it)
     planner.separation_m = scenario.min_separation_m + args.separation_margin     # and keeps the separation distance from them (as in the mock study)
+movers = None
+if args.moving == "on":
+    import carla
+    from fics_drone.core.moving import CarlaMovers
+    _client = carla.Client("localhost", int(os.environ["CARLA_PORT"]))
+    _client.set_timeout(20.0)
+    movers = CarlaMovers(_client.get_world(), refresh_s=0.2)
+    for _agent in agents.values():
+        _agent.guardian.limits.moving_fn = movers.snapshot
+    if planner is not None:
+        planner.movers_fn = movers.snapshot
 t0 = time.monotonic()
 
 
@@ -108,7 +120,16 @@ def clock():
 stop = threading.Event()
 if args.overlay:
     from zone_overlay import start_overlay
-    start_overlay(scenario, clock, stop, positions_fn=lambda: [v for n, v in (samples[-1].items() if samples else []) if n != "t"])
+    def _rings():
+        out = []
+        if samples:
+            for n, v in samples[-1].items():
+                if n != "t" and v:
+                    out.append((v[0], v[1], v[2], scenario.min_separation_m / 2.0))     # a drone: circles touch at the separation limit
+        if movers is not None:
+            out += [(o.x, o.y, 0.3, o.radius + next(iter(agents.values())).guardian.limits.moving_pad_m) for o in movers.snapshot()]
+        return out
+    start_overlay(scenario, clock, stop, positions_fn=lambda: [v for n, v in (samples[-1].items() if samples else []) if n != "t"], rings_fn=_rings)
 stop_recording = None
 if args.record:
     from run_recorder import start_recording
@@ -167,8 +188,8 @@ for name in agents:
     track = [(r["t"], r[name]) for r in samples if r.get(name) and r["t"] <= end]
     for t, (x, y, z) in track:
         in_tree += any(tr.blocks_point(x, y, z) for tr in trees)
-        in_static += any(zn.contains(x, y) for zn in static_zones if not zn.is_dynamic)
-        exposure += SAMPLE_S * any(zn.contains(x, y, t) for zn in dynamic) / k
+        in_static += any(zn.contains(x, y, None, scenario.drone_radius_m) for zn in static_zones if not zn.is_dynamic)     # the body, not just the centre
+        exposure += SAMPLE_S * any(zn.contains(x, y, t, scenario.drone_radius_m) for zn in dynamic) / k
         if z > 3:
             min_tree = min(min_tree, min(math.hypot(x - tr.x, y - tr.y) for tr in trees))
     final = track[-1][1] if track else None
