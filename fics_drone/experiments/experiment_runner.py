@@ -327,5 +327,5 @@ def _to_agent_clock(log, clock_off):
 def _exposure_s(scenario, log):
     """Seconds spent inside any zone while it was active, summed over drones."""
     return sum(1 for samples in log.values() for smp in samples
-               if any(z.contains(smp.position[0], smp.position[1], smp.t)
+               if any(z.contains(smp.position[0], smp.position[1], smp.t, getattr(scenario, "drone_radius_m", 0.0))
                       for z in scenario.no_fly_zones)) / SAMPLE_RATE_HZ

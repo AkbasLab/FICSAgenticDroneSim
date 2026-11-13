@@ -91,7 +91,7 @@ def derive_events(agents, reports, scenario, telemetry, repeat: int) -> List[Eve
     for name, samples in telemetry.items():
         inside = False
         for smp in samples:
-            now = any(z.contains(smp.position[0], smp.position[1], smp.t)
+            now = any(z.contains(smp.position[0], smp.position[1], smp.t, getattr(scenario, "drone_radius_m", 0.0))
                       for z in scenario.no_fly_zones)
             if now and not inside:
                 out.append(Event(EventType.ZONE_ENTERED, repeat, smp.t, name, {}))

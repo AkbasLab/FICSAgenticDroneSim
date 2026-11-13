@@ -34,7 +34,8 @@ from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import List, Optional, Tuple
 
-from ..core.scenario import NoFlyZone, Scenario
+from ..core import moving
+from ..core.scenario import DRONE_RADIUS_M, NoFlyZone, Scenario
 
 
 INTENT_FRESH_S = 30.0  # a teammate's announced destination counts for this long after its heartbeat
@@ -119,6 +120,36 @@ class SafetyLimits:
     min_separation_m: float = 5.0
     exit_margin_m: float = 3.0  # how far outside a zone's edge an exit point is placed
     exit_settle_s: float = 2.0  # an exit point must stay clear this long after the drone has arrived
+    drone_radius_m: float = DRONE_RADIUS_M  # half the aircraft's width: a zone counts as entered when the body's edge crosses
+    # vehicles and pedestrians: a callable returning the current list of core.moving.MovingObject (None = there are none)
+    moving_fn: object = None
+    moving_pad_m: float = 1.5        # clearance kept round a moving object's body
+    moving_lookahead_s: float = 3.0  # keep clear of where it will be this many seconds on, as well
+    moving_vertical_pad_m: float = 4.0  # an aircraft this far above a person's or car's top is clear of it
+    moving_check_range_m: Optional[float] = None  # None: a leg is refused if a moving body crosses any of it. A number: only if the body
+    #   is within this far of the aircraft (set when a reactive leg planner flies the leg: it steers round a far body in flight,
+    #   and a leg held back for something 25 m off never starts)
+
+    def moving_columns(self) -> list:
+        """Keep-out columns for every vehicle and pedestrian right now (and where each is going), or []."""
+        if self.moving_fn is None:
+            return []
+        try:
+            return moving.columns(self.moving_fn(), self.moving_pad_m, self.moving_lookahead_s, self.moving_vertical_pad_m)
+        except Exception:
+            return []
+
+    def standing_columns(self, max_speed_mps: float = 0.3) -> list:
+        """Keep-out columns for the vehicles and pedestrians that are standing still (they will still be there, so a leg is
+        planned round them like a tree). A moving one is left out: it will have passed, and a detour planned round it runs
+        far off the road; the flight code steers round it and the guardian holds the leg until it is clear."""
+        if self.moving_fn is None:
+            return []
+        try:
+            standing = [o for o in self.moving_fn() if o.speed <= max_speed_mps]
+            return moving.columns(standing, self.moving_pad_m, self.moving_lookahead_s, self.moving_vertical_pad_m)
+        except Exception:
+            return []
 
     @classmethod
     def from_scenario(cls, scenario: Scenario, margin_m: float = 40.0) -> "SafetyLimits":
@@ -131,7 +162,8 @@ class SafetyLimits:
         half_extent = max(max(abs(v) for v in xs + ys), 1.0) + margin_m
         return cls(restricted_zones=scenario.no_fly_zones, obstacles=list(getattr(scenario, "obstacles", [])),
                     geofence_half_extent_m=half_extent,
-                    min_separation_m=scenario.min_separation_m)
+                    min_separation_m=scenario.min_separation_m,
+                    drone_radius_m=getattr(scenario, "drone_radius_m", DRONE_RADIUS_M))
 
 
 @dataclass
@@ -264,7 +296,8 @@ class SafetyGuardian:
         if t is None or position_world is None:
             return False
         x, y = position_world[0], position_world[1]
-        return any(zone.is_dynamic and zone.contains(x, y, t) for zone in self.limits.restricted_zones)
+        r = self.limits.drone_radius_m
+        return any(zone.is_dynamic and zone.contains(x, y, t, r) for zone in self.limits.restricted_zones)
 
     def _exit_active_zone(self, belief, position_world=None) -> Optional[GuardianEvaluation]:
         """GMB: a scheduled or drifting zone can switch on, or move, on top of an aircraft
@@ -279,7 +312,8 @@ class SafetyGuardian:
             return None
         x, y, z = position
         zones = [zone for zone in self.limits.restricted_zones if zone.is_dynamic]
-        inside = [zone for zone in zones if zone.contains(x, y, t)]
+        r = self.limits.drone_radius_m
+        inside = [zone for zone in zones if zone.contains(x, y, t, r)]
         if not inside:
             return None
         margin = self.limits.exit_margin_m
@@ -290,7 +324,7 @@ class SafetyGuardian:
             candidates += [(x0 - margin, y), (x1 + margin, y), (x, y0 - margin), (x, y1 + margin)]
         usable = [(cx, cy) for cx, cy in candidates
                   if abs(cx) <= extent and abs(cy) <= extent
-                  and not any(zn.contains(cx, cy, t) for zn in self.limits.restricted_zones)]
+                  and not any(zn.contains(cx, cy, t, r) for zn in self.limits.restricted_zones)]
         candidates_all = list(usable)
         # an exit point inside a keep-out, or a straight way to it through one, is not an exit (a street scenario has them on
         # every side); if every one is blocked the nearest is still used
@@ -323,7 +357,7 @@ class SafetyGuardian:
             until = t + math.dist((x, y), c) / exit_speed + self.limits.exit_settle_s
             step = t
             while step <= until:
-                if any(zn.contains(c[0], c[1], step) for zn in self.limits.restricted_zones):
+                if any(zn.contains(c[0], c[1], step, r) for zn in self.limits.restricted_zones):
                     return False
                 step += 0.5
             return True
@@ -407,16 +441,30 @@ class SafetyGuardian:
         x, y, _ = command.target
         t = self._now(belief)
         for zone in self.limits.restricted_zones:
-            if zone.contains(x, y, t):
+            if zone.contains(x, y, t, self.limits.drone_radius_m):
                 return SafetyCheck("restricted_zones", False, f"({x}, {y}) inside {zone.id}", Severity.HARD)
         return SafetyCheck("restricted_zones", True)
 
     def _check_obstacles(self, command: Command, position_world=None) -> SafetyCheck:
         """A leg must not end in, or (when the aircraft's own position is known) cross, a tree. The sim does not stop
         a drone flying through a palm, so this is the only protection."""
-        if command.kind != "fly" or command.target is None or not self.limits.obstacles:
+        if command.kind != "fly" or command.target is None:
+            return SafetyCheck("obstacles", True)
+        movers = self.limits.moving_columns()
+        if not self.limits.obstacles and not movers:
             return SafetyCheck("obstacles", True)
         margin = self.limits.obstacle_margin_m
+        for column in movers:     # vehicles and pedestrians: already padded, so no extra margin
+            if column.blocks_point(*command.target, margin=0.0):
+                return SafetyCheck("obstacles", False,
+                                    f"{command.target} too close to a moving vehicle or pedestrian near ({column.x:.1f}, {column.y:.1f})",
+                                    Severity.HARD)
+            if position_world is not None and column.blocks_segment(position_world, command.target, margin=0.0):
+                reach = self.limits.moving_check_range_m
+                if reach is None or math.hypot(column.x - position_world[0], column.y - position_world[1]) <= reach:
+                    return SafetyCheck("obstacles", False,
+                                        f"path to {command.target} passes a moving vehicle or pedestrian near ({column.x:.1f}, {column.y:.1f})",
+                                        Severity.HARD)
         for tree in self.limits.obstacles:
             if tree.blocks_point(*command.target, margin=margin):
                 return SafetyCheck("obstacles", False, f"{command.target} inside the tree at ({tree.x}, {tree.y})",
@@ -499,7 +547,7 @@ class SafetyGuardian:
         x, y, _ = command.target
         t = self._now(belief)
         for zone in self.limits.restricted_zones:
-            if zone.contains(x, y, t):
+            if zone.contains(x, y, t, self.limits.drone_radius_m):
                 return SafetyCheck("landing_site", False, f"landing at ({x}, {y}) inside {zone.id}", Severity.HARD)
         return SafetyCheck("landing_site", True)
 

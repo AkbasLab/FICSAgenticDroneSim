@@ -9,6 +9,10 @@ from typing import List, Optional, Tuple
 
 from .obstacles import TreeObstacle  # noqa: E402
 
+# Half the drone's width, metres. The simulator's drone body measures 0.49 m either side of its centre; a zone, a keep-out
+# or a scoring check that tests only the centre point lets almost half the aircraft cross the edge before it counts.
+DRONE_RADIUS_M = 0.5
+
 
 @dataclass
 class DroneSpec:
@@ -77,13 +81,15 @@ class NoFlyZone:
         dx, dy = self.vx * dt, self.vy * dt
         return self.x_min + dx, self.x_max + dx, self.y_min + dy, self.y_max + dy
 
-    def contains(self, x: float, y: float, t: Optional[float] = None) -> bool:
+    def contains(self, x: float, y: float, t: Optional[float] = None, radius: float = 0.0) -> bool:
+        """True if a point (radius 0) or a body of this half-width centred on (x, y) touches the zone: the box is grown by
+        `radius` on every side, so an aircraft counts as inside as soon as its edge crosses."""
         if t is None:
-            return self.x_min <= x <= self.x_max and self.y_min <= y <= self.y_max
+            return self.x_min - radius <= x <= self.x_max + radius and self.y_min - radius <= y <= self.y_max + radius
         if not self.active_at(t):
             return False
         x0, x1, y0, y1 = self.bounds_at(t)
-        return x0 <= x <= x1 and y0 <= y <= y1
+        return x0 - radius <= x <= x1 + radius and y0 - radius <= y <= y1 + radius
 
 
 @dataclass
@@ -110,6 +116,8 @@ class Scenario:
     search_routes: dict = field(default_factory=dict)
     # height above ground the agents cruise at when the caller does not say; None = the navigation default
     cruise_height: Optional[float] = None
+    # half-width of the drone body, for every zone test (see DRONE_RADIUS_M)
+    drone_radius_m: float = DRONE_RADIUS_M
 
     def sector(self, sector_id: str) -> Sector:
         for s in self.sectors:
@@ -139,4 +147,5 @@ def load_scenario(path: str) -> Scenario:
         mission_kind=data.get("mission_kind", "surveillance"),
         search_routes=data.get("search_routes", {}),
         cruise_height=data.get("cruise_height"),
+        drone_radius_m=data.get("drone_radius_m", DRONE_RADIUS_M),
     )

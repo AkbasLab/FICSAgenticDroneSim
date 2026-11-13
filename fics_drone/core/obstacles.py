@@ -85,6 +85,75 @@ class TreeObstacle:
 
 
 @dataclass(frozen=True)
+class BoxObstacle:
+    """A solid thing from the map (a building piece, a tree with its crown, a lamp post, a bench): a rectangle in the horizontal plane
+    that holds from z_bottom to z_top. It has the same interface as TreeObstacle, so the guardian, the route planner and the leg planner
+    treat it like a tree, but its shape is the real one (its bounding box), not a circle.
+
+    `x`, `y`, `trunk_r` and `crown_r` are the centre and the circle that covers the whole rectangle: the callers that cull by distance
+    or plan a detour round a circle use them and so keep clear of it with room to spare; blocks_point and blocks_segment use the
+    rectangle itself."""
+    x_min: float
+    x_max: float
+    y_min: float
+    y_max: float
+    z_bottom: float
+    z_top: float
+    name: str = ""
+
+    VERTICAL_MARGIN_M = 0.5     # the aircraft's own half height: it clears a roof or a ledge by this much, not less
+
+    @property
+    def x(self) -> float:
+        return 0.5 * (self.x_min + self.x_max)
+
+    @property
+    def y(self) -> float:
+        return 0.5 * (self.y_min + self.y_max)
+
+    @property
+    def trunk_r(self) -> float:
+        return math.hypot(0.5 * (self.x_max - self.x_min), 0.5 * (self.y_max - self.y_min))
+
+    @property
+    def crown_r(self) -> float:
+        return self.trunk_r
+
+    def _high_enough(self, z: float) -> bool:
+        return self.z_bottom - self.VERTICAL_MARGIN_M <= z <= self.z_top + self.VERTICAL_MARGIN_M
+
+    def radius_at(self, z: float) -> Optional[float]:
+        """The circle that covers the rectangle, at height z (None above or below it): for the callers that plan round circles."""
+        return self.trunk_r if self._high_enough(z) else None
+
+    def blocks_point(self, x: float, y: float, z: float, margin: float = 0.0) -> bool:
+        return (self._high_enough(z) and self.x_min - margin < x < self.x_max + margin
+                and self.y_min - margin < y < self.y_max + margin)
+
+    def blocks_segment(self, a: Tuple[float, float, float], b: Tuple[float, float, float], margin: float = 0.0,
+                       step: float = 0.5, skip_start_m: float = 2.0) -> bool:
+        """True if the straight line a-b passes through the box. The first `skip_start_m` metres are not tested, so an aircraft that
+        already stands inside the margin can leave."""
+        length = math.dist(a, b)
+        n = max(1, int(length / step))
+        for i in range(n + 1):
+            f = i / n
+            if f * length < skip_start_m and f < 1.0:
+                continue
+            if self.blocks_point(a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f, margin):
+                return True
+        return False
+
+    def rect_at(self, z: float) -> Optional[Tuple[float, float, float, float]]:
+        return (self.x_min, self.x_max, self.y_min, self.y_max) if self._high_enough(z) else None
+
+    def rects_at(self, z: float, strips: int = 8) -> list:
+        """The rectangle at height z, for a leg planner that only knows rectangles (it is one already)."""
+        r = self.rect_at(z)
+        return [] if r is None else [r]
+
+
+@dataclass(frozen=True)
 class BoxKeepOut:
     """A rectangle in the horizontal plane at every height (a no-fly zone that is on right now, padded)."""
     x_min: float

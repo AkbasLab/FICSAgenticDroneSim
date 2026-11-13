@@ -16,6 +16,8 @@ import time
 
 import numpy as np
 
+from ..core import moving as _moving
+
 MAX_RAY_M = 4.0
 DEBUG = [] if os.environ.get("NAVRL_DEBUG") == "1" else None   # per-tick record of what the planner decided (off unless NAVRL_DEBUG=1)
 HRES_DEG = 10.0
@@ -89,6 +91,98 @@ def lidar_range_grid(points_flat, yaw, start_angle_deg, max_range=MAX_RAY_M, hre
         if r < grid[h, v]:
             grid[h, v] = r
     return grid
+
+
+MOVER_CLEAR_M = 2.0        # clearance kept between the aircraft and the body of a vehicle or pedestrian, on top of the body's own radius
+MOVER_SEEN_M = 50.0        # vehicles and pedestrians further than this are not shown to the policy
+MOVER_LEAD_S = 1.0         # the clearance kept from a body grows by this many metres for every m/s the aircraft and the body are closing at
+
+
+MOVER_HORIZON_S = 6.0      # a body that will not pass closer than its clearance within this many seconds is left alone
+MOVER_PASS_MPS = 2.0       # the fastest sideways step taken to let a body go by
+MOVER_AHEAD_HORIZON_S = 10.0   # in flight the step aside starts this early (a body that will pass within the clearance in this many seconds)
+MOVER_PASS_CLEAR_M = 2.5       # and aims to pass this far from the body's edge
+MOVER_PASS_FAST_MPS = 2.5      # at up to this sideways speed
+MOVER_PASS_SAFE_M = 1.5        # a body the aircraft will pass at least this far off (edge to centre) is passed at a slowed speed, not stopped for
+MOVER_SLOW_RANGE_M = 16.0      # the slowing starts this far outside that gap, and
+MOVER_SLOW_MIN_FRAC = 0.4     # never takes the speed toward the body below this fraction of what it was
+MOVER_SLOW_DOWN_PER_S = 0.25   # the slowing eases in no faster than this fraction of the speed a second,
+MOVER_SLOW_UP_PER_S = 0.5      # and eases out at this rate
+MOVER_RAMP_S = 1.5             # the gap is opened over at most this long, however far off the body still is
+MOVER_MAX_OFFSET_M = 5.0       # the step aside never takes the aircraft further than this from the straight line of its leg (a road and
+                               # its trees are on the sides: past this the other way, or stopping, is the safer dodge)
+
+
+def sidestep_movers(pos, vel, objects, horizon_s=MOVER_HORIZON_S, pass_mps=MOVER_PASS_MPS, clear_m=MOVER_CLEAR_M,
+                    ramp_s=None, line=None, max_offset_m=None):
+    """The velocity with a sideways step added for every moving body that will pass closer than its clearance.
+
+    Cutting the closing speed (keep_separation) is not enough for a car coming at 6 m/s: the aircraft stops and the car arrives.
+    For each body this finds the moment of closest approach, given the aircraft's velocity and the body's, and if the body
+    would then be within radius + clear_m of the aircraft it adds a velocity at right angles to the relative motion, away from the
+    side the body will pass on (to the right when it is dead ahead), big enough to open the gap in the time left."""
+    v = np.array(vel, float)
+    for o in objects:
+        r = np.array([o.x - pos[0], o.y - pos[1]], float)
+        w = v - np.array([o.vx, o.vy], float)
+        ww = float(np.dot(w, w))
+        if ww < 0.04:
+            continue                     # not closing at all: keep_separation handles a body that is standing near
+        tca = float(np.dot(r, w)) / ww
+        if tca <= 0.0 or tca > horizon_s:
+            continue                     # already past, or too far off to matter yet
+        miss = r - w * tca               # where the body is, relative to the aircraft, at closest approach
+        dist = float(np.hypot(miss[0], miss[1]))
+        need = o.reach(pos[0], pos[1]) + clear_m
+        if dist >= need:
+            continue
+        perp = np.array([-w[1], w[0]]) / np.sqrt(ww)
+        off = float(np.dot(miss, perp))
+        side = -1.0 if off >= 0.0 else 1.0     # it passes on the left: step right; dead ahead: step right
+        step = side * min(pass_mps, (need - dist) / max(min(tca, ramp_s) if ramp_s else tca, 1.0)) * perp
+        if line is not None and max_offset_m is not None:
+            a, b = np.array(line[0], float), np.array(line[1], float)
+            d = b - a
+            n = float(np.hypot(d[0], d[1]))
+            if n > 1e-6:
+                normal = np.array([-d[1], d[0]]) / n
+                off_line = float(np.dot(np.array(pos, float) - a, normal))
+                if abs(off_line) >= max_offset_m and off_line * float(np.dot(step, normal)) > 0.0:
+                    step = -step         # already as far to this side as the road allows: go the other way
+        v = v + step
+    return v
+
+
+STATIC_CLEAR_M = float(os.environ.get("NAVRL_STATIC_CLEAR", 2.5))   # a final filter keeps the aircraft's velocity from closing on a keep-out nearer than this
+STATIC_EASE_M = 2.0                                                  # (plus the coast), easing in over this much further out
+
+
+def keep_clear_of_rects(pos, vel, rects, real_speed=0.0, clear_m=STATIC_CLEAR_M, ease_m=STATIC_EASE_M, coast_s=0.8):
+    """The velocity with the part that closes on a static keep-out (a tree, a zone: rectangles x0, x1, y0, y1) taken out as it nears.
+
+    NavRL senses only 4 m, and its own steering, and the sideways step added round a moving body, do not know where the trees
+    stand: they swung the aircraft into a palm. This is the last word on the velocity: for each keep-out within clear_m (plus the
+    distance the aircraft coasts) the closing speed is cut, all of it at the limit, and inside the limit it is pushed away."""
+    v = np.array(vel, float)
+    coast = coast_s * real_speed
+    px, py = float(pos[0]), float(pos[1])
+    for x0, x1, y0, y1 in rects:
+        cx, cy = min(max(px, x0), x1), min(max(py, y0), y1)
+        dx, dy = cx - px, cy - py
+        d = float(np.hypot(dx, dy))
+        if d < 1e-6:
+            continue                       # inside one: the zone and tree checks elsewhere deal with that, not a velocity filter
+        if d >= clear_m + coast + ease_m:
+            continue
+        n = np.array([dx, dy]) / d
+        closing = float(np.dot(v, n))
+        if closing <= 0.0:
+            continue
+        weight = min(1.0, (clear_m + coast + ease_m - d) / ease_m)
+        v = v - weight * closing * n
+        if d < clear_m:
+            v = v - n * min(SEPARATION_PUSH_MPS, 0.5 * (clear_m - d))
+    return v
 
 
 def keep_separation(pos, vel, peer_positions, separation_m, real_speed=0.0):
@@ -189,6 +283,8 @@ class NavRLPlanner:
     the two wins in every direction). One planner per aircraft when a scan_fn is used, because the scan belongs to one."""
 
     wants_adapter = True     # begin_leg is given the aircraft's adapter (see control/leg_planner_skill.py)
+    mover_vertical_pad_m = 4.0   # an aircraft this far above a body's top is clear of it (the guardian's moving_vertical_pad_m)
+    movers_fn = None         # a callable returning the current core.moving.MovingObject list: vehicles and pedestrians are then avoided like peers
     fleet = None             # a FleetStates: with it, the other aircraft go into NavRL's moving-obstacle input
     separation_m = 0.0       # the lab's separation limit: NavRL alone keeps only ~1.5 m from another drone, so a filter holds this
 
@@ -234,7 +330,12 @@ class NavRLPlanner:
                 self._load()
         scan_fn = self.scan_fn or (getattr(adapter, "get_lidar_scan", None) if adapter is not None else None)
         peers_fn = (lambda: self.fleet.peers_of(adapter)) if (self.fleet is not None and adapter is not None) else None
-        return _Leg(self, np.array(goal_xy, float) - np.array(start_xy, float), scan_fn, peers_fn, self.separation_m)
+        movers_fn = None
+        if self.movers_fn is not None:
+            def movers_fn(base=self.movers_fn, pad=self.mover_vertical_pad_m, adapter=adapter):
+                z = adapter.get_position()[2] if adapter is not None else 0.0     # only what is as tall as the aircraft is low
+                return _moving.low_enough(base(), z, pad)
+        return _Leg(self, np.array(goal_xy, float) - np.array(start_xy, float), scan_fn, peers_fn, self.separation_m, movers_fn)
 
     def _plan(self, target_dir, vel, pos, goal, zone_rects, scan_fn=None, peers=None):
         with self._lock:
@@ -269,10 +370,13 @@ class NavRLPlanner:
 
 
 class _Leg:
-    def __init__(self, planner, target_dir, scan_fn=None, peers_fn=None, separation_m=0.0):
+    def __init__(self, planner, target_dir, scan_fn=None, peers_fn=None, separation_m=0.0, movers_fn=None):
         self._planner, self._target_dir, self._vel, self._scan_fn = planner, target_dir, np.zeros(2), scan_fn
+        self._movers_fn = movers_fn
         self._peers_fn, self._separation_m = peers_fn, separation_m
         self._last_fix, self._speed_est = None, 0.0
+        self._start_xy = None     # where the leg began (the first position it is asked about)
+        self._slow_f, self._slow_t, self._slow_dir = 1.0, None, None   # the eased slowing for a body being passed
 
     def _real_speed(self, pos_xy):
         """The aircraft's own speed over the last control ticks, from where it is (not from what was commanded)."""
@@ -286,6 +390,16 @@ class _Leg:
 
     def velocity(self, pos_xy, goal_xy, zone_rects):
         peers = self._peers_fn() if self._peers_fn else None
+        if self._start_xy is None:
+            self._start_xy = (float(pos_xy[0]), float(pos_xy[1]))
+        near_movers = []
+        if self._movers_fn is not None:
+            try:
+                near_movers = [o for o in self._movers_fn() if np.hypot(o.x - pos_xy[0], o.y - pos_xy[1]) < MOVER_SEEN_M]
+            except Exception:
+                near_movers = []
+        if near_movers:     # the policy sees a vehicle or pedestrian as one more moving obstacle, with its velocity
+            peers = list(peers or []) + [((o.x, o.y), (o.vx, o.vy)) for o in near_movers]
         # never more than the policy's own top speed: a position jump (a test stepping time, a telemetry glitch) is not a speed
         moving = min(self._real_speed(pos_xy), self._planner.max_speed)
         v = self._planner._plan(self._target_dir, self._vel, np.array(pos_xy, float), np.array(goal_xy, float),
@@ -317,7 +431,52 @@ class _Leg:
                     v = v - (closing - limit) * toward
                     self._planner.gov_binds += 1
         if peers and self._separation_m > 0:
-            v = keep_separation(np.array(pos_xy, float), v, [p for p, _ in peers], self._separation_m, real_speed=moving)
+            fleet_peers = peers[:len(peers) - len(near_movers)]
+            v = keep_separation(np.array(pos_xy, float), v, [p for p, _ in fleet_peers], self._separation_m, real_speed=moving)
+        if near_movers:           # step aside early from anything that will pass too close, then cut what still closes
+            v = sidestep_movers(np.array(pos_xy, float), v, near_movers, horizon_s=MOVER_AHEAD_HORIZON_S,
+                                pass_mps=MOVER_PASS_FAST_MPS, clear_m=MOVER_PASS_CLEAR_M, ramp_s=MOVER_RAMP_S,
+                                line=(self._start_xy, (self._start_xy[0] + float(self._target_dir[0]), self._start_xy[1] + float(self._target_dir[1]))),
+                                max_offset_m=MOVER_MAX_OFFSET_M)
+        slow_target, slow_dir = 1.0, None
+        for o in near_movers:     # each body keeps its own clearance: its reach toward the aircraft plus MOVER_CLEAR_M, and more the faster they close
+            to = np.array([o.x - pos_xy[0], o.y - pos_xy[1]], float)
+            d = float(np.hypot(to[0], to[1]))
+            rad = o.reach(pos_xy[0], pos_xy[1])
+            rel = v - np.array([o.vx, o.vy], float)
+            closing = 0.0 if d < 1e-6 else float(np.dot(rel, to / d))
+            # on a path that will clear the body by a safe gap the aircraft is slowed (the closer, the slower) and keeps going; it is
+            # brought to a stop only when its path would take it too close
+            ww = float(np.dot(rel, rel))
+            tca = float(np.dot(to, rel)) / ww if ww > 0.04 else 0.0
+            if tca <= 0.0:
+                passing = d > rad + MOVER_PASS_SAFE_M            # moving apart, or level with it
+            else:
+                miss = to - rel * tca
+                passing = float(np.hypot(miss[0], miss[1])) >= rad + MOVER_PASS_SAFE_M and d > rad + MOVER_PASS_SAFE_M
+            if passing:
+                if closing > 0.0 and d > 1e-6:
+                    sm = min(1.0, max(0.0, (d - rad - MOVER_PASS_SAFE_M) / MOVER_SLOW_RANGE_M))
+                    f = MOVER_SLOW_MIN_FRAC + (1.0 - MOVER_SLOW_MIN_FRAC) * (sm * sm * (3.0 - 2.0 * sm))   # a smooth ramp, not a line
+                    if f < slow_target:
+                        slow_target, slow_dir = f, to / d
+                continue
+            v = keep_separation(np.array(pos_xy, float), v, [(o.x, o.y)],
+                                rad + MOVER_CLEAR_M + MOVER_LEAD_S * max(0.0, closing), real_speed=moving)
+        # the slowing eases in and out over a second or two, so the speed never drops in one step
+        now_s = time.monotonic()
+        dt_s = 0.2 if self._slow_t is None else min(0.5, max(0.02, now_s - self._slow_t))
+        self._slow_t = now_s
+        rate = MOVER_SLOW_DOWN_PER_S if slow_target < self._slow_f else MOVER_SLOW_UP_PER_S
+        self._slow_f += max(-rate * dt_s, min(rate * dt_s, slow_target - self._slow_f))
+        if slow_dir is not None:
+            self._slow_dir = slow_dir
+        if self._slow_dir is not None and self._slow_f < 0.999:
+            along = float(np.dot(v, self._slow_dir))
+            if along > 0.0:
+                v = v - (1.0 - self._slow_f) * along * self._slow_dir
+        if zone_rects and STATIC_CLEAR_M > 0.0:
+            v = keep_clear_of_rects(np.array(pos_xy, float), v, zone_rects, real_speed=moving)
         if DEBUG is not None:
             DEBUG.append((round(time.monotonic(), 2), [round(float(x), 1) for x in pos_xy], [round(float(x), 1) for x in goal_xy],
                           [round(float(x), 2) for x in policy_v], [round(float(x), 2) for x in v_scaled], [round(float(x), 2) for x in v],

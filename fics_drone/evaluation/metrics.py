@@ -107,7 +107,7 @@ def _score_no_fly(scenario: Scenario, run_log: Dict[str, List[Sample]]):
     for name, samples in run_log.items():
         for s in samples:
             for zone in scenario.no_fly_zones:
-                if zone.contains(s.position[0], s.position[1], s.t):  # time-aware: a scheduled zone only counts while active
+                if zone.contains(s.position[0], s.position[1], s.t, getattr(scenario, "drone_radius_m", 0.0)):  # time-aware: a scheduled zone only counts while active
                     violations.append(f"{name} entered {zone.id} at t={s.t:.1f}s")
     return violations, len(violations) == 0
 

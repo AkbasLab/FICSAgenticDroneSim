@@ -78,6 +78,9 @@ STEP_OUT_RANGE_M = 20.0
 DEFER_HOLD_S = 2.0   # when every remaining leg is inside a zone, hold still this long before looking again
 SEPARATION_WAIT_S = 25.0  # how long a drone holds still when only a teammate's position or route blocks its leg
 SEPARATION_WAIT_STEP_S = 2.0  # one hold, then ask the guardian again
+MOVER_GUARD_RANGE_M = 15.0   # with a leg planner, only a vehicle or pedestrian this near the aircraft holds a leg back at the start
+MOVER_WAIT_TRIES = 6   # a leg refused only because a vehicle or pedestrian is near it: hold this many times, then plan again
+MOVER_WAIT_STEP_S = 1.0
 CONFIRM_TEAMMATE_FRESH_S = 8.0  # a teammate counts as a candidate only if heard from this recently
 CONFIRM_STANDOFF_MARGIN_M = 8.0  # a waiting spot must stay this far outside every zone for the whole wait
 CONFIRM_STANDOFF_ARRIVE_M = 2.0  # closer than this to the chosen waiting spot counts as already there
@@ -186,6 +189,8 @@ class PersistentAgent:
         # binary pass/fail) as the default - Guardian itself is untouched, still its
         # own class with its own tests, just no longer what a real agent flies with.
         self.guardian = guardian or SafetyGuardian(limits=SafetyLimits.from_scenario(scenario))
+        if leg_planner is not None:    # a planner that reacts in flight handles a body that is still far off the leg
+            self.guardian.limits.moving_check_range_m = MOVER_GUARD_RANGE_M
         self.guardian.limits.home_world = (spawn_offset[0], spawn_offset[1])
         self.guardian_log = GuardianLog()
         self._pending_waypoint = None  # Phase 12: coordinates for a model-chosen GO_TO_WAYPOINT, one-shot
@@ -736,7 +741,7 @@ class PersistentAgent:
         zones = self.guardian.limits.restricted_zones
         last, t = None, now
         while t <= now + CONFIRM_HORIZON_S:
-            if any(z.contains(x, y, t) for z in zones):
+            if any(z.contains(x, y, t, self.guardian.limits.drone_radius_m) for z in zones):
                 last = t
             t += 0.5
         if last is None:
@@ -1023,6 +1028,10 @@ class PersistentAgent:
             if zone.active_at(t):
                 x0, x1, y0, y1 = zone.bounds_at(t)
                 obstacles.append(BoxKeepOut(x0 - pad, x1 + pad, y0 - pad, y1 + pad))
+        if getattr(self.leg_planner, "movers_fn", None) is None:
+            # vehicles and pedestrians that are standing: they stay, so a leg goes round them. When a reactive leg planner flies the leg
+            # it sees them and steers round them itself, and a detour planned round a person on the pavement runs far off the way
+            obstacles.extend(limits.standing_columns())
         radius = limits.min_separation_m + 1.5
         for record in self.belief.team.teammates.values():
             if record.last_known_position is not None:
@@ -1093,7 +1102,7 @@ class PersistentAgent:
 
     def _guarded_fly(self, local_target: Tuple[float, float, float], trace: List[str],
                       purpose: str = "mission", _after_interrupt: bool = False,
-                      _detouring: bool = False, pass_through: bool = False) -> ReplanEvent:
+                      _detouring: bool = False, pass_through: bool = False, _mover_waits: int = 0) -> ReplanEvent:
         """Every proposed flight target goes through the SafetyGuardian before
         reaching the vehicle - the policy proposes, the guardian disposes.
         `purpose="home"` (RETURN_HOME) exempts battery_reserve/separation, which
@@ -1189,6 +1198,17 @@ class PersistentAgent:
                 and evaluation.failed_checks == ["separation"]):
             evaluation = self._wait_out_separation(command, trace, evaluation)
 
+        if (evaluation.outcome == GuardianOutcome.REJECT_AND_REPLAN and evaluation.failed_checks == ["obstacles"]
+                and "moving vehicle or pedestrian" in (evaluation.reason or "") and _mover_waits < MOVER_WAIT_TRIES):
+            # a car or a person is moving through this leg's way: not a tree, so it will not still be there. Hold, then plan the
+            # leg again from what the aircraft can see now (round it, or straight on once it has passed)
+            trace.append("waited_for_mover")
+            self.guardian.consecutive_rejections = 0
+            self.guardian.consecutive_interventions = 0
+            result = hold_position(self.adapter, MOVER_WAIT_STEP_S, interrupt=self._zone_interrupt())
+            self.belief.position = result.final_position or self.belief.position
+            return self._guarded_fly(local_target, trace, purpose, _after_interrupt=_after_interrupt, _detouring=_detouring,
+                                     pass_through=pass_through, _mover_waits=_mover_waits + 1)
         if evaluation.outcome == GuardianOutcome.REJECT_AND_REPLAN:
             self.belief.self_state.last_block_reason = evaluation.reason
             trace.append(f"guardian_blocked({evaluation.reason})")

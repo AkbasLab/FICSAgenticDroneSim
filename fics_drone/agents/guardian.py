@@ -8,12 +8,13 @@ paper work - that work formalizes and extends exactly this checkpoint.
 
 from typing import List, Optional, Tuple
 
-from ..core.scenario import NoFlyZone
+from ..core.scenario import DRONE_RADIUS_M, NoFlyZone
 
 
 class Guardian:
-    def __init__(self, no_fly_zones: List[NoFlyZone]):
+    def __init__(self, no_fly_zones: List[NoFlyZone], drone_radius_m: float = DRONE_RADIUS_M):
         self.no_fly_zones = no_fly_zones
+        self.drone_radius_m = drone_radius_m
 
     def check(self, target_point: Optional[Tuple[float, float, float]]) -> Tuple[bool, Optional[str]]:
         """target_point is in WORLD coordinates - the caller is responsible for
@@ -23,6 +24,6 @@ class Guardian:
         if target_point is None:
             return True, None
         for zone in self.no_fly_zones:
-            if zone.contains(target_point[0], target_point[1]):
+            if zone.contains(target_point[0], target_point[1], None, self.drone_radius_m):
                 return False, f"target {target_point} is inside no-fly zone {zone.id}"
         return True, None
