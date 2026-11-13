@@ -194,6 +194,40 @@ def test_dv2_runs_are_audited_like_d_runs():
         shutil.rmtree(out, ignore_errors=True)
 
 
+def test_a_run_that_never_finished_is_re_run_not_counted():
+    """main_v2: a run interrupted at start-up left a manifest saying "running"
+    and no error. It was counted as a DV2 mission failure and skipped on resume;
+    by the predeclared X1 criterion it is an infrastructure exclusion."""
+    import shutil
+    import tempfile
+    from agentic_uav.experiments.experiment_config import ExperimentConfig
+    d = tempfile.mkdtemp(prefix="x1_")
+    try:
+        cfg = ExperimentConfig(experiment_id="x1run", architecture="DV2",
+                               scenario="family:test", team_size=2,
+                               network_profile="final_nominal",
+                               failure_profile="one_failure", random_seed=25294,
+                               planner="llama3.1:8b", crn=True)
+        with open(os.path.join(d, "manifest.json"), "w", encoding="utf-8") as f:
+            json.dump({"experiment_id": "x1run", "architecture_key": "DV2",
+                       "random_seed": 25294, "status": "running",
+                       "error_type": None, "team": []}, f)
+        v = fx.classify(d, cfg, fx.load_exclusions(), None)
+        check("a run killed before it finished is X1, not a mission failure",
+              v["status"] == "excluded" and not v["system_failure"]
+              and v["reasons"][0].startswith("X1"), v)
+        with open(os.path.join(d, "manifest.json"), "w", encoding="utf-8") as f:
+            json.dump({"experiment_id": "x1run", "architecture_key": "DV2",
+                       "random_seed": 25294, "status": "failed",
+                       "error_type": "ValueError", "error_message": "bug",
+                       "team": []}, f)
+        v = fx.classify(d, cfg, fx.load_exclusions(), None)
+        check("an exception in the system under test is still a failed mission",
+              v["status"] == "valid" and v["system_failure"], v)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 # --- main_v2 -------------------------------------------------------------------------
 
 def test_main_v2_uses_fresh_held_out_seeds():

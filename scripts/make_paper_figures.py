@@ -660,6 +660,60 @@ def fig_llm_behaviour():
     save(fig, "fig9_llm_agent_behaviour")
 
 
+def fig_d_vs_dv2():
+    """main_v1's D against main_v2's DV2: what the model chose, and what it
+    achieved next to C on the same seeds of each design."""
+    v1, v2 = _factorial("main_v1"), _factorial("main_v2")
+    D, DV2 = v1["llm_by_arch"]["D"], v2["llm_by_arch"]["DV2"]
+    tools = ["start_search", "report_task_complete", "report_target", "send_bid",
+             "go_to_waypoint", "other"]
+
+    def shares(L):
+        t = dict(L["tools"])
+        tot = sum(t.values())
+        out = [t.pop(k, 0) / tot for k in tools[:-1]]
+        return out + [sum(t.values()) / tot]
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(WIDE, 2.3),
+                                   gridspec_kw={"width_ratios": [1.5, 1]})
+    y = range(len(tools))
+    ax1.barh([i - 0.2 for i in y], shares(D), 0.4, color=ORANGE, label="D (main_v1)",
+             zorder=2)
+    ax1.barh([i + 0.2 for i in y], shares(DV2), 0.4, color=BLUE,
+             label="DV2 (main_v2)", zorder=2)
+    ax1.set_yticks(list(y))
+    ax1.set_yticklabels(tools, fontsize=6.8)
+    ax1.invert_yaxis()
+    ax1.set_xlabel("share of model decisions")
+    ax1.legend(fontsize=6.2, frameon=False, loc="lower right")
+    ax1.set_title(f"D: {D['model_decisions']} decisions; DV2: {DV2['model_decisions']}",
+                  fontsize=8)
+
+    def rate(data, arch, n):
+        rs = [c for c in data["cells"] if c["architecture"] == arch and c["team_size"] == n]
+        return sum(c["successes"] for c in rs) / sum(c["n"] for c in rs)
+
+    groups = [("main_v1", v1, "D", ORANGE), ("main_v2", v2, "DV2", BLUE)]
+    x = 0
+    ticks, labels = [], []
+    for n in (2, 4):
+        for design, data, arch, col in groups:
+            c_rate, a_rate = rate(data, "C", n), rate(data, arch, n)
+            ax2.bar(x, a_rate, 0.38, color=col, zorder=2)
+            ax2.bar(x + 0.4, c_rate, 0.38, color=GREY, zorder=2)
+            ax2.text(x, a_rate + 0.03, f"{a_rate:.0%}", ha="center", fontsize=6)
+            ticks.append(x + 0.2)
+            labels.append(f"{arch}\nvs C\n{n} drones")
+            x += 1.1
+    ax2.set_xticks(ticks)
+    ax2.set_xticklabels(labels, fontsize=6.2)
+    ax2.set_ylim(0, 1.15)
+    ax2.set_ylabel("mission success")
+    ax2.set_title("Agentic (colour) vs C (grey), same seeds", fontsize=8)
+    fig.tight_layout()
+    save(fig, "fig11_d_vs_dv2")
+
+
 FIGURES = [
     ("fig1_architecture", fig_architecture),
     ("fig1_architecture_plain", fig_architecture_plain),
@@ -676,6 +730,7 @@ FIGURES = [
 if os.path.exists(os.path.join(DATA, "factorial_main_v2.json")):
     FIGURES.append(("fig10_factorial_main_v2",
                     lambda: fig_factorial_heatmaps("main_v2", "fig10_factorial_main_v2")))
+    FIGURES.append(("fig11_d_vs_dv2", fig_d_vs_dv2))
 
 
 def main():

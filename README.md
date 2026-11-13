@@ -891,6 +891,8 @@ simulator, GPU or API key.
   common random numbers, splits and the held-out seal, and the predeclared exclusions.
 - **[`docs/RESULTS_main_v1.md`](docs/RESULTS_main_v1.md)** — the first held-out
   results, and why the agentic agent D failed.
+- **[`docs/RESULTS_main_v2.md`](docs/RESULTS_main_v2.md)** — follow-up results: DV2
+  matches C (98.8% vs 98.4%) on fresh held-out seeds.
 - **[`docs/FOLLOWUP_DV2.md`](docs/FOLLOWUP_DV2.md)** — the disclosed follow-up: DV2
   (D with task-phase tools), design `main_v2` on fresh held-out seeds, and how to run it.
 - **[`docs/PILOT.md`](docs/PILOT.md)** — Phase 17: what the pilots found, the

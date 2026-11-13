@@ -39,7 +39,7 @@ SUITES = [
     ("16",  "AirSim regression missions", "tests/test_airsim_regression.py", 5),
     ("17",  "Pilots, calibration, freeze", "tests/test_pilot.py", 56),
     ("18",  "Factorial experiment",       "tests/test_factorial.py", 74),
-    ("18+", "DV2 follow-up (phase tools)", "tests/test_dv2.py", 41),
+    ("18+", "DV2 follow-up (phase tools)", "tests/test_dv2.py", 43),
 ]
 
 DEMOS = [

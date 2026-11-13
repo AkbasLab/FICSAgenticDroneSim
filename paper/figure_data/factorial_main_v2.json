@@ -1,0 +1,1560 @@
+{
+ "design": "main_v2",
+ "runs": 1280,
+ "cells": [
+  {
+   "architecture": "A",
+   "team_size": 2,
+   "network": "final_moderate",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.0,
+   "time_mean_s": 236.3,
+   "time_mean_successful_s": 236.3
+  },
+  {
+   "architecture": "A",
+   "team_size": 2,
+   "network": "final_moderate",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 18,
+   "success_rate": 0.9,
+   "success_ci95": [
+    0.699,
+    0.9721
+   ],
+   "coverage_mean": 0.975,
+   "dup_mean": 0.0,
+   "time_mean_s": 419.4,
+   "time_mean_successful_s": 428.6
+  },
+  {
+   "architecture": "A",
+   "team_size": 2,
+   "network": "final_nominal",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.0,
+   "time_mean_s": 224.5,
+   "time_mean_successful_s": 224.5
+  },
+  {
+   "architecture": "A",
+   "team_size": 2,
+   "network": "final_nominal",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.0,
+   "time_mean_s": 424.2,
+   "time_mean_successful_s": 424.2
+  },
+  {
+   "architecture": "A",
+   "team_size": 2,
+   "network": "final_partitioned",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 1.0,
+   "time_mean_s": 324.6,
+   "time_mean_successful_s": 324.6
+  },
+  {
+   "architecture": "A",
+   "team_size": 2,
+   "network": "final_partitioned",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.0,
+   "time_mean_s": 422.3,
+   "time_mean_successful_s": 422.3
+  },
+  {
+   "architecture": "A",
+   "team_size": 2,
+   "network": "final_severe",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 1.6,
+   "time_mean_s": 406.6,
+   "time_mean_successful_s": 406.6
+  },
+  {
+   "architecture": "A",
+   "team_size": 2,
+   "network": "final_severe",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 17,
+   "success_rate": 0.85,
+   "success_ci95": [
+    0.6396,
+    0.9476
+   ],
+   "coverage_mean": 0.9625,
+   "dup_mean": 0.0,
+   "time_mean_s": 464.5,
+   "time_mean_successful_s": 469.2
+  },
+  {
+   "architecture": "A",
+   "team_size": 4,
+   "network": "final_moderate",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.0,
+   "time_mean_s": 140.2,
+   "time_mean_successful_s": 140.2
+  },
+  {
+   "architecture": "A",
+   "team_size": 4,
+   "network": "final_moderate",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.1,
+   "time_mean_s": 311.9,
+   "time_mean_successful_s": 311.9
+  },
+  {
+   "architecture": "A",
+   "team_size": 4,
+   "network": "final_nominal",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.0,
+   "time_mean_s": 129.6,
+   "time_mean_successful_s": 129.6
+  },
+  {
+   "architecture": "A",
+   "team_size": 4,
+   "network": "final_nominal",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.0,
+   "time_mean_s": 307.3,
+   "time_mean_successful_s": 307.3
+  },
+  {
+   "architecture": "A",
+   "team_size": 4,
+   "network": "final_partitioned",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 2.95,
+   "time_mean_s": 284.5,
+   "time_mean_successful_s": 284.5
+  },
+  {
+   "architecture": "A",
+   "team_size": 4,
+   "network": "final_partitioned",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 1.45,
+   "time_mean_s": 298.5,
+   "time_mean_successful_s": 298.5
+  },
+  {
+   "architecture": "A",
+   "team_size": 4,
+   "network": "final_severe",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 1.45,
+   "time_mean_s": 301.1,
+   "time_mean_successful_s": 301.1
+  },
+  {
+   "architecture": "A",
+   "team_size": 4,
+   "network": "final_severe",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 18,
+   "success_rate": 0.9,
+   "success_ci95": [
+    0.699,
+    0.9721
+   ],
+   "coverage_mean": 0.975,
+   "dup_mean": 1.6,
+   "time_mean_s": 381.0,
+   "time_mean_successful_s": 393.0
+  },
+  {
+   "architecture": "B",
+   "team_size": 2,
+   "network": "final_moderate",
+   "failure": "none",
+   "n": 20,
+   "successes": 0,
+   "success_rate": 0.0,
+   "success_ci95": [
+    0,
+    0.1611
+   ],
+   "coverage_mean": 0.5,
+   "dup_mean": 0.0,
+   "time_mean_s": 110.1,
+   "time_mean_successful_s": null
+  },
+  {
+   "architecture": "B",
+   "team_size": 2,
+   "network": "final_moderate",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 0,
+   "success_rate": 0.0,
+   "success_ci95": [
+    0,
+    0.1611
+   ],
+   "coverage_mean": 0.275,
+   "dup_mean": 0.0,
+   "time_mean_s": 100.6,
+   "time_mean_successful_s": null
+  },
+  {
+   "architecture": "B",
+   "team_size": 2,
+   "network": "final_nominal",
+   "failure": "none",
+   "n": 20,
+   "successes": 0,
+   "success_rate": 0.0,
+   "success_ci95": [
+    0,
+    0.1611
+   ],
+   "coverage_mean": 0.5,
+   "dup_mean": 0.0,
+   "time_mean_s": 110.1,
+   "time_mean_successful_s": null
+  },
+  {
+   "architecture": "B",
+   "team_size": 2,
+   "network": "final_nominal",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 0,
+   "success_rate": 0.0,
+   "success_ci95": [
+    0,
+    0.1611
+   ],
+   "coverage_mean": 0.275,
+   "dup_mean": 0.0,
+   "time_mean_s": 100.6,
+   "time_mean_successful_s": null
+  },
+  {
+   "architecture": "B",
+   "team_size": 2,
+   "network": "final_partitioned",
+   "failure": "none",
+   "n": 20,
+   "successes": 0,
+   "success_rate": 0.0,
+   "success_ci95": [
+    0,
+    0.1611
+   ],
+   "coverage_mean": 0.5,
+   "dup_mean": 0.0,
+   "time_mean_s": 110.1,
+   "time_mean_successful_s": null
+  },
+  {
+   "architecture": "B",
+   "team_size": 2,
+   "network": "final_partitioned",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 0,
+   "success_rate": 0.0,
+   "success_ci95": [
+    0,
+    0.1611
+   ],
+   "coverage_mean": 0.275,
+   "dup_mean": 0.0,
+   "time_mean_s": 100.6,
+   "time_mean_successful_s": null
+  },
+  {
+   "architecture": "B",
+   "team_size": 2,
+   "network": "final_severe",
+   "failure": "none",
+   "n": 20,
+   "successes": 0,
+   "success_rate": 0.0,
+   "success_ci95": [
+    0,
+    0.1611
+   ],
+   "coverage_mean": 0.5,
+   "dup_mean": 0.0,
+   "time_mean_s": 110.1,
+   "time_mean_successful_s": null
+  },
+  {
+   "architecture": "B",
+   "team_size": 2,
+   "network": "final_severe",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 0,
+   "success_rate": 0.0,
+   "success_ci95": [
+    0,
+    0.1611
+   ],
+   "coverage_mean": 0.275,
+   "dup_mean": 0.0,
+   "time_mean_s": 100.6,
+   "time_mean_successful_s": null
+  },
+  {
+   "architecture": "B",
+   "team_size": 4,
+   "network": "final_moderate",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.0,
+   "time_mean_s": 111.9,
+   "time_mean_successful_s": 111.9
+  },
+  {
+   "architecture": "B",
+   "team_size": 4,
+   "network": "final_moderate",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 2,
+   "success_rate": 0.1,
+   "success_ci95": [
+    0.0279,
+    0.301
+   ],
+   "coverage_mean": 0.775,
+   "dup_mean": 0.0,
+   "time_mean_s": 111.5,
+   "time_mean_successful_s": 111.9
+  },
+  {
+   "architecture": "B",
+   "team_size": 4,
+   "network": "final_nominal",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.0,
+   "time_mean_s": 111.9,
+   "time_mean_successful_s": 111.9
+  },
+  {
+   "architecture": "B",
+   "team_size": 4,
+   "network": "final_nominal",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 2,
+   "success_rate": 0.1,
+   "success_ci95": [
+    0.0279,
+    0.301
+   ],
+   "coverage_mean": 0.775,
+   "dup_mean": 0.0,
+   "time_mean_s": 111.5,
+   "time_mean_successful_s": 111.9
+  },
+  {
+   "architecture": "B",
+   "team_size": 4,
+   "network": "final_partitioned",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.0,
+   "time_mean_s": 111.9,
+   "time_mean_successful_s": 111.9
+  },
+  {
+   "architecture": "B",
+   "team_size": 4,
+   "network": "final_partitioned",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 2,
+   "success_rate": 0.1,
+   "success_ci95": [
+    0.0279,
+    0.301
+   ],
+   "coverage_mean": 0.775,
+   "dup_mean": 0.0,
+   "time_mean_s": 111.5,
+   "time_mean_successful_s": 111.9
+  },
+  {
+   "architecture": "B",
+   "team_size": 4,
+   "network": "final_severe",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.0,
+   "time_mean_s": 111.9,
+   "time_mean_successful_s": 111.9
+  },
+  {
+   "architecture": "B",
+   "team_size": 4,
+   "network": "final_severe",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 2,
+   "success_rate": 0.1,
+   "success_ci95": [
+    0.0279,
+    0.301
+   ],
+   "coverage_mean": 0.775,
+   "dup_mean": 0.0,
+   "time_mean_s": 111.5,
+   "time_mean_successful_s": 111.9
+  },
+  {
+   "architecture": "C",
+   "team_size": 2,
+   "network": "final_moderate",
+   "failure": "none",
+   "n": 20,
+   "successes": 19,
+   "success_rate": 0.95,
+   "success_ci95": [
+    0.7639,
+    0.9911
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.05,
+   "time_mean_s": 204.5,
+   "time_mean_successful_s": 200.5
+  },
+  {
+   "architecture": "C",
+   "team_size": 2,
+   "network": "final_moderate",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.0,
+   "time_mean_s": 364.4,
+   "time_mean_successful_s": 364.4
+  },
+  {
+   "architecture": "C",
+   "team_size": 2,
+   "network": "final_nominal",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.0,
+   "time_mean_s": 195.4,
+   "time_mean_successful_s": 195.4
+  },
+  {
+   "architecture": "C",
+   "team_size": 2,
+   "network": "final_nominal",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.0,
+   "time_mean_s": 361.9,
+   "time_mean_successful_s": 361.9
+  },
+  {
+   "architecture": "C",
+   "team_size": 2,
+   "network": "final_partitioned",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 2.0,
+   "time_mean_s": 292.7,
+   "time_mean_successful_s": 292.7
+  },
+  {
+   "architecture": "C",
+   "team_size": 2,
+   "network": "final_partitioned",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.05,
+   "time_mean_s": 365.3,
+   "time_mean_successful_s": 365.3
+  },
+  {
+   "architecture": "C",
+   "team_size": 2,
+   "network": "final_severe",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 1.05,
+   "time_mean_s": 308.1,
+   "time_mean_successful_s": 308.1
+  },
+  {
+   "architecture": "C",
+   "team_size": 2,
+   "network": "final_severe",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.0,
+   "time_mean_s": 365.4,
+   "time_mean_successful_s": 365.4
+  },
+  {
+   "architecture": "C",
+   "team_size": 4,
+   "network": "final_moderate",
+   "failure": "none",
+   "n": 20,
+   "successes": 16,
+   "success_rate": 0.8,
+   "success_ci95": [
+    0.584,
+    0.9193
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.45,
+   "time_mean_s": 182.5,
+   "time_mean_successful_s": 169.9
+  },
+  {
+   "architecture": "C",
+   "team_size": 4,
+   "network": "final_moderate",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.35,
+   "time_mean_s": 202.5,
+   "time_mean_successful_s": 202.5
+  },
+  {
+   "architecture": "C",
+   "team_size": 4,
+   "network": "final_nominal",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.0,
+   "time_mean_s": 113.1,
+   "time_mean_successful_s": 113.1
+  },
+  {
+   "architecture": "C",
+   "team_size": 4,
+   "network": "final_nominal",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.0,
+   "time_mean_s": 190.1,
+   "time_mean_successful_s": 190.1
+  },
+  {
+   "architecture": "C",
+   "team_size": 4,
+   "network": "final_partitioned",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 3.0,
+   "time_mean_s": 207.5,
+   "time_mean_successful_s": 207.5
+  },
+  {
+   "architecture": "C",
+   "team_size": 4,
+   "network": "final_partitioned",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 2.1,
+   "time_mean_s": 247.7,
+   "time_mean_successful_s": 247.7
+  },
+  {
+   "architecture": "C",
+   "team_size": 4,
+   "network": "final_severe",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 1.9,
+   "time_mean_s": 241.4,
+   "time_mean_successful_s": 241.4
+  },
+  {
+   "architecture": "C",
+   "team_size": 4,
+   "network": "final_severe",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 1.5,
+   "time_mean_s": 272.3,
+   "time_mean_successful_s": 272.3
+  },
+  {
+   "architecture": "DV2",
+   "team_size": 2,
+   "network": "final_moderate",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.25,
+   "time_mean_s": 213.9,
+   "time_mean_successful_s": 213.9
+  },
+  {
+   "architecture": "DV2",
+   "team_size": 2,
+   "network": "final_moderate",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.0,
+   "time_mean_s": 355.3,
+   "time_mean_successful_s": 355.3
+  },
+  {
+   "architecture": "DV2",
+   "team_size": 2,
+   "network": "final_nominal",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.0,
+   "time_mean_s": 195.3,
+   "time_mean_successful_s": 195.3
+  },
+  {
+   "architecture": "DV2",
+   "team_size": 2,
+   "network": "final_nominal",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.0,
+   "time_mean_s": 348.3,
+   "time_mean_successful_s": 348.3
+  },
+  {
+   "architecture": "DV2",
+   "team_size": 2,
+   "network": "final_partitioned",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 2.0,
+   "time_mean_s": 285.4,
+   "time_mean_successful_s": 285.4
+  },
+  {
+   "architecture": "DV2",
+   "team_size": 2,
+   "network": "final_partitioned",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.05,
+   "time_mean_s": 355.6,
+   "time_mean_successful_s": 355.6
+  },
+  {
+   "architecture": "DV2",
+   "team_size": 2,
+   "network": "final_severe",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 1.7,
+   "time_mean_s": 308.5,
+   "time_mean_successful_s": 308.5
+  },
+  {
+   "architecture": "DV2",
+   "team_size": 2,
+   "network": "final_severe",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.0,
+   "time_mean_s": 354.0,
+   "time_mean_successful_s": 354.0
+  },
+  {
+   "architecture": "DV2",
+   "team_size": 4,
+   "network": "final_moderate",
+   "failure": "none",
+   "n": 20,
+   "successes": 16,
+   "success_rate": 0.8,
+   "success_ci95": [
+    0.584,
+    0.9193
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.65,
+   "time_mean_s": 177.5,
+   "time_mean_successful_s": 170.2
+  },
+  {
+   "architecture": "DV2",
+   "team_size": 4,
+   "network": "final_moderate",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.4,
+   "time_mean_s": 208.0,
+   "time_mean_successful_s": 208.0
+  },
+  {
+   "architecture": "DV2",
+   "team_size": 4,
+   "network": "final_nominal",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.0,
+   "time_mean_s": 113.1,
+   "time_mean_successful_s": 113.1
+  },
+  {
+   "architecture": "DV2",
+   "team_size": 4,
+   "network": "final_nominal",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 0.0,
+   "time_mean_s": 189.3,
+   "time_mean_successful_s": 189.3
+  },
+  {
+   "architecture": "DV2",
+   "team_size": 4,
+   "network": "final_partitioned",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 3.0,
+   "time_mean_s": 207.4,
+   "time_mean_successful_s": 207.4
+  },
+  {
+   "architecture": "DV2",
+   "team_size": 4,
+   "network": "final_partitioned",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 2.45,
+   "time_mean_s": 268.6,
+   "time_mean_successful_s": 268.6
+  },
+  {
+   "architecture": "DV2",
+   "team_size": 4,
+   "network": "final_severe",
+   "failure": "none",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 3.05,
+   "time_mean_s": 281.0,
+   "time_mean_successful_s": 281.0
+  },
+  {
+   "architecture": "DV2",
+   "team_size": 4,
+   "network": "final_severe",
+   "failure": "one_failure",
+   "n": 20,
+   "successes": 20,
+   "success_rate": 1.0,
+   "success_ci95": [
+    0.8389,
+    1
+   ],
+   "coverage_mean": 1.0,
+   "dup_mean": 2.35,
+   "time_mean_s": 315.2,
+   "time_mean_successful_s": 315.2
+  }
+ ],
+ "architectures": [
+  "A",
+  "B",
+  "C",
+  "DV2"
+ ],
+ "comparisons": {
+  "C_vs_A": {
+   "all": {
+    "pairs": 320,
+    "success_rate_x": 0.9844,
+    "success_rate_y": 0.9781,
+    "x_only_success": 7,
+    "y_only_success": 5,
+    "mcnemar_p": 0.7744140625,
+    "time_diff_mean_s": -60.1,
+    "time_diff_ci95_s": [
+     -68.5,
+     -51.9
+    ]
+   },
+   "final_nominal": {
+    "pairs": 80,
+    "success_rate_x": 1.0,
+    "success_rate_y": 1.0,
+    "x_only_success": 0,
+    "y_only_success": 0,
+    "mcnemar_p": 1.0,
+    "time_diff_mean_s": -56.3,
+    "time_diff_ci95_s": [
+     -66.0,
+     -47.5
+    ]
+   },
+   "final_moderate": {
+    "pairs": 80,
+    "success_rate_x": 0.9375,
+    "success_rate_y": 0.975,
+    "x_only_success": 2,
+    "y_only_success": 5,
+    "mcnemar_p": 0.453125,
+    "time_diff_mean_s": -38.5,
+    "time_diff_ci95_s": [
+     -53.7,
+     -23.5
+    ]
+   },
+   "final_severe": {
+    "pairs": 80,
+    "success_rate_x": 1.0,
+    "success_rate_y": 0.9375,
+    "x_only_success": 5,
+    "y_only_success": 0,
+    "mcnemar_p": 0.0625,
+    "time_diff_mean_s": -91.5,
+    "time_diff_ci95_s": [
+     -116.4,
+     -65.0
+    ]
+   },
+   "final_partitioned": {
+    "pairs": 80,
+    "success_rate_x": 1.0,
+    "success_rate_y": 1.0,
+    "x_only_success": 0,
+    "y_only_success": 0,
+    "mcnemar_p": 1.0,
+    "time_diff_mean_s": -54.2,
+    "time_diff_ci95_s": [
+     -60.0,
+     -48.5
+    ]
+   },
+   "none": {
+    "pairs": 160,
+    "success_rate_x": 0.9688,
+    "success_rate_y": 1.0,
+    "x_only_success": 0,
+    "y_only_success": 5,
+    "mcnemar_p": 0.0625,
+    "time_diff_mean_s": -37.8,
+    "time_diff_ci95_s": [
+     -50.1,
+     -25.4
+    ]
+   },
+   "one_failure": {
+    "pairs": 160,
+    "success_rate_x": 1.0,
+    "success_rate_y": 0.9563,
+    "x_only_success": 7,
+    "y_only_success": 0,
+    "mcnemar_p": 0.015625,
+    "time_diff_mean_s": -82.4,
+    "time_diff_ci95_s": [
+     -93.0,
+     -72.9
+    ]
+   }
+  },
+  "C_vs_B": {
+   "all": {
+    "pairs": 320,
+    "success_rate_x": 0.9844,
+    "success_rate_y": 0.275,
+    "x_only_success": 231,
+    "y_only_success": 4,
+    "mcnemar_p": 4.5647499802206254e-63,
+    "time_diff_mean_s": 148.7,
+    "time_diff_ci95_s": [
+     138.6,
+     158.1
+    ]
+   },
+   "final_nominal": {
+    "pairs": 80,
+    "success_rate_x": 1.0,
+    "success_rate_y": 0.275,
+    "x_only_success": 58,
+    "y_only_success": 0,
+    "mcnemar_p": 6.938893903907228e-18,
+    "time_diff_mean_s": 106.6,
+    "time_diff_ci95_s": [
+     84.8,
+     128.4
+    ]
+   },
+   "final_moderate": {
+    "pairs": 80,
+    "success_rate_x": 0.9375,
+    "success_rate_y": 0.275,
+    "x_only_success": 57,
+    "y_only_success": 4,
+    "mcnemar_p": 4.85494457136415e-13,
+    "time_diff_mean_s": 129.9,
+    "time_diff_ci95_s": [
+     110.6,
+     149.4
+    ]
+   },
+   "final_severe": {
+    "pairs": 80,
+    "success_rate_x": 1.0,
+    "success_rate_y": 0.275,
+    "x_only_success": 58,
+    "y_only_success": 0,
+    "mcnemar_p": 6.938893903907228e-18,
+    "time_diff_mean_s": 188.3,
+    "time_diff_ci95_s": [
+     168.8,
+     207.4
+    ]
+   },
+   "final_partitioned": {
+    "pairs": 80,
+    "success_rate_x": 1.0,
+    "success_rate_y": 0.275,
+    "x_only_success": 58,
+    "y_only_success": 0,
+    "mcnemar_p": 6.938893903907228e-18,
+    "time_diff_mean_s": 169.8,
+    "time_diff_ci95_s": [
+     155.6,
+     184.6
+    ]
+   },
+   "none": {
+    "pairs": 160,
+    "success_rate_x": 0.9688,
+    "success_rate_y": 0.5,
+    "x_only_success": 79,
+    "y_only_success": 4,
+    "mcnemar_p": 3.9973254947441296e-19,
+    "time_diff_mean_s": 107.1,
+    "time_diff_ci95_s": [
+     96.3,
+     118.6
+    ]
+   },
+   "one_failure": {
+    "pairs": 160,
+    "success_rate_x": 1.0,
+    "success_rate_y": 0.05,
+    "x_only_success": 152,
+    "y_only_success": 0,
+    "mcnemar_p": 3.503246160812043e-46,
+    "time_diff_mean_s": 190.2,
+    "time_diff_ci95_s": [
+     176.6,
+     202.5
+    ]
+   }
+  },
+  "C_vs_DV2": {
+   "all": {
+    "pairs": 320,
+    "success_rate_x": 0.9844,
+    "success_rate_y": 0.9875,
+    "x_only_success": 2,
+    "y_only_success": 3,
+    "mcnemar_p": 1.0,
+    "time_diff_mean_s": -3.8,
+    "time_diff_ci95_s": [
+     -9.9,
+     2.0
+    ]
+   },
+   "final_nominal": {
+    "pairs": 80,
+    "success_rate_x": 1.0,
+    "success_rate_y": 1.0,
+    "x_only_success": 0,
+    "y_only_success": 0,
+    "mcnemar_p": 1.0,
+    "time_diff_mean_s": 3.6,
+    "time_diff_ci95_s": [
+     2.2,
+     5.4
+    ]
+   },
+   "final_moderate": {
+    "pairs": 80,
+    "success_rate_x": 0.9375,
+    "success_rate_y": 0.95,
+    "x_only_success": 2,
+    "y_only_success": 3,
+    "mcnemar_p": 1.0,
+    "time_diff_mean_s": -0.2,
+    "time_diff_ci95_s": [
+     -6.7,
+     6.4
+    ]
+   },
+   "final_severe": {
+    "pairs": 80,
+    "success_rate_x": 1.0,
+    "success_rate_y": 1.0,
+    "x_only_success": 0,
+    "y_only_success": 0,
+    "mcnemar_p": 1.0,
+    "time_diff_mean_s": -17.9,
+    "time_diff_ci95_s": [
+     -40.9,
+     2.9
+    ]
+   },
+   "final_partitioned": {
+    "pairs": 80,
+    "success_rate_x": 1.0,
+    "success_rate_y": 1.0,
+    "x_only_success": 0,
+    "y_only_success": 0,
+    "mcnemar_p": 1.0,
+    "time_diff_mean_s": -1.0,
+    "time_diff_ci95_s": [
+     -5.6,
+     3.3
+    ]
+   },
+   "none": {
+    "pairs": 160,
+    "success_rate_x": 0.9688,
+    "success_rate_y": 0.975,
+    "x_only_success": 2,
+    "y_only_success": 3,
+    "mcnemar_p": 1.0,
+    "time_diff_mean_s": -4.6,
+    "time_diff_ci95_s": [
+     -13.6,
+     4.1
+    ]
+   },
+   "one_failure": {
+    "pairs": 160,
+    "success_rate_x": 1.0,
+    "success_rate_y": 1.0,
+    "x_only_success": 0,
+    "y_only_success": 0,
+    "mcnemar_p": 1.0,
+    "time_diff_mean_s": -3.1,
+    "time_diff_ci95_s": [
+     -10.9,
+     3.7
+    ]
+   }
+  },
+  "A_vs_DV2": {
+   "all": {
+    "pairs": 320,
+    "success_rate_x": 0.9781,
+    "success_rate_y": 0.9875,
+    "x_only_success": 4,
+    "y_only_success": 7,
+    "mcnemar_p": 0.548828125,
+    "time_diff_mean_s": 56.3,
+    "time_diff_ci95_s": [
+     48.0,
+     64.3
+    ]
+   },
+   "final_nominal": {
+    "pairs": 80,
+    "success_rate_x": 1.0,
+    "success_rate_y": 1.0,
+    "x_only_success": 0,
+    "y_only_success": 0,
+    "mcnemar_p": 1.0,
+    "time_diff_mean_s": 59.9,
+    "time_diff_ci95_s": [
+     51.0,
+     69.7
+    ]
+   },
+   "final_moderate": {
+    "pairs": 80,
+    "success_rate_x": 0.975,
+    "success_rate_y": 0.95,
+    "x_only_success": 4,
+    "y_only_success": 2,
+    "mcnemar_p": 0.6875,
+    "time_diff_mean_s": 38.3,
+    "time_diff_ci95_s": [
+     23.8,
+     52.5
+    ]
+   },
+   "final_severe": {
+    "pairs": 80,
+    "success_rate_x": 0.9375,
+    "success_rate_y": 1.0,
+    "x_only_success": 0,
+    "y_only_success": 5,
+    "mcnemar_p": 0.0625,
+    "time_diff_mean_s": 73.6,
+    "time_diff_ci95_s": [
+     46.2,
+     98.2
+    ]
+   },
+   "final_partitioned": {
+    "pairs": 80,
+    "success_rate_x": 1.0,
+    "success_rate_y": 1.0,
+    "x_only_success": 0,
+    "y_only_success": 0,
+    "mcnemar_p": 1.0,
+    "time_diff_mean_s": 53.2,
+    "time_diff_ci95_s": [
+     47.5,
+     59.2
+    ]
+   },
+   "none": {
+    "pairs": 160,
+    "success_rate_x": 1.0,
+    "success_rate_y": 0.975,
+    "x_only_success": 4,
+    "y_only_success": 0,
+    "mcnemar_p": 0.125,
+    "time_diff_mean_s": 33.2,
+    "time_diff_ci95_s": [
+     23.1,
+     43.3
+    ]
+   },
+   "one_failure": {
+    "pairs": 160,
+    "success_rate_x": 0.9563,
+    "success_rate_y": 1.0,
+    "x_only_success": 0,
+    "y_only_success": 7,
+    "mcnemar_p": 0.015625,
+    "time_diff_mean_s": 79.3,
+    "time_diff_ci95_s": [
+     67.9,
+     90.6
+    ]
+   }
+  }
+ },
+ "llm": {
+  "runs": 320,
+  "model_decisions": 6317,
+  "tools": {
+   "start_search": 3739,
+   "report_task_complete": 1414,
+   "send_bid": 758,
+   "go_to_waypoint": 393,
+   "claim_task": 8,
+   "announce_task": 4,
+   "hold": 1
+  },
+  "start_search_share": 0.5919,
+  "runs_only_start_search": 1,
+  "fallback_causes": {
+   "landing_is_deterministic": 3391,
+   "not_airborne_yet": 2195,
+   "no_work_remaining": 461,
+   "standing_by": 388,
+   "coordination_not_converging": 284,
+   "wrong_phase": 181,
+   "bad_parameters": 72,
+   "bad_messages": 31
+  },
+  "rejections": {
+   "wrong_phase": 1005,
+   "bad_parameters": 347,
+   "bad_messages": 193
+  },
+  "latency_mean_s": 16.3,
+  "confidence_mean": 0.154,
+  "success_if_ever_reported": [
+   315,
+   319
+  ],
+  "success_if_never_reported": [
+   1,
+   1
+  ],
+  "completions_by_model": 1414,
+  "wrong_phase_fallbacks": 181
+ },
+ "llm_by_arch": {
+  "DV2": {
+   "runs": 320,
+   "model_decisions": 6317,
+   "tools": {
+    "start_search": 3739,
+    "report_task_complete": 1414,
+    "send_bid": 758,
+    "go_to_waypoint": 393,
+    "claim_task": 8,
+    "announce_task": 4,
+    "hold": 1
+   },
+   "start_search_share": 0.5919,
+   "runs_only_start_search": 1,
+   "fallback_causes": {
+    "landing_is_deterministic": 3391,
+    "not_airborne_yet": 2195,
+    "no_work_remaining": 461,
+    "standing_by": 388,
+    "coordination_not_converging": 284,
+    "wrong_phase": 181,
+    "bad_parameters": 72,
+    "bad_messages": 31
+   },
+   "rejections": {
+    "wrong_phase": 1005,
+    "bad_parameters": 347,
+    "bad_messages": 193
+   },
+   "latency_mean_s": 16.3,
+   "confidence_mean": 0.154,
+   "success_if_ever_reported": [
+    315,
+    319
+   ],
+   "success_if_never_reported": [
+    1,
+    1
+   ],
+   "completions_by_model": 1414,
+   "wrong_phase_fallbacks": 181
+  }
+ }
+}

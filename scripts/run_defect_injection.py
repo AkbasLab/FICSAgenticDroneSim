@@ -338,6 +338,14 @@ DEFECTS = [
      "(found in the first llama development run)",
      ["tests/test_dv2.py"]),
 
+    ("killed_run_counted_as_failure", "experiment design",
+     "agentic_uav/experiments/factorial.py",
+     "        if status == \"running\" and not m.get(\"error_type\"):",
+     "        if False:",
+     "a run whose process was killed counts as a mission failure and is never "
+     "re-run (found in main_v2)",
+     ["tests/test_dv2.py"]),
+
     ("seeds_reused_across_designs", "experiment design",
      "agentic_uav/experiments/factorial.py",
      "        clash = sorted(mine & set(used))",
