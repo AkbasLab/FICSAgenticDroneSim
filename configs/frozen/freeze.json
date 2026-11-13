@@ -1,6 +1,6 @@
 {
  "fingerprint": {
-  "design": "9a1da68101e1bff8",
+  "design": "b3acfdd186b890f9",
   "metrics": "460d71eeb86f37b2",
   "networks": "896214a3727d10e6",
   "prompts": "505befde9ab6095c",
@@ -8,12 +8,12 @@
   "seeds": "444ffdaa7ff0dd49",
   "task_rules": "519f14ce94f97562"
  },
- "frozen_at": "2026-11-09T22:37:39",
+ "frozen_at": "2026-11-12T19:06:03",
  "groups": {
   "design": {
    "sources": {
     "agentic_uav/experiments/architectures.py": "54e26f981c24ba4b",
-    "agentic_uav/experiments/factorial.py": "84ea9164d7b76fd0",
+    "agentic_uav/experiments/factorial.py": "02c62f6e32f841c6",
     "agentic_uav/experiments/pilot.py": "5c6cdfa5bddc73ed",
     "configs/experiments/exclusion_criteria.yaml": "1ebbb83d744f4d53",
     "configs/experiments/factorial_gemini.yaml": "7b84540c0d0a8683",
@@ -324,6 +324,19 @@
     "task_rules": "519f14ce94f97562"
    },
    "reason": "DV2 development run 1 (llama, dv2_dev): 2 of 16 runs left a drone airborne because report_task_complete with nothing to report was accepted and looped at one instant. It is now a wrong_phase rejection. Development-split change before any held-out DV2 run; disclosed in docs/FOLLOWUP_DV2.md."
+  },
+  {
+   "at": "2026-11-12T19:06:03",
+   "fingerprint": {
+    "design": "b3acfdd186b890f9",
+    "metrics": "460d71eeb86f37b2",
+    "networks": "896214a3727d10e6",
+    "prompts": "505befde9ab6095c",
+    "scenarios": "3f187079082c80b0",
+    "seeds": "444ffdaa7ff0dd49",
+    "task_rules": "519f14ce94f97562"
+   },
+   "reason": "After main_v2 finished: the run classifier now applies the predeclared X1 criterion to runs whose process was killed (manifest 'running', no error). main_v2 and main_v1 are complete; no held-out run is affected by this change."
   }
  ]
 }

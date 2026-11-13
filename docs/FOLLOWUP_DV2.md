@@ -1,6 +1,6 @@
 # Follow-up to main_v1: DV2, the agentic agent with task-phase tools
 
-**Status:** built and tested with scripted models; not yet run with llama.
+**Status:** complete. Results in [`RESULTS_main_v2.md`](RESULTS_main_v2.md): DV2 98.8% vs C 98.4% (p = 1.0), no time difference.
 **Disclosure:** this was designed *after* the main_v1 results were seen. It is a
 separately labelled follow-up. main_v1, including D's 33% success, stays in the
 paper as measured.
@@ -53,9 +53,10 @@ catches it. So a DV2 success has to be read together with how often the model
 chose the right phase itself. That is why `completions_by_model` and
 `wrong_phase_fallbacks` are reported next to success.
 
-Tests: `tests/test_dv2.py` (41 checks). Five new injected defects
+Tests: `tests/test_dv2.py` (43 checks). Six new injected defects
 (`phase_check_off`, `completion_tool_not_offered`, `airborne_exit`,
-`idle_report_accepted`, `seeds_reused_across_designs`) are all caught.
+`idle_report_accepted`, `killed_run_counted_as_failure`,
+`seeds_reused_across_designs`) are all caught.
 
 ## Development run 1 with llama (dv2_dev, 16 runs) and the one fix it led to
 

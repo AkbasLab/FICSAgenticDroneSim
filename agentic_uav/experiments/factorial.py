@@ -283,7 +283,16 @@ def classify(directory, expected: ExperimentConfig, exclusions, fingerprint) -> 
     if status != "completed":
         etype = m.get("error_type") or "unknown"
         infra = set(crit.get("X1_infrastructure_error", {}).get("exception_types", []))
-        if etype in infra or not m:
+        # A run whose manifest still says "running" with no error recorded was
+        # never allowed to finish: the process was killed, the window closed,
+        # or the machine slept. An exception in the system under test is
+        # always recorded (error_type), so this is the machine, not the system
+        # - X1. Found in main_v2: one such run was counted as a DV2 failure
+        # and skipped on resume instead of being re-run.
+        if status == "running" and not m.get("error_type"):
+            etype = "process ended without finishing (killed or interrupted)"
+            reasons.append(f"X1_infrastructure_error: {etype}")
+        elif etype in infra or not m:
             reasons.append(f"X1_infrastructure_error: {etype}: {(m.get('error_message') or '')[:80]}")
         else:
             system_failure = True               # a result, not an exclusion

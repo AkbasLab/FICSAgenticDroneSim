@@ -393,7 +393,7 @@ to a real invariant, applied to a throwaway copy of the repository; the
 simulator-free suites run against the damaged copy, and the defect counts as
 caught only if a suite fails.
 
-**35 of 35 caught**: eleven written up front, across allocation, communication, roles, belief and safety; five first found by flying in CARLA-Air; four found by the Phase 17 pilot timelines (see `docs/PILOT.md`); five that would break the Phase 18 experiment's guarantees (see `docs/FACTORIAL.md`); five from the pre-run review; and five guarding the DV2 follow-up (see `docs/FOLLOWUP_DV2.md`):
+**36 of 36 caught**: eleven written up front, across allocation, communication, roles, belief and safety; five first found by flying in CARLA-Air; four found by the Phase 17 pilot timelines (see `docs/PILOT.md`); five that would break the Phase 18 experiment's guarantees (see `docs/FACTORIAL.md`); five from the pre-run review; and six guarding the DV2 follow-up (see `docs/FOLLOWUP_DV2.md`):
 
 | Defect | Breaks |
 |---|---|
@@ -431,6 +431,7 @@ caught only if a suite fails.
 | `completion_tool_not_offered` | the v2 tool set silently lacks `report_task_complete`, so DV2 is just D |
 | `airborne_exit` | a drone holding a task with nothing new to react to leaves its loop in the air |
 | `idle_report_accepted` | a drone with nothing to report keeps reporting at one instant until its step budget runs out, airborne |
+| `killed_run_counted_as_failure` | a run whose process was killed counts as a mission failure and is never re-run |
 | `seeds_reused_across_designs` | a follow-up design is evaluated on held-out seeds an earlier result already used |
 
 The last five were each invisible to the suite when they were found - they
