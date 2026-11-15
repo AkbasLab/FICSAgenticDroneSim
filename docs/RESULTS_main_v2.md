@@ -36,7 +36,7 @@ result used. main_v1, including D's 33%, stays in the paper as measured.
 
 | comparison (paired by seed) | success | McNemar p (exact) | mean time difference (95% CI) |
 |---|---|---|---|
-| **C vs DV2** | 98.4% vs 98.8% | 1.0 | C faster by 4 s (−10 to +2) |
+| **C vs DV2** | 98.4% vs 98.8% | 1.0 | C faster by 4 s (seed-clustered CI 0.8–7.3; negligible, see Phase 19) |
 | A vs DV2 | 97.8% vs 98.8% | 0.55 | DV2 faster by 56 s (48–64) |
 | C vs A | 98.4% vs 97.8% | 0.77 | C faster by 60 s (52–69) |
 | C vs B | 98.4% vs 27.5% | 5 × 10⁻⁶³ | B never redistributes work |
@@ -77,8 +77,9 @@ failures.
 ## Limitations to state
 
 - **Mission time excludes thinking time.** Mission times are simulated, and model latency (16 s per decision on a 4 GB laptop GPU) is wall-clock and not charged to the mission. The same holds for D in main_v1. On real hardware an LLM agent would be slower unless decisions overlap with flight.
-- **One new DV2-specific failure** (`DV2_n4_final_moderate_none_s83088`): under message loss the drones believed a finished sector was still open. The model kept choosing `start_search` without a task, which becomes a claim that takes no simulated time. All four drones looped at 147 s until the step cap and stayed airborne. C completed this seed. The result is kept as measured, since main_v2 was sealed.
-- **Shared failures.** In 4-drone, moderate-loss, no-failure runs, C and DV2 both reach 90%, with a drone not landed on largely the same seeds. This comes from the deterministic landing logic both use, not from the model.
+- **One run looped at a single instant** (`DV2_n4_final_moderate_none_s83088`): the drones held already-swept sectors, coordination messages were lost, and each re-decided without simulated time passing until its step budget ran out in the air. Phase 19 found the same mechanism in 5 C runs and 4 D runs, so it is a defect of the shared allocation and lifecycle code, not of the LLM (`ANALYSIS_phase19.md`, STALE_INFORMATION). Kept as measured; main_v2 is sealed.
+- **Shared failures.** In 4-drone, moderate-loss, no-failure runs, C and DV2 both reach 90%. Phase 19 traced these: some are the loop above, and the rest (C 2, DV2 2) are a drone that lost every bid and never took off. It was scored "not home" although it sat on its own pad. Counting it as home would give C 99.1% and DV2 99.4%.
+- **Mission time, re-analysed.** With a bootstrap that resamples seeds (Phase 19), DV2 is 4.0 s slower than C (95% CI 0.8–7.3 s; median 0 s; d_z = 0.08). That is detectable but negligible. The earlier "C faster by 3.8 s, CI −9.9 to 2.0" used a pair-level bootstrap. DV2 also slows 21 s more than C under severe loss (CI 7–36 s).
 
 ## Where the agentic architecture could be better
 
