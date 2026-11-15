@@ -40,6 +40,7 @@ SUITES = [
     ("17",  "Pilots, calibration, freeze", "tests/test_pilot.py", 56),
     ("18",  "Factorial experiment",       "tests/test_factorial.py", 74),
     ("18+", "DV2 follow-up (phase tools)", "tests/test_dv2.py", 43),
+    ("19",  "Phase 19 analysis",          "tests/test_phase19.py", 14),
 ]
 
 DEMOS = [

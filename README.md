@@ -891,6 +891,11 @@ simulator, GPU or API key.
   common random numbers, splits and the held-out seal, and the predeclared exclusions.
 - **[`docs/RESULTS_main_v1.md`](docs/RESULTS_main_v1.md)** — the first held-out
   results, and why the agentic agent D failed.
+- **[`docs/ANALYSIS_phase19.md`](docs/ANALYSIS_phase19.md)** — Phase 19: paired
+  comparisons, interaction models, degradation curves and a failure taxonomy for
+  D and DV2, with the trade-offs stated.
+- **[`docs/FIGURES_GUIDE.md`](docs/FIGURES_GUIDE.md)** — plain-language guide to
+  every plot in `docs/figures/` and `paper/figures/`.
 - **[`docs/RESULTS_main_v2.md`](docs/RESULTS_main_v2.md)** — follow-up results: DV2
   matches C (98.8% vs 98.4%) on fresh held-out seeds.
 - **[`docs/FOLLOWUP_DV2.md`](docs/FOLLOWUP_DV2.md)** — the disclosed follow-up: DV2
