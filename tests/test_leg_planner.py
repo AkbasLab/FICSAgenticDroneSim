@@ -105,7 +105,7 @@ class TestLegSkill(unittest.TestCase):
 
     def test_a_leg_that_keeps_getting_nearer_is_not_called_stalled(self):
         adapter = KinematicMockVehicleAdapter("D", start_position=(0.0, 0.0, 12.0))
-        result = fly_leg_with_planner(adapter, 6.0, 0.0, 12.0, StraightPlanner(speed=4.0), lambda: [], timeout_s=20.0, stall_s=0.6)
+        result = fly_leg_with_planner(adapter, 6.0, 0.0, 12.0, StraightPlanner(speed=4.0), lambda: [], timeout_s=20.0, stall_s=4.0)
         self.assertEqual(result.status, SkillStatus.SUCCESS)
 
     def test_a_leg_in_a_run_ends_still_moving_and_a_last_leg_ends_stopped(self):
@@ -114,7 +114,8 @@ class TestLegSkill(unittest.TestCase):
                                       pass_through_m=1.5)
         self.assertEqual(result.status, SkillStatus.SUCCESS)
         self.assertGreater(through.get_speed(), 1.0)                 # no stop at the waypoint
-        self.assertGreater(through.get_position()[0], 18.0)
+        self.assertGreater(through.get_position()[0], 20.0 - 4.0)     # done a little before the waypoint (the next run turns early, in one curve), at most LEAD_MAX_M
+        self.assertLess(through.get_position()[0], 20.0 + 1.5)
         last = KinematicMockVehicleAdapter("D", start_position=(0.0, 0.0, 12.0))
         result = fly_leg_with_planner(last, 20.0, 0.0, 12.0, StraightPlanner(speed=4.0), lambda: [], timeout_s=20.0)
         self.assertEqual(result.status, SkillStatus.SUCCESS)

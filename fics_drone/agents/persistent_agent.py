@@ -14,10 +14,10 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 from ..control.navigation import DEFAULT_HEIGHT, SKILL_TIMEOUT_S
-from ..control.leg_planner_skill import PASS_THROUGH_M, fly_leg_with_planner
+from ..control.leg_planner_skill import LEAD_S, PASS_THROUGH_M, fly_leg_with_planner
 from ..core.obstacles import BoxKeepOut, TreeObstacle
 from ..planners.street_path import plan_around
-from ..planners.overfly import detour_cost_s, overfly_altitude, overfly_cost_s
+from ..planners.overfly import detour_cost_s, mover_overfly_altitude, movers_on_leg, overfly_altitude, overfly_cost_s, target_busy
 from ..control.leg_planner_skill import MAX_CLIMB_MPS
 from ..control.skills import go_to_waypoint, hold_position, land, take_off
 from ..coordination.bidding import DEFAULT_WEIGHTS, compute_bid
@@ -48,6 +48,9 @@ MAX_HELP_REQUESTS_KEPT = 5  # Phase 12.3: bounded, like every other thing shown 
 MAX_MARKET_KEPT = 5  # Phase 12 (15-tool set): same bound for announcements, bids and offers
 OVERFLY_MAX_EXTRA_M = float(os.environ.get("AGENT_OVERFLY_MAX_M", 15.0))   # a blocked leg may climb this far above its own height to cross
 # tall trees instead of flying round them (0 = never). NavRL steers only sideways; the agent supplies the vertical part.
+MOVER_OVERFLY = os.environ.get("AGENT_MOVER_OVERFLY", "1") != "0"      # climb over a crowd or a line of traffic instead of weaving through it (0 = always weave)
+MOVER_DESCENT_WAITS = 30       # seconds to hold above a target a car or person is about to cross before coming down on it
+MOVER_OVERFLY_MIN = int(os.environ.get("AGENT_MOVER_OVERFLY_MIN", 3))   # how many vehicles and pedestrians must be on the way for that
 OVERFLY_CLEARANCE_M = 3.0      # how far above the tallest tree on the way the crossing is flown
 DETOUR_SPEED_MPS = 2.1         # what a live aircraft averages along a detour (measured 2026-11-08), to compare it with a climb
 AGENT_REPORT_DRIFT_M = 3.0  # how far the aircraft may wander while holding to confirm a sighting. The default 1.0 m
@@ -79,13 +82,70 @@ DEFER_HOLD_S = 2.0   # when every remaining leg is inside a zone, hold still thi
 SEPARATION_WAIT_S = 25.0  # how long a drone holds still when only a teammate's position or route blocks its leg
 SEPARATION_WAIT_STEP_S = 2.0  # one hold, then ask the guardian again
 MOVER_GUARD_RANGE_M = 15.0   # with a leg planner, only a vehicle or pedestrian this near the aircraft holds a leg back at the start
-MOVER_WAIT_TRIES = 6   # a leg refused only because a vehicle or pedestrian is near it: hold this many times, then plan again
-MOVER_WAIT_STEP_S = 1.0
+MOVER_OVERFLY_MAX_Z_M = 10.0   # a leg that begins or ends higher than this (a roof) is not held back by what is on the ground below it
+MOVER_WAIT_TRIES = 12  # a leg refused only because a vehicle or pedestrian is near it: hold this many times, then plan again
+MOVER_WAIT_STEP_S = 0.4      # (the pause before a leg is planned again: short, so the aircraft does not seem to stop and think)
 CONFIRM_TEAMMATE_FRESH_S = 8.0  # a teammate counts as a candidate only if heard from this recently
 CONFIRM_STANDOFF_MARGIN_M = 8.0  # a waiting spot must stay this far outside every zone for the whole wait
 CONFIRM_STANDOFF_ARRIVE_M = 2.0  # closer than this to the chosen waiting spot counts as already there
 CONFIRM_STANDOFF_RADII_M = (10.0, 15.0, 20.0, 30.0, 40.0)  # rings searched around the sighting
 CONFIRM_STANDOFF_BEARINGS = 16  # candidate points per ring
+
+
+DIAGONAL_RISE_SPEED_MPS = 1.5   # how fast a climb is assumed to also move along the way to the target
+DIAGONAL_MIN_M = 2.0
+
+
+def climb_spot(start, target, over: float, free_m: float):
+    """Where a climb to `over` ends: ahead along the way to the target (so the aircraft rises while it moves on), as far as the
+    clear run `free_m` allows, or straight above the start when there is no room."""
+    dx, dy = target[0] - start[0], target[1] - start[1]
+    d = math.hypot(dx, dy)
+    rise = max(0.0, over - start[2])
+    ahead = min(free_m, 0.6 * d, rise / MAX_CLIMB_MPS * DIAGONAL_RISE_SPEED_MPS)
+    if d < 1e-6 or ahead < DIAGONAL_MIN_M:
+        return (start[0], start[1], over)
+    return (start[0] + dx / d * ahead, start[1] + dy / d * ahead, over)
+
+
+def safe_climb_spot(start, target, over: float, free_m: float, obstacles, margin: float):
+    """climb_spot, shortened (in the end straight up) until the sloping climb to it misses every keep-out: the clear run is judged at the
+    starting height only, so a tree that stands higher than the aircraft is on the slope without being on the run."""
+    run = free_m
+    while True:
+        spot = climb_spot(start, target, over, run)
+        if (spot[0] == start[0] and spot[1] == start[1]) or not any(t.blocks_segment(start, spot, margin=margin) for t in obstacles):
+            return spot
+        ahead = math.hypot(spot[0] - start[0], spot[1] - start[1])
+        run = ahead * 0.7 - 0.01
+        if run < DIAGONAL_MIN_M:
+            return (start[0], start[1], over)
+
+
+def route_runs_clear(start, path, obstacles, margin: float) -> bool:
+    """True if every straight run of start -> path (a list of stops, the last the target) misses every keep-out by `margin`."""
+    pts = [start, *path]
+    return not any(t.blocks_segment(a, b, margin=margin) for a, b in zip(pts, pts[1:]) for t in obstacles)
+
+
+def clear_run_m(start, target, obstacles, margin: float, movers=(), mover_gap_m: float = 10.0) -> float:
+    """How far along the straight way to the target the aircraft can go at its starting height before it meets a keep-out
+    (or comes within mover_gap_m of a moving body that is on the leg)."""
+    d = math.hypot(target[0] - start[0], target[1] - start[1])
+    if d < 1e-6:
+        return 0.0
+    ux, uy = (target[0] - start[0]) / d, (target[1] - start[1]) / d
+    run = d
+    s = 0.0
+    while s < d:
+        x, y = start[0] + ux * s, start[1] + uy * s
+        if any(t.blocks_point(x, y, start[2], margin + 1.5) for t in obstacles):
+            run = max(0.0, s - 0.5)
+            break
+        s += 0.5
+    for m in movers:
+        run = min(run, max(0.0, math.hypot(m.x - start[0], m.y - start[1]) - mover_gap_m))
+    return run
 
 
 def _to_local(point: Tuple[float, float, float], spawn_offset: Tuple[float, float, float]):
@@ -1074,8 +1134,14 @@ class PersistentAgent:
         planner is shown instead of a lidar."""
         t = self._live_elapsed()
         rects = [zone.bounds_at(t) for zone in self.guardian.limits.restricted_zones if zone.active_at(t)]
-        height = self.belief.position[2]
-        here = _to_world(self.belief.position, self.spawn_offset)
+        # where the aircraft is NOW: belief.position is set when a leg starts, and a leg that climbs or descends would keep being shown the keep-outs
+        # at its starting height (a live aircraft parked 1.2 m from a crown that was not there at its real height, and stalled)
+        try:
+            position = self.adapter.get_position()
+        except Exception:
+            position = self.belief.position
+        height = position[2]
+        here = _to_world(position, self.spawn_offset)
         for tree in self.guardian.limits.obstacles:
             # a planner cannot see further than its sensor, and a street scenario holds thousands of keep-outs
             if math.hypot(tree.x - here[0], tree.y - here[1]) <= max(tree.trunk_r, tree.crown_r) + SCENE_RANGE_M:
@@ -1087,7 +1153,9 @@ class PersistentAgent:
             return go_to_waypoint(self.adapter, *local_target, timeout_s=self.leg_timeout_s, interrupt=interrupt)
         return fly_leg_with_planner(self.adapter, *local_target, self.leg_planner, self._active_zone_rects,
                                     offset_xy=self.spawn_offset[:2], timeout_s=self.leg_timeout_s,
-                                    interrupt=interrupt, pass_through_m=PASS_THROUGH_M if pass_through else 0.0)
+                                    interrupt=interrupt, pass_through_m=PASS_THROUGH_M if pass_through else 0.0,
+                                    evade_fn=getattr(self, "evade_fn", None),
+                                    lead_s=getattr(self, "pass_lead_s", LEAD_S), dz_tol_m=getattr(self, "pass_dz_m", 2.0))
 
     def _zone_interrupt(self):
         """Per-tick check handed to the flight skill, or None when the monitor is off or no zone
@@ -1099,6 +1167,24 @@ class PersistentAgent:
             world = _to_world(local_position, self.spawn_offset)
             return self.guardian.in_active_dynamic_zone(world, self._live_elapsed())
         return tripped
+
+    def _hold_stepping_aside(self, seconds: float) -> None:
+        """Wait on the spot, but step out of the way of a vehicle or person about to run into the aircraft (a live aircraft waiting in a lane
+        was hit by a car while holding)."""
+        evade = getattr(self, "evade_fn", None)
+        end = time.monotonic() + seconds
+        ox, oy = self.spawn_offset[:2]
+        while time.monotonic() < end:
+            step = None
+            if evade is not None:
+                x, y, z = self.adapter.get_position()
+                step = evade((x + ox, y + oy, z))
+            if step is None:
+                self.adapter.start_hover()
+            else:
+                self.adapter.start_velocity(float(step[0]), float(step[1]), 0.0)
+            time.sleep(0.1)
+        self.adapter.start_hover()
 
     def _guarded_fly(self, local_target: Tuple[float, float, float], trace: List[str],
                       purpose: str = "mission", _after_interrupt: bool = False,
@@ -1148,9 +1234,15 @@ class PersistentAgent:
                     # keep-outs stand thick along a street: plan a way through all of them, not round one tree at a time
                     spots = None
                     for pad in (12.0, 24.0, 40.0):
-                        path = plan_around(start, world_target, trees, margin, pad=pad)
-                        if path:
-                            spots = path[:-1]   # (the leg to the target follows)
+                        for extra in (0.3, 1.0, 2.0):
+                            # the plan keeps its stops clear, but a straight run between two stops can still cut a keep-out's corner and be
+                            # refused by the guardian after the aircraft has flown part of the route (seen live): more room is asked for until
+                            # every run of the route is clear
+                            path = plan_around(start, world_target, trees, margin, pad=pad, extra=extra)
+                            if path and route_runs_clear(start, path, trees, margin):
+                                spots = path[:-1]   # (the leg to the target follows)
+                                break
+                        if spots is not None:
                             break
                     no_way_round = spots is None or any(t.blocks_point(*s, margin=margin) for s in spots for t in trees)
                     if no_way_round and over is not None:
@@ -1170,9 +1262,17 @@ class PersistentAgent:
                     over = None          # the way round costs less than the climb
                 if over is not None:
                     # climb straight up, cross level above the trees, come down at the target
-                    for part, spot in (("climb", (start[0], start[1], over)), ("cross", (world_target[0], world_target[1], over))):
+                    up = safe_climb_spot(start, world_target, over, clear_run_m(start, world_target, trees, margin), trees, margin)
+                    # and the way down starts before the target, along the same line, as far as the low ground near the target is clear
+                    d_all = math.hypot(world_target[0] - start[0], world_target[1] - start[1])
+                    d_up = math.hypot(up[0] - start[0], up[1] - start[1])
+                    down = safe_climb_spot(world_target, start, over, min(clear_run_m(world_target, start, trees, margin), max(0.0, d_all - d_up - 1.0)), trees, margin)
+                    if (math.hypot(down[0] - world_target[0], down[1] - world_target[1]) < 1e-6
+                            or any(t.blocks_segment(down, world_target, margin=margin, skip_start_m=0.0) for t in trees)):
+                        down = (world_target[0], world_target[1], over)
+                    for part, spot in (("climb", up), ("cross", down)):
                         event = self._guarded_fly(_to_local(spot, self.spawn_offset), trace, purpose, _detouring=True,
-                                                  pass_through=(part == "cross"))
+                                                  pass_through=(part == "cross" or (up[0] != start[0] or up[1] != start[1])))
                         if event != ReplanEvent.SKILL_SUCCEEDED:
                             return event
                     trace.append("flew_over_tree")
@@ -1183,6 +1283,49 @@ class PersistentAgent:
                         if event != ReplanEvent.SKILL_SUCCEEDED:
                             return event
                     trace.append("flew_round_tree")
+        movers_fn = getattr(self.guardian.limits, "moving_fn", None)
+        start_z = _to_world(self.belief.position, self.spawn_offset)[2]
+        if (MOVER_OVERFLY and movers_fn is not None and not _detouring and purpose == "mission"
+                and all(math.isfinite(v) for v in world_target)
+                and world_target[2] < MOVER_OVERFLY_MAX_Z_M and start_z < MOVER_OVERFLY_MAX_Z_M):
+            # NavRL steers only sideways: when a crowd or a line of traffic is on the way to the target (from wherever the aircraft is now,
+            # after any detour round trees above), climb above it (the leg planner and the guardian ignore a body once the aircraft is 4 m
+            # above its top), cross level, and come down at the target
+            try:
+                now_movers = list(movers_fn())
+            except Exception:
+                now_movers = []
+            start = _to_world(self.belief.position, self.spawn_offset)
+            over_movers = mover_overfly_altitude(start, world_target, now_movers, self._route_obstacles(), self.guardian.limits.obstacle_margin_m,
+                                                 self.guardian.limits.moving_vertical_pad_m, min_movers=MOVER_OVERFLY_MIN,
+                                                 max_extra=OVERFLY_MAX_EXTRA_M)
+            if os.environ.get("AGENT_DEBUG_MOVER"):
+                print("mover-overfly check:", [round(v, 1) for v in start], [round(v, 1) for v in world_target], len(now_movers), "movers,",
+                      len(movers_on_leg(start, world_target, now_movers)), "on the leg ->", over_movers, flush=True)
+            if over_movers is not None:
+                trace.append("climbed_over_movers")
+                route = self._route_obstacles()
+                up = safe_climb_spot(start, world_target, over_movers,
+                                     clear_run_m(start, world_target, route, self.guardian.limits.obstacle_margin_m, movers_on_leg(start, world_target, now_movers)),
+                                     route, self.guardian.limits.obstacle_margin_m)
+                for part, spot in (("climb", up), ("cross", (world_target[0], world_target[1], over_movers))):
+                    event = self._guarded_fly(_to_local(spot, self.spawn_offset), trace, purpose, _detouring=True,
+                                              pass_through=(part == "climb" and (up[0] != start[0] or up[1] != start[1])))    # stops over the target: a crossing that ended still moving coasted 2 m past it
+                    if event != ReplanEvent.SKILL_SUCCEEDED:
+                        return event
+                # come down only when nothing will be on the target during the descent
+                descent_s = (over_movers - world_target[2]) / MAX_CLIMB_MPS + 2.0
+                for _ in range(MOVER_DESCENT_WAITS):
+                    try:
+                        busy = target_busy(world_target, list(movers_fn()), descent_s)
+                    except Exception:
+                        busy = False
+                    if not busy:
+                        break
+                    if "held_above_target" not in trace:
+                        trace.append("held_above_target")
+                    result = hold_position(self.adapter, 1.0, interrupt=self._zone_interrupt())
+                    self.belief.position = result.final_position or self.belief.position
         command = Command(kind="fly", target=world_target, purpose=purpose,
                            speed_mps=getattr(self.adapter, "speed_mps", 0.0), timeout_s=SKILL_TIMEOUT_S)
         evaluation = self.guardian.evaluate(command, self.belief,
@@ -1205,8 +1348,8 @@ class PersistentAgent:
             trace.append("waited_for_mover")
             self.guardian.consecutive_rejections = 0
             self.guardian.consecutive_interventions = 0
-            result = hold_position(self.adapter, MOVER_WAIT_STEP_S, interrupt=self._zone_interrupt())
-            self.belief.position = result.final_position or self.belief.position
+            self._hold_stepping_aside(MOVER_WAIT_STEP_S)
+            self.belief.position = self.adapter.get_position()
             return self._guarded_fly(local_target, trace, purpose, _after_interrupt=_after_interrupt, _detouring=_detouring,
                                      pass_through=pass_through, _mover_waits=_mover_waits + 1)
         if evaluation.outcome == GuardianOutcome.REJECT_AND_REPLAN:

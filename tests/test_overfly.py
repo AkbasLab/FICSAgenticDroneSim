@@ -13,7 +13,8 @@ from fics_drone.agents import persistent_agent
 from fics_drone.agents.persistent_agent import PersistentAgent
 from fics_drone.core.obstacles import BoxKeepOut, TreeObstacle
 from fics_drone.core.scenario import load_scenario
-from fics_drone.planners.overfly import detour_cost_s, overfly_altitude, overfly_cost_s
+from fics_drone.core.moving import MovingObject
+from fics_drone.planners.overfly import detour_cost_s, mover_overfly_altitude, movers_on_leg, target_busy, overfly_altitude, overfly_cost_s
 from fics_drone.simulator.kinematic_mock_adapter import KinematicMockVehicleAdapter
 
 SCENARIO_PATH = os.path.join(os.path.dirname(__file__), "..", "configs", "missions", "search_relay_001.json")
@@ -127,6 +128,70 @@ class AgentOverflyTests(unittest.TestCase):
         event = agent._guarded_fly((30.0, 0.0, 8.0), trace)
         self.assertEqual(event.value, "skill_succeeded", trace)
         self.assertIn("flew_round_tree", trace)
+
+
+def walker(x, y, vx=0.0, vy=0.0, h=1.8):
+    return MovingObject("p", "pedestrian", x, y, vx, vy, radius=0.4, height=h)
+
+
+class MoverOverflyTests(unittest.TestCase):
+    crowd = [walker(10, 0.5), walker(20, -0.5), walker(30, 1.0)]
+
+    def test_a_crowd_on_the_way_gives_the_height_above_the_tallest_plus_the_pad(self):
+        z = mover_overfly_altitude((0, 0, 0.75), (40, 0, 0.75), self.crowd, [], 0.5)
+        self.assertAlmostEqual(z, 1.8 + 4.0 + 1.0)
+
+    def test_a_lone_pedestrian_is_passed_sideways(self):
+        self.assertIsNone(mover_overfly_altitude((0, 0, 0.75), (40, 0, 0.75), self.crowd[:2], [], 0.5))
+
+    def test_a_crowd_off_to_the_side_does_not_count(self):
+        far = [walker(10, 12), walker(20, -12), walker(30, 15)]
+        self.assertIsNone(mover_overfly_altitude((0, 0, 0.75), (40, 0, 0.75), far, [], 0.5))
+
+    def test_traffic_about_to_cross_the_line_counts(self):
+        cars = [walker(15, 8, vy=-2.0), walker(20, 9, vy=-2.0), walker(25, 10, vy=-2.0)]     # 6 s on they are all across the line
+        self.assertEqual(len(movers_on_leg((0, 0, 0.75), (40, 0, 0.75), cars)), 3)
+        self.assertIsNotNone(mover_overfly_altitude((0, 0, 0.75), (40, 0, 0.75), cars, [], 0.5))
+
+    def test_a_short_leg_is_not_worth_a_climb(self):
+        self.assertIsNone(mover_overfly_altitude((0, 0, 0.75), (8, 0, 0.75), self.crowd, [], 0.5))
+
+    def test_already_above_the_crowd_needs_no_climb(self):
+        self.assertIsNone(mover_overfly_altitude((0, 0, 7.0), (40, 0, 7.0), self.crowd, [], 0.5))
+
+
+    def test_a_tall_tree_beside_the_line_gives_a_higher_crossing(self):
+        z = mover_overfly_altitude((0, 0, 0.75), (40, 0, 0.75), self.crowd, [tree(20, 1, 12, r=2.0, bottom=0.0)], 0.5)
+        self.assertEqual(z, 12 + 1.0 + 1.0)
+
+    def test_a_tree_too_tall_to_clear_within_the_limit_refuses_it(self):
+        self.assertIsNone(mover_overfly_altitude((0, 0, 0.75), (40, 0, 0.75), self.crowd, [tree(20, 1, 30, r=2.0, bottom=0.0)], 0.5, max_extra=15.0))
+
+    def test_a_low_tree_does_not(self):
+        self.assertIsNotNone(mover_overfly_altitude((0, 0, 0.75), (40, 0, 0.75), self.crowd, [tree(20, 3, 3, r=1.0, bottom=0.0)], 0.5))
+
+    def test_switched_off_by_the_height_limit(self):
+        self.assertIsNone(mover_overfly_altitude((0, 0, 0.75), (40, 0, 0.75), self.crowd, [], 0.5, max_extra=0.0))
+
+    def test_traffic_still_well_up_the_road_counts_when_it_will_be_across_the_line_within_nine_seconds(self):
+        cars = [MovingObject(f"c{i}", "vehicle", 20.0 + 3 * i, 50.0, 0.0, -6.0, radius=2.5, height=1.5) for i in range(3)]   # 50 m off, closing at 6 m/s
+        self.assertEqual(len(movers_on_leg((0, 0, 0.75), (40, 0, 0.75), cars)), 3)
+        self.assertEqual(len(movers_on_leg((0, 0, 0.75), (40, 0, 0.75), cars, look_s=(0.0, 3.0, 6.0))), 0)
+
+
+class TargetBusyTests(unittest.TestCase):
+    def test_a_car_driving_onto_the_target_during_the_descent(self):
+        car = MovingObject("c", "vehicle", 28.0, 0.0, -7.0, 0.0, radius=2.5, height=1.5, half_width=1.0, half_length=2.3, yaw=math.pi)
+        self.assertTrue(target_busy((0.0, 0.0, 0.75), [car], horizon_s=6.0))
+        self.assertFalse(target_busy((0.0, 0.0, 0.75), [car], horizon_s=2.0))
+
+    def test_a_car_going_away_or_far_off_to_the_side_is_not_in_the_way(self):
+        away = MovingObject("c", "vehicle", 10.0, 0.0, 7.0, 0.0, radius=2.5, height=1.5)
+        side = MovingObject("c", "vehicle", 0.0, 20.0, 7.0, 0.0, radius=2.5, height=1.5)
+        self.assertFalse(target_busy((0.0, 0.0, 0.75), [away, side], horizon_s=6.0))
+
+    def test_a_pedestrian_standing_on_the_target_counts(self):
+        self.assertTrue(target_busy((0.0, 0.0, 0.75), [walker(1.0, 0.5)], horizon_s=1.0))
 
 
 if __name__ == "__main__":

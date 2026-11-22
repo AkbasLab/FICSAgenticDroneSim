@@ -1,0 +1,436 @@
+A = parse(args.A)
+rng = random.Random(args.seed)
+REGION = (165.0, 258.0, -283.0, -217.0)      # same mapped street area as the keep-outs
+
+
+import zone_overlay
+from fics_drone.core.map_geometry import box_from_bounding_box
+GREEN = carla.Color(0, 110, 0, 255)        # dim: the bright neon swamped the picture next to the drone
+
+
+def _draw_target_3d(debug, target):
+    """A green pole standing on the target, a cross at its top and a ring round it, at the target's own height (roofs included)."""
+    cx, cy, cz = target.x + SX, target.y + SY, GZ + getattr(target, "z", 0.0)
+    try:
+        dpos = adapter.get_position()
+        if math.hypot(dpos[0] + ox + SX - cx, dpos[1] + oy + SY - cy) < 4.0:
+            return                                   # close to the drone the marker is hidden (it was blinding there)
+    except Exception:
+        pass
+    lo = cz - (3.0 if cz > 3.0 else 0.0)
+    hi = cz + 5.0
+    debug.draw_line(carla.Location(cx, cy, lo), carla.Location(cx, cy, hi), 0.03, GREEN, zone_overlay.SHAPE_LIFE_S)
+    for dx, dy in ((1.2, 0.0), (0.0, 1.2)):
+        debug.draw_line(carla.Location(cx - dx, cy - dy, hi), carla.Location(cx + dx, cy + dy, hi), 0.03, GREEN, zone_overlay.SHAPE_LIFE_S)
+    ring = [carla.Location(cx + 1.0 * math.cos(2 * math.pi * i / 24), cy + 1.0 * math.sin(2 * math.pi * i / 24), cz) for i in range(25)]
+    for a, b in zip(ring, ring[1:]):
+        debug.draw_line(a, b, 0.03, GREEN, zone_overlay.SHAPE_LIFE_S)
+
+
+zone_overlay._draw_target = _draw_target_3d
+STREET_Z = 6.5              # street targets hover above the traffic, not in a lane at car height
+ROOF_WALL_CLEAR_M = 3.0      # a roof spot must be this far from any wall that rises above the roof
+ROOF_MAX_TOP_M = 12.0       # roofs higher than this are skipped (a long climb, and the agent's overfly cap is 15 m)
+
+
+def clear_of_things(x, y, zs, margin):
+    """True if no keep-out (building, tree trunk or crown, pole, prop) is within `margin` of the point at any of the heights `zs`."""
+    return not any(o.blocks_point(x, y, z, margin) for o in LIM.obstacles for z in zs)
+
+
+def sidewalk_points():
+    pts, tries = [], 0
+    while len(pts) < 200 and tries < 60000:
+        tries += 1
+        loc = world.get_random_location_from_navigation()
+        if loc is None:
+            continue
+        x, y = loc.x - SX, loc.y - SY
+        if REGION[0] < x < REGION[1] and REGION[2] < y < REGION[3] and clear_of_things(x, y, (args.height, 2.5, 5.0, 8.0), 2.0):
+            pts.append((round(x, 2), round(y, 2), args.height))
+    return pts
+
+
+def street_points():
+    pts = []
+    for _ in range(3000):
+        if len(pts) >= 120:
+            break
+        x, y = rng.uniform(REGION[0] + 5, REGION[1] - 5), rng.choice(LANES) + rng.uniform(-1.0, 1.0)
+        wp = crowd.lane_waypoint(x, y)
+        if wp is None:
+            continue
+        p = wp.transform.location
+        x, y = p.x - SX, p.y - SY
+        if REGION[0] < x < REGION[1] and clear_of_things(x, y, (args.height, 2.5, 5.0, 6.5, 8.0), 2.0):
+            pts.append((round(x, 2), round(y, 2), STREET_Z))
+    return pts
+
+
+ROOFBOX = {}
+
+
+def roof_points():
+    pts = []
+    for o in world.get_environment_objects(carla.CityObjectLabel.Buildings):
+        try:
+            b = box_from_bounding_box(o.bounding_box, (SX, SY), GZ, o.name)
+        except Exception:
+            continue
+        top = b.z_top
+        if top < 5.0 or top > ROOF_MAX_TOP_M or (b.x_max - b.x_min) < 5.0 or (b.y_max - b.y_min) < 5.0:
+            continue
+        if not (REGION[0] < b.x_min and b.x_max < REGION[1] and REGION[2] < b.y_min and b.y_max < REGION[3]):
+            continue
+        # roof spots: the ones furthest from any wall that stands higher than the roof beside it (the planner stalled next to one),
+        # kept only if at least ROOF_WALL_CLEAR_M from it; up to 2 per roof, well apart
+        z = round(top + 3.0, 2)
+        scored = []
+        gx = b.x_min + 1.5
+        while gx <= b.x_max - 1.5:
+            gy = b.y_min + 1.5
+            while gy <= b.y_max - 1.5:
+                if clear_of_things(gx, gy, (z + 1.5,), 1.5):
+                    room = 0.0
+                    for m in (2.0, 3.0, 4.0, 5.0, 6.0, 8.0):
+                        if clear_of_things(gx, gy, (z,), m):
+                            room = m
+                        else:
+                            break
+                    if room >= ROOF_WALL_CLEAR_M:
+                        scored.append((room, gx, gy))
+                gy += 1.0
+            gx += 1.0
+        scored.sort(reverse=True)
+        chosen = []
+        for room, gx, gy in scored:
+            if all(math.hypot(gx - c[0], gy - c[1]) > 4.0 for c in chosen):
+                chosen.append((gx, gy))
+            if len(chosen) == 2:
+                break
+        for gx, gy in chosen:
+            pts.append((round(gx, 2), round(gy, 2), z))
+            ROOFBOX[pts[-1]] = (b.x_min, b.x_max, b.y_min, b.y_max, top)
+    return pts
+
+
+from fics_drone.planners.overfly import overfly_altitude
+from fics_drone.planners.street_path import plan_around
+from fics_drone.agents.persistent_agent import route_runs_clear
+from fics_drone.planners.plan3d import plan_3d
+
+BOUNDS3 = (REGION[0] - 2.0, REGION[1] + 2.0, REGION[2] - 2.0, REGION[3] + 2.0)      # keep-outs are mapped only here
+
+
+def needs_3d(start, target):
+    return True            # every leg: the 3-D plan is as short as the flat one on open ground, and goes under crowns the flat one has to go round
+
+
+def route3d(start, target):
+    """A route through the trees in three dimensions (round, under, over); None if there is none. More room is asked for until no stop is
+    inside a keep-out and every run is clear the way the guardian judges it."""
+    trees = agent._route_obstacles()
+    margin = agent.guardian.limits.obstacle_margin_m
+    for extra in (0.3, 0.8, 1.3):
+        stops = plan_3d(start, target, trees, margin, BOUNDS3, extra=extra)
+        if stops is None:
+            continue
+        pts = [start] + stops
+        if (not any(t.blocks_point(*sp, margin=margin) for sp in stops[:-1] for t in trees)
+                and not any(t.blocks_segment(a, b, margin=margin) for a, b in zip(pts, pts[1:]) for t in trees)):
+            return stops
+    return None
+
+
+def ramp_points(start, target):
+    """World waypoints of a roof leg: along the straight line to the target every ~6 m, rising in step with the distance covered, each lifted
+    to the lowest height clear of every crown (a waypoint inside a crown is refused), ending 1 m above the roof spot."""
+    d = math.hypot(target[0] - start[0], target[1] - start[1])
+    n = max(1, int(d // 6.0))
+    pts = []
+    for i in range(1, n + 1):
+        f = i / n
+        wx, wy = start[0] + (target[0] - start[0]) * f, start[1] + (target[1] - start[1]) * f
+        wz = start[2] + (target[2] + 1.0 - start[2]) * f
+        while wz < target[2] + 12.0 and not clear_of_things(wx, wy, (wz,), 2.0):
+            wz += 1.0
+        pts.append((wx, wy, wz))
+    return pts
+
+
+def route_ok(start, target):
+    """Would the agent find a way to fly from start to target (world x, y, z)? The same tests it makes when it plans a leg: nothing on the
+    straight line, or a way over (overfly), or a way round (grid plan) whose stops are clear; a roof leg's ramp must have clear segments.
+    Checked when a target is picked, so the drone does not set off on a leg that is refused after flying part of it."""
+    trees = agent._route_obstacles()
+    margin = agent.guardian.limits.obstacle_margin_m
+    seg_ok = lambda a, b: not any(t.blocks_segment(a, b, margin=margin) for t in trees)
+    if any(t.blocks_point(*target, margin=margin) for t in trees):
+        return False
+    if route3d(start, target) is not None:
+        return True
+    if target[2] > 10.0:
+        return False
+    if not any(t.blocks_segment(start, target, margin=margin) for t in trees):
+        return True
+    if overfly_altitude(start, target, trees, margin, 3.0, 15.0) is not None:
+        return True
+    for pad in (12.0, 24.0, 40.0):
+        for extra in (0.5, 1.5, 2.5):
+            path = plan_around(start, target, trees, margin, pad=pad, extra=extra)
+            if path and route_runs_clear(start, path, trees, margin):
+                return not any(t.blocks_point(*sp, margin=margin) for sp in path[:-1] for t in trees)
+    return False
+
+
+def next_target(pos, done, pools, last_kind, force_kind=None):
+    """A different kind from the last one (roof, street, sidewalk), at a flyable distance, not near a recent target."""
+    kinds = [k for k in pools if pools[k] and k != last_kind] or [k for k in pools if pools[k]]
+    kind = force_kind or rng.choice(kinds)
+    pts = pools[kind]
+    ok = [p for p in pts if args.min_dist <= math.hypot(p[0] - pos[0], p[1] - pos[1]) <= args.max_dist
+          and all(math.hypot(p[0] - d[0], p[1] - d[1]) > 6.0 for d in done[-4:])]
+    bodies = movers.snapshot()
+    free = [p for p in ok if p[2] > 5.0 or all(math.hypot(p[0] - m.x, p[1] - m.y) > 4.0 for m in bodies)]     # not one a person or car stands on now
+    sx, sy, sz = adapter.get_position()
+    here = (sx + ox, sy + oy, max(sz, 0.8))
+    order = [kind] + [k for k in pools if k != kind and pools[k] and not force_kind]
+    first = None
+    for k in order:
+        kp = pools[k]
+        kok = [p for p in kp if args.min_dist <= math.hypot(p[0] - pos[0], p[1] - pos[1]) <= args.max_dist
+               and all(math.hypot(p[0] - d[0], p[1] - d[1]) > 6.0 for d in done[-4:])]
+        cands = [p for p in kok if k == kind or True]
+        if k == kind:
+            cands = list(free or ok or pts)
+        rng.shuffle(cands)
+        first = first or (k, cands[0] if cands else None)
+        for p in cands[:14]:
+            try:
+                if route_ok(here, p):
+                    return k, p
+            except Exception as e:
+                print("  route check failed:", e, flush=True)
+                return kind, cands[0]
+    return first if first and first[1] is not None else (kind, rng.choice(free or ok or pts))
+
+
+from fics_drone.core.evade import evasion_velocity
+EVADE_ON = os.environ.get("AGENT_EVADE", "1") != "0"
+FLOW = os.environ.get("DEMO_FLOW", "1") != "0"      # fly through each target and straight on to the next, instead of stopping on it
+
+
+ROAD_Y = (-254.0, -238.5)      # the traffic lanes: a low aircraft stepping away from a walker must not step into them
+
+
+def lift_clear():
+    """Low and a vehicle within 3.5 m (it ended a leg in the road, or stopped in a queue): straight up to street-target height, clear of the cars."""
+    x, y, z = adapter.get_position()
+    if z >= 3.0:
+        return
+    if not any(m.kind == "vehicle" and math.hypot(m.x - (x + ox), m.y - (y + oy)) < 3.5 for m in movers.snapshot()):
+        return
+    print("  lifting clear of the traffic", flush=True)
+    end = time.monotonic() + 9.0
+    while time.monotonic() < end and adapter.get_position()[2] < STREET_Z - 0.3:
+        adapter.start_velocity(0.0, 0.0, 1.0)
+        time.sleep(0.1)
+    adapter.start_hover()
+
+
+def _evade(pos_world):
+    z = pos_world[2]
+    return evasion_velocity(pos_world, movers.snapshot(), speed_mps=1.3, horizon_s=1.5, clear_m=0.8, blocked_fn=lambda x, y: (not clear_of_things(x, y, (z,), 0.8)) or (z < 3.0 and ROAD_Y[0] < y < ROAD_Y[1] and REGION[0] < x < REGION[1]))
+
+
+def evade_hold(seconds):
+    """Wait on the spot, but step out of the way of anything that is about to run into the aircraft."""
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        x, y, z = adapter.get_position()
+        step = _evade((x + ox, y + oy, z)) if EVADE_ON else None
+        if step is None:
+            adapter.start_hover()
+        else:
+            adapter.start_velocity(float(step[0]), float(step[1]), 0.0)
+        time.sleep(0.1)
+    adapter.start_hover()
+
+
+if EVADE_ON:
+    agent.evade_fn = lambda p: _evade(p)
+
+import inspect
+_orig_hover = adapter.start_hover
+def _logged_hover(*a, **k):
+    fr = [f.function for f in inspect.stack()[1:5]]
+    print("HOVER t=%.1f via %s" % (time.monotonic() - t0, "<-".join(fr)), flush=True)
+    return _orig_hover(*a, **k)
+adapter.start_hover = _logged_hover
+CMD = []
+_orig_vel = adapter.start_velocity
+def _logged_vel(vx, vy, vz, *a, **k):
+    CMD.append((time.monotonic() - t0, math.hypot(vx, vy), vz))
+    return _orig_vel(vx, vy, vz, *a, **k)
+adapter.start_velocity = _logged_vel
+
+
+def leave_roof(roof, towards):
+    """The planner cannot route a descent through a building, so from a roof the drone first slides sideways at roof height to a spot 3 m
+    beyond the nearest clear edge (on the side facing the next target), then drops straight down beside the wall."""
+    x0, x1, y0, y1, top = ROOFBOX[roof]
+    z = roof[2]
+    cands = [(x0 - 3.0, min(max(roof[1], y0), y1)), (x1 + 3.0, min(max(roof[1], y0), y1)),
+             (min(max(roof[0], x0), x1), y0 - 3.0), (min(max(roof[0], x0), x1), y1 + 3.0)]
+    cands.sort(key=lambda c: math.hypot(c[0] - towards[0], c[1] - towards[1]))
+    column = [args.height + 1.5 * i for i in range(int((z - args.height) / 1.5) + 1)] + [z]     # the whole drop, not a few heights
+    for cx, cy in cands:
+        inside = REGION[0] + 2 < cx < REGION[1] - 2 and REGION[2] + 2 < cy < REGION[3] - 2          # keep-outs are only mapped inside REGION
+        if inside and clear_of_things(cx, cy, column, 2.0):
+            for stage, spot in (("off_roof", (cx, cy, z)), ("down", (cx, cy, args.height))):
+                trace = []
+                ev = agent._guarded_fly((spot[0] - ox, spot[1] - oy, spot[2]), trace)
+                print("  leave roof", stage, ev.value, trace[-1][:90] if trace else "", flush=True)
+                if ev.value != "skill_succeeded":
+                    return False
+            return True
+    print("  leave roof: no clear side", flush=True)
+    return False
+
+
+def roof_entry(target):
+    """A spot 2.5 m off one of the roof's walls, outside the mapped keep-outs from street height up to the roof, so the drone can come in low
+    (between and under the trees), climb straight along the wall's face and step over the edge. Chosen to make the shortest trip from here."""
+    x0, x1, y0, y1, top = ROOFBOX[target]
+    z = target[2]
+    x, y, _ = adapter.get_position()
+    here = (x + ox, y + oy)
+    column = [args.height + 1.5 * i for i in range(int((z + 0.5 - args.height) / 1.5) + 1)] + [z + 0.5]
+    cands = []
+    for t in (0.15, 0.3, 0.5, 0.7, 0.85):
+        px, py = x0 + t * (x1 - x0), y0 + t * (y1 - y0)
+        for cx, cy in ((x0 - 2.5, py), (x1 + 2.5, py), (px, y0 - 2.5), (px, y1 + 2.5)):
+            if not (REGION[0] + 2 < cx < REGION[1] - 2 and REGION[2] + 2 < cy < REGION[3] - 2):
+                continue
+            if cy > ROAD_Y[0] and cy < ROAD_Y[1]:
+                continue
+            if clear_of_things(cx, cy, column, 1.5):
+                cands.append((math.hypot(cx - here[0], cy - here[1]) + math.hypot(cx - target[0], cy - target[1]), cx, cy))
+    if not cands:
+        print("  roof entry: no clear strip", flush=True)
+        return None
+    cands.sort()
+    print("  roof entry strip", (round(cands[0][1], 1), round(cands[0][2], 1)), flush=True)
+    return cands[0][1], cands[0][2]
+
+
+def leg3(name, target):
+    view["target"] = target[:2]
+    a, i0, trace = time.monotonic(), len(samples), []
+    event, stops = None, None
+    for attempt in range(3):
+        x, y, z0 = adapter.get_position()
+        stops = route3d((x + ox, y + oy, z0), target)
+        if stops is None:
+            break
+        # the route the 3-D planner found (rises on the way, between trees where there is room, over only where there is none); the aircraft passes
+        # a stop within 1.5 m, so the next run can start a little off the planned line and be refused: the route is then planned again from where it is
+        for i, (wx, wy, wz) in enumerate(stops, 1):
+            last = (i == len(stops))
+            agent.pass_lead_s, agent.pass_dz_m = (0.45, 1.2) if last else (0.7, 2.0)      # the target itself is cut closer than a mid-route stop
+            event = agent._guarded_fly((wx - ox, wy - oy, wz), trace, pass_through=(FLOW or i < len(stops)), _detouring=True)      # the stops are planned in 3-D: not re-routed by the 2-D detour logic
+            if event.value != "skill_succeeded":
+                break
+        trace.append("route3d_%d_stops" % len(stops))
+        if event.value != "guardian_blocked":
+            break
+    if stops is not None:
+        pass
+    elif target[2] > 10.0:
+        # a roof: climb on the way, along the straight line to the target (height rises in step with the distance covered), not low-then-up
+        pts = ramp_points((x + ox, y + oy, z0), target)
+        event = None
+        for i, (wx, wy, wz) in enumerate(pts, 1):
+            event = agent._guarded_fly((wx - ox, wy - oy, wz), trace, pass_through=(i < len(pts)))
+            if event.value != "skill_succeeded":
+                break
+        if event.value == "skill_succeeded":
+            event = agent._guarded_fly((target[0] - ox, target[1] - oy, target[2]), trace)
+    else:
+        event = agent._guarded_fly((target[0] - ox, target[1] - oy, target[2]), trace)
+    cs = sorted(c[1] for c in CMD if c[0] >= a - t0)
+    if cs:
+        print("  commanded horizontal speed this leg: p50 %.2f p90 %.2f max %.2f (n=%d)" % (cs[len(cs) // 2], cs[int(len(cs) * .9)], cs[-1], len(cs)), flush=True)
+    return summarize(name, samples[i0:], event, trace, time.monotonic() - a)
+
+
+out = []
+finish_film = None
+try:
+    populate()
+    crowd.start()
+    pools = {"sidewalk": sidewalk_points(), "street": street_points(), "roof": roof_points()}
+    print("candidate targets:", {k: len(v) for k, v in pools.items()}, flush=True)
+    print("spawned", len(crowd.cars), "cars and", len(crowd.walkers), "pedestrians", flush=True)
+    take_off(adapter)
+    import airsim
+    asc = airsim.MultirotorClient()
+    asc.confirmConnection()
+    pose = asc.simGetVehiclePose("Drone3")
+    pose.position.x_val, pose.position.y_val, pose.position.z_val = A[0] - ox, A[1] - oy, args.height
+    pose.orientation = airsim.to_quaternion(0.0, 0.0, math.pi)
+    asc.simSetVehiclePose(pose, True, "Drone3")
+    time.sleep(1.5)
+    go_to_waypoint(adapter, A[0] - ox, A[1] - oy, args.height)
+    agent.belief.position = adapter.get_position()
+    time.sleep(8.0)
+    del samples[:]
+    if args.film:
+        finish_film = start_film(args.film)
+        time.sleep(1.0)
+    done, done_kinds, begun = [], [], time.monotonic()
+    force, tries, roof_now = None, 0, None
+    while (args.targets == 0 or len(done) < args.targets) and time.monotonic() - begun < args.max_seconds:
+        x, y, _z = adapter.get_position()
+        pos = (x + ox, y + oy)
+        kind, tgt = next_target(pos, done, pools, done_kinds[-1] if done_kinds else None, force)
+        under = next((k for k, v in ROOFBOX.items() if v[0] <= pos[0] <= v[1] and v[2] <= pos[1] <= v[3] and _z > v[4] + 1.0), None) if _z > 3.0 else None
+        if under is not None and route3d((pos[0], pos[1], _z), tgt) is not None:
+            under = None               # a 3-D route from the roof to the next target exists: leg3 flies it
+        if under is not None:          # on a roof (reached, or a leg that failed up there): off it and down before the next leg
+            leave_roof(under, tgt)
+            roof_now = None
+            x, y, _z = adapter.get_position()
+            pos = (x + ox, y + oy)
+        _Stub.targets = [_Target(tgt[0], tgt[1], z=tgt[2])]
+        print("target", len(done) + 1, kind, tgt, "distance", round(math.hypot(tgt[0] - pos[0], tgt[1] - pos[1]), 1), flush=True)
+        res = leg3("target_%d_%s" % (len(done) + 1, kind), tgt)
+        out.append(res)
+        px, py, pz = adapter.get_position()
+        if res["event"] == "skill_failed" and math.hypot(tgt[0] - ox - px, tgt[1] - oy - py) < 2.5 and abs(tgt[2] - pz) < 1.5:
+            res["event"] = "skill_succeeded"           # held off the last metre by evading a walker: close enough to count as arrived
+            res["note"] = "near arrival"
+        print("  ->", res["event"], res["seconds"], "s, closest gap", res["closest_edge_gap_m"], flush=True)
+        _Stub.targets = []
+        if not (FLOW and res["event"] == "skill_succeeded"):      # a run flows on from one target to the next: no stop, no wait
+            lift_clear()
+            evade_hold(0.6)
+        agent.belief.position = adapter.get_position()
+        if res["event"] == "guardian_blocked" and tries < 3:        # no safe route to that one: try another of the same kind
+            force, tries = kind, tries + 1
+            continue
+        force, tries, roof_now = None, 0, None
+        done_kinds.append(kind)
+        done.append(tgt)
+        if kind == "roof" and res["event"] == "skill_succeeded":
+            roof_now = tgt
+finally:
+    stop.set()
+    time.sleep(0.8)
+    crowd.end()
+    res = {"film": None, "tag": args.tag, "height": args.height, "peds": args.peds, "cars": args.cars, "legs": out, "samples": samples, "framelog": FRAMELOG}
+    json.dump(res, open(os.path.expanduser(f"~/live_rand_{args.tag}.json"), "w"))
+    film = finish_film() if finish_film else None
+    res["film"] = film
+    json.dump(res, open(os.path.expanduser(f"~/live_rand_{args.tag}.json"), "w"))
+print(json.dumps({"legs": out}, indent=1))
