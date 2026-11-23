@@ -250,7 +250,17 @@ def _evade(pos_world):
 
 def _evade_xy(pos_world):
     z = pos_world[2]
-    return evasion_velocity(pos_world, movers.snapshot(), speed_mps=EVADE_SPEED, horizon_s=1.5, clear_m=0.8, blocked_fn=lambda x, y: (not clear_of_things(x, y, (z,), 0.8)) or (z < 3.0 and ROAD_Y[0] < y < ROAD_Y[1] and REGION[0] < x < REGION[1]))
+    px, py = pos_world[0], pos_world[1]
+
+    def blocked(x, y):
+        # the whole way of the sidestep is checked (the aircraft covers EVADE_SPEED metres a second, so a point 1.5 m on can be past a pole it brushes on the way),
+        # with room for the airframe (0.5 m) plus 0.5 m: a sidestep that held the aircraft 0.3 m from a street light hit it (R46)
+        for f in (0.25, 0.5, 0.75, 1.0):
+            xi, yi = px + (x - px) * f, py + (y - py) * f
+            if not clear_of_things(xi, yi, (z,), 1.0):
+                return True
+        return z < 3.0 and ROAD_Y[0] < y < ROAD_Y[1] and REGION[0] < x < REGION[1]
+    return evasion_velocity(pos_world, movers.snapshot(), speed_mps=EVADE_SPEED, horizon_s=1.5, clear_m=0.8, blocked_fn=blocked)
 
 
 def evade_hold(seconds):
