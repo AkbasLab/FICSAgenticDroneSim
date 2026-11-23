@@ -1,0 +1,5 @@
+building
+other_obstacles
+pedestrian
+tree
+vehicle

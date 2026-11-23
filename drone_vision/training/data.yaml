@@ -1,0 +1,10 @@
+path: /home/borysy/Project-Drone-Vision/data/ready_dataset
+train: train/images
+val: val/images
+test: test/images
+names:
+  0: pedestrian
+  1: vehicle
+  2: tree
+  3: building
+  4: other_obstacles
