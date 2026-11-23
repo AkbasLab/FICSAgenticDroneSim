@@ -75,7 +75,7 @@ def fly_leg_with_planner(adapter: VehicleAdapter, x: float, y: float, z: float, 
                 # a body about to run into the aircraft (while it creeps the last metres or waits on its target) is stepped away from first
                 step = evade_fn((pos[0] + offset_xy[0], pos[1] + offset_xy[1], pos[2]))
                 if step is not None:
-                    adapter.start_velocity(float(step[0]), float(step[1]), 0.0)
+                    adapter.start_velocity(float(step[0]), float(step[1]), float(step[2]) if len(step) > 2 else 0.0)      # a third value lifts the aircraft over a walker
                     holding = False
                     last_progress = time.monotonic()
                     time.sleep(SKILL_POLL_INTERVAL_S)

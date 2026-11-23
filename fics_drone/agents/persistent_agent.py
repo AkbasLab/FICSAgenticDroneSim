@@ -1182,7 +1182,7 @@ class PersistentAgent:
             if step is None:
                 self.adapter.start_hover()
             else:
-                self.adapter.start_velocity(float(step[0]), float(step[1]), 0.0)
+                self.adapter.start_velocity(float(step[0]), float(step[1]), float(step[2]) if len(step) > 2 else 0.0)
             time.sleep(0.1)
         self.adapter.start_hover()
 
