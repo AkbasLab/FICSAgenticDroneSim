@@ -1,1 +1,2 @@
 drone_vision/**/*.pt filter=lfs diff=lfs merge=lfs -text
+drone_vision/cubemap/**/*.png filter=lfs diff=lfs merge=lfs -text
